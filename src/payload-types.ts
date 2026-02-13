@@ -69,6 +69,8 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    pages: Page;
+    articles: Article;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +80,8 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    pages: PagesSelect<false> | PagesSelect<true>;
+    articles: ArticlesSelect<false> | ArticlesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -87,8 +91,16 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    homepage: Homepage;
+    header: Header;
+    footer: Footer;
+  };
+  globalsSelect: {
+    homepage: HomepageSelect<false> | HomepageSelect<true>;
+    header: HeaderSelect<false> | HeaderSelect<true>;
+    footer: FooterSelect<false> | FooterSelect<true>;
+  };
   locale: null;
   user: User;
   jobs: {
@@ -160,6 +172,102 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages".
+ */
+export interface Page {
+  id: number;
+  title: string;
+  slug?: string | null;
+  fullSlug?: string | null;
+  category:
+    | 'Místo k navštívení'
+    | 'Turistický cíl'
+    | 'Místa'
+    | 'Praktické informace'
+    | 'Vstupní podmínky'
+    | 'Cesta'
+    | 'Počasí'
+    | 'Doprava'
+    | 'Měna a ceny'
+    | 'Zdraví a bezpečí'
+    | 'Jazyk a kultura'
+    | 'Jídlo a pití'
+    | 'Ubytování'
+    | 'Články';
+  parent?: (number | null) | Page;
+  includeInChildUrlPaths?: boolean | null;
+  text?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  featuredImage: {
+    image: number | Media;
+    description?: string | null;
+    author?: string | null;
+    source?: string | null;
+    sourceLink?: string | null;
+    creativeCommonsLicense?: string | null;
+    featureImageStyleCss?: string | null;
+    cloudinarySetting?: string | null;
+    svgCode?: string | null;
+  };
+  articles?: (number | Article)[] | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "articles".
+ */
+export interface Article {
+  id: number;
+  title: string;
+  slug?: string | null;
+  category?: ('Článek' | 'Průvodce' | 'RadyNaCestu') | null;
+  mainPage?: (number | null) | Page;
+  pages?: (number | Page)[] | null;
+  text?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  featuredImage: {
+    image: number | Media;
+    description?: string | null;
+    author?: string | null;
+    source?: string | null;
+    sourceLink?: string | null;
+    creativeCommonsLicense?: string | null;
+    featureImageStyleCss?: string | null;
+    cloudinarySetting?: string | null;
+    svgCode?: string | null;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -189,6 +297,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'pages';
+        value: number | Page;
+      } | null)
+    | ({
+        relationTo: 'articles';
+        value: number | Article;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -274,6 +390,62 @@ export interface MediaSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages_select".
+ */
+export interface PagesSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  fullSlug?: T;
+  category?: T;
+  parent?: T;
+  includeInChildUrlPaths?: T;
+  text?: T;
+  featuredImage?:
+    | T
+    | {
+        image?: T;
+        description?: T;
+        author?: T;
+        source?: T;
+        sourceLink?: T;
+        creativeCommonsLicense?: T;
+        featureImageStyleCss?: T;
+        cloudinarySetting?: T;
+        svgCode?: T;
+      };
+  articles?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "articles_select".
+ */
+export interface ArticlesSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  category?: T;
+  mainPage?: T;
+  pages?: T;
+  text?: T;
+  featuredImage?:
+    | T
+    | {
+        image?: T;
+        description?: T;
+        author?: T;
+        source?: T;
+        sourceLink?: T;
+        creativeCommonsLicense?: T;
+        featureImageStyleCss?: T;
+        cloudinarySetting?: T;
+        svgCode?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv_select".
  */
 export interface PayloadKvSelect<T extends boolean = true> {
@@ -311,6 +483,146 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "homepage".
+ */
+export interface Homepage {
+  id: number;
+  title: string;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "header".
+ */
+export interface Header {
+  id: number;
+  logo: {
+    link?: {
+      title?: string | null;
+      href?: string | null;
+      isExternal?: boolean | null;
+      isButtonLink?: boolean | null;
+    };
+    image: number | Media;
+    svgCode?: string | null;
+  };
+  navItems?:
+    | {
+        label: string;
+        link: string;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer".
+ */
+export interface Footer {
+  id: number;
+  logo: {
+    link?: {
+      title?: string | null;
+      href?: string | null;
+      isExternal?: boolean | null;
+      isButtonLink?: boolean | null;
+      id?: string | null;
+    };
+    image: number | Media;
+    svgCode?: string | null;
+  };
+  navItems?:
+    | {
+        title?: string | null;
+        href?: string | null;
+        isExternal?: boolean | null;
+        isButtonLink?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  copyright?: string | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "homepage_select".
+ */
+export interface HomepageSelect<T extends boolean = true> {
+  title?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "header_select".
+ */
+export interface HeaderSelect<T extends boolean = true> {
+  logo?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              title?: T;
+              href?: T;
+              isExternal?: T;
+              isButtonLink?: T;
+            };
+        image?: T;
+        svgCode?: T;
+      };
+  navItems?:
+    | T
+    | {
+        label?: T;
+        link?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer_select".
+ */
+export interface FooterSelect<T extends boolean = true> {
+  logo?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              title?: T;
+              href?: T;
+              isExternal?: T;
+              isButtonLink?: T;
+              id?: T;
+            };
+        image?: T;
+        svgCode?: T;
+      };
+  navItems?:
+    | T
+    | {
+        title?: T;
+        href?: T;
+        isExternal?: T;
+        isButtonLink?: T;
+        id?: T;
+      };
+  copyright?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
