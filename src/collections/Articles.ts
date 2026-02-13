@@ -1,10 +1,14 @@
 import type { CollectionConfig } from 'payload'
 import { imageFields } from '../fields/image'
+import { slugField } from '../fields/slug'
 
 export const Articles: CollectionConfig = {
   slug: 'articles',
   admin: {
     useAsTitle: 'title',
+  },
+  access: {
+    read: () => true,
   },
   fields: [
     {
@@ -12,14 +16,7 @@ export const Articles: CollectionConfig = {
       type: 'text',
       required: true,
     },
-    {
-      name: 'slug',
-      type: 'text', // In a real app, use a hook to generate this from title
-      unique: true,
-      admin: {
-        position: 'sidebar',
-      },
-    },
+    slugField(),
     {
       name: 'category',
       type: 'select',

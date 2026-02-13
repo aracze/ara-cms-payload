@@ -1,9 +1,19 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import {
+  FixedToolbarFeature,
+  HeadingFeature,
+  InlineToolbarFeature,
+  lexicalEditor,
+  LinkFeature,
+  UploadFeature,
+  HTMLConverterFeature,
+  BlocksFeature,
+} from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
+import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
@@ -25,7 +35,30 @@ export default buildConfig({
   },
   collections: [Users, Media, Pages, Articles],
   globals: [Homepage, Header, Footer],
-  editor: lexicalEditor(),
+  editor: lexicalEditor({
+    features: ({ defaultFeatures }) => [
+      ...defaultFeatures,
+      FixedToolbarFeature(),
+      InlineToolbarFeature(),
+      UploadFeature({
+        collections: {
+          media: {
+            fields: [
+              {
+                name: 'caption',
+                type: 'richText',
+                editor: lexicalEditor(),
+              },
+            ],
+          },
+        },
+      }),
+      HTMLConverterFeature({}),
+      BlocksFeature({
+        blocks: [], // Zde můžete přidat své bloky, které chcete vkládat do textu
+      }),
+    ],
+  }),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
@@ -34,7 +67,23 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URL || '',
     },
+    push: process.env.NODE_ENV !== 'production',
   }),
   sharp,
-  plugins: [],
+  plugins: [
+    nestedDocsPlugin({
+      collections: ['pages'],
+      generateLabel: (_, doc) => doc.title as string,
+      generateURL: (docs) =>
+        docs.reduce((url, doc, index) => {
+          const isLast = index === docs.length - 1
+          if (isLast || doc.includeInChildUrlPaths !== false) {
+            return `${url}/${doc.slug}`
+          }
+          return url
+        }, ''),
+      parentFieldSlug: 'parent',
+      breadcrumbsFieldSlug: 'breadcrumbs',
+    }),
+  ],
 })

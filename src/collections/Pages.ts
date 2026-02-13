@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { imageFields } from '../fields/image'
+import { slugField } from '../fields/slug'
 
 export const Pages: CollectionConfig = {
   slug: 'pages',
@@ -7,27 +8,16 @@ export const Pages: CollectionConfig = {
     useAsTitle: 'title',
     defaultColumns: ['title', 'slug', 'updatedAt'],
   },
+  access: {
+    read: () => true,
+  },
   fields: [
     {
       name: 'title',
       type: 'text',
       required: true,
     },
-    {
-      name: 'slug',
-      type: 'text', // In Payload, use a hook to generate if needed
-      admin: {
-        position: 'sidebar',
-      },
-    },
-    {
-      name: 'fullSlug',
-      type: 'text',
-      unique: true,
-      admin: {
-        position: 'sidebar',
-      },
-    },
+    slugField(),
     {
       name: 'category',
       type: 'select',
@@ -56,11 +46,25 @@ export const Pages: CollectionConfig = {
       relationTo: 'pages',
       hasMany: false,
       filterOptions: ({ id }) => {
+        if (!id) return true
         return {
           id: {
             not_equals: id,
           },
         }
+      },
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'finalUrl',
+      type: 'ui',
+      admin: {
+        position: 'sidebar',
+        components: {
+          Field: '/components/FinalUrl#FinalUrl',
+        },
       },
     },
     {
@@ -72,20 +76,54 @@ export const Pages: CollectionConfig = {
       },
     },
     {
+      name: 'breadcrumbs',
+      type: 'array',
+      fields: [
+        {
+          name: 'doc',
+          type: 'relationship',
+          relationTo: 'pages',
+          hasMany: false,
+          admin: {
+            disabled: true,
+          },
+        },
+        {
+          type: 'row',
+          fields: [
+            {
+              name: 'url',
+              label: 'URL',
+              type: 'text',
+              admin: {
+                width: '50%',
+              },
+            },
+            {
+              name: 'label',
+              type: 'text',
+              admin: {
+                width: '50%',
+              },
+            },
+          ],
+        },
+      ],
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+      },
+    },
+    {
       name: 'text',
       type: 'richText',
     },
     {
-      name: 'children', // Virtual field or actual relationship? In Strapi it's OneToMany mappedBy parent.
-      // Payload handles this via the 'parent' field on the child.
-      // We can use a join field or just omit it and query by parent.
-      // For now, I'll omit it as it's redundant data storage, but if needed for UI, we can use a custom component.
-      // However, if the user expects to see children in the API response, we might need a virtual field (afterRead hook).
-      // For migration simplicity, I will stick to the 'parent' field establishing the hierarchy.
+      name: 'children',
       type: 'ui',
       admin: {
         components: {
-          Field: undefined, // Placeholder if we wanted a custom component
+          Field: '/components/ChildrenPlaceholder#ChildrenPlaceholder',
         },
       },
       label: 'Children (Managed via Parent field on child pages)',

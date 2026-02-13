@@ -178,7 +178,6 @@ export interface Page {
   id: number;
   title: string;
   slug?: string | null;
-  fullSlug?: string | null;
   category:
     | 'Místo k navštívení'
     | 'Turistický cíl'
@@ -196,6 +195,14 @@ export interface Page {
     | 'Články';
   parent?: (number | null) | Page;
   includeInChildUrlPaths?: boolean | null;
+  breadcrumbs?:
+    | {
+        doc?: (number | null) | Page;
+        url?: string | null;
+        label?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   text?: {
     root: {
       type: string;
@@ -211,15 +218,19 @@ export interface Page {
     };
     [k: string]: unknown;
   } | null;
-  featuredImage: {
-    image: number | Media;
-    description?: string | null;
+  featuredImage?: {
+    image?: (number | null) | Media;
+    featureImageStyleCss?: string | null;
+    cloudinarySetting?: string | null;
+    isCreativeCommons?: boolean | null;
     author?: string | null;
+    description?: string | null;
     source?: string | null;
     sourceLink?: string | null;
     creativeCommonsLicense?: string | null;
-    featureImageStyleCss?: string | null;
-    cloudinarySetting?: string | null;
+    /**
+     * Zde vložte kód SVG (volitelné)
+     */
     svgCode?: string | null;
   };
   articles?: (number | Article)[] | null;
@@ -252,15 +263,19 @@ export interface Article {
     };
     [k: string]: unknown;
   } | null;
-  featuredImage: {
-    image: number | Media;
-    description?: string | null;
+  featuredImage?: {
+    image?: (number | null) | Media;
+    featureImageStyleCss?: string | null;
+    cloudinarySetting?: string | null;
+    isCreativeCommons?: boolean | null;
     author?: string | null;
+    description?: string | null;
     source?: string | null;
     sourceLink?: string | null;
     creativeCommonsLicense?: string | null;
-    featureImageStyleCss?: string | null;
-    cloudinarySetting?: string | null;
+    /**
+     * Zde vložte kód SVG (volitelné)
+     */
     svgCode?: string | null;
   };
   updatedAt: string;
@@ -395,22 +410,30 @@ export interface MediaSelect<T extends boolean = true> {
 export interface PagesSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
-  fullSlug?: T;
   category?: T;
   parent?: T;
   includeInChildUrlPaths?: T;
+  breadcrumbs?:
+    | T
+    | {
+        doc?: T;
+        url?: T;
+        label?: T;
+        id?: T;
+      };
   text?: T;
   featuredImage?:
     | T
     | {
         image?: T;
-        description?: T;
+        featureImageStyleCss?: T;
+        cloudinarySetting?: T;
+        isCreativeCommons?: T;
         author?: T;
+        description?: T;
         source?: T;
         sourceLink?: T;
         creativeCommonsLicense?: T;
-        featureImageStyleCss?: T;
-        cloudinarySetting?: T;
         svgCode?: T;
       };
   articles?: T;
@@ -432,13 +455,14 @@ export interface ArticlesSelect<T extends boolean = true> {
     | T
     | {
         image?: T;
-        description?: T;
+        featureImageStyleCss?: T;
+        cloudinarySetting?: T;
+        isCreativeCommons?: T;
         author?: T;
+        description?: T;
         source?: T;
         sourceLink?: T;
         creativeCommonsLicense?: T;
-        featureImageStyleCss?: T;
-        cloudinarySetting?: T;
         svgCode?: T;
       };
   updatedAt?: T;
