@@ -48,3 +48,10 @@ node_modules/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# local editor settings
+.vscode/
+
+# database & sessions
+*.session.sql
+
