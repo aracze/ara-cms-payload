@@ -14,6 +14,7 @@ import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
+import { cloudinaryStorage } from 'payload-storage-cloudinary'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
@@ -84,6 +85,16 @@ export default buildConfig({
         }, ''),
       parentFieldSlug: 'parent',
       breadcrumbsFieldSlug: 'breadcrumbs',
+    }),
+    cloudinaryStorage({
+      cloudConfig: {
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME as string,
+        api_key: process.env.CLOUDINARY_API_KEY as string,
+        api_secret: process.env.CLOUDINARY_API_SECRET as string,
+      },
+      collections: {
+        media: true,
+      },
     }),
   ],
 })
