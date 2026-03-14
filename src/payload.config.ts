@@ -36,7 +36,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
     components: {
-      actions: ['/components/DbDumpButton#DbDumpButton'],
+      afterNavLinks: ['/components/DatabaseNav#DatabaseNav'],
     },
   },
   collections: [Users, Media, Pages, Articles],
