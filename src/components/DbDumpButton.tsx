@@ -15,6 +15,8 @@ export function DbDumpButton() {
   if (!isAdmin) return null
 
   const apiBase = config.routes?.api || '/api'
+  const adminBase = config.routes?.admin || '/admin'
+  const importUrl = `${adminBase.replace(/\/$/, '')}/db-import`
 
   const handleClick = async () => {
     setError(null)
@@ -52,10 +54,21 @@ export function DbDumpButton() {
   }
 
   return (
-    <div>
-      <Button buttonStyle="secondary" size="small" onClick={handleClick} disabled={isLoading}>
-        {isLoading ? 'Generating dump...' : 'Download DB Dump'}
-      </Button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <Button buttonStyle="secondary" size="small" onClick={handleClick} disabled={isLoading}>
+          {isLoading ? 'Generating dump...' : 'Download DB Dump'}
+        </Button>
+        <Button
+          buttonStyle="secondary"
+          size="small"
+          onClick={() => {
+            window.location.assign(importUrl)
+          }}
+        >
+          Import DB Dump
+        </Button>
+      </div>
       {error ? <p style={{ marginTop: 6, color: 'var(--theme-error-500)' }}>{error}</p> : null}
     </div>
   )

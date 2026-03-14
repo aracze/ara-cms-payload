@@ -34,6 +34,11 @@ To spin up this project locally, follow these steps:
      - `PG_DUMP_DOCKER_SERVICE=postgres` (optional)
      - `PG_DUMP_DOCKER_HOST=localhost` (optional)
      - `PG_DUMP_DOCKER_CONTAINER=postgres-1` (optional, only if the service lookup fails)
+8. **DB Import (Admin Only, Destructive)**:
+   - In the Admin UI, use the **Import DB Dump** action.
+   - Upload a `pg_dump` custom-format file (the same format downloaded by the dump action).
+   - The import uses `pg_restore` with `--clean --if-exists` and overwrites all existing data.
+   - Requires the same Docker Compose access as the dump action.
 
 ---
 

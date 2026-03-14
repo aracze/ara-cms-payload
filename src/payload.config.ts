@@ -24,6 +24,7 @@ import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
 import { dbDumpEndpoint } from './endpoints/dbDump'
+import { dbImportEndpoint } from './endpoints/dbImport'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -75,7 +76,7 @@ export default buildConfig({
     push: process.env.NODE_ENV !== 'production',
   }),
   sharp,
-  endpoints: [dbDumpEndpoint],
+  endpoints: [dbDumpEndpoint, dbImportEndpoint],
   plugins: [
     nestedDocsPlugin({
       collections: ['pages'],
