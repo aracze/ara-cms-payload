@@ -20,6 +20,20 @@ To spin up this project locally, follow these steps:
    pnpm dev
    ```
 5. **Access Admin**: Open `http://localhost:3000/admin` to create your first admin user.
+6. **Promote Admin (Required for DB dumps)**:
+   ```bash
+   pnpm run promote:admin -- user@example.com
+   ```
+7. **DB Dump (Admin Only)**:
+   - In the Admin UI, use the **Download DB Dump** action.
+   - Always uses `pg_dump` from the Postgres Docker service.
+   - Ensure Postgres is running via `docker compose up -d postgres`.
+   - Payload container must have Docker Compose available (`docker compose` or `docker-compose`) and `/var/run/docker.sock` mounted (already configured in `docker-compose.yml`).
+   - If your Postgres is started via this repo's Compose file, no extra env vars are needed.
+   - If your Postgres service name or host differs (edge case), set:
+     - `PG_DUMP_DOCKER_SERVICE=postgres` (optional)
+     - `PG_DUMP_DOCKER_HOST=localhost` (optional)
+     - `PG_DUMP_DOCKER_CONTAINER=postgres-1` (optional, only if the service lookup fails)
 
 ---
 

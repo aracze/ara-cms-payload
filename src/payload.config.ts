@@ -23,6 +23,7 @@ import { Articles } from './collections/Articles'
 import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
+import { dbDumpEndpoint } from './endpoints/dbDump'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -32,6 +33,9 @@ export default buildConfig({
     user: Users.slug,
     importMap: {
       baseDir: path.resolve(dirname),
+    },
+    components: {
+      actions: ['/components/DbDumpButton#DbDumpButton'],
     },
   },
   collections: [Users, Media, Pages, Articles],
@@ -71,6 +75,7 @@ export default buildConfig({
     push: process.env.NODE_ENV !== 'production',
   }),
   sharp,
+  endpoints: [dbDumpEndpoint],
   plugins: [
     nestedDocsPlugin({
       collections: ['pages'],
@@ -86,15 +91,21 @@ export default buildConfig({
       parentFieldSlug: 'parent',
       breadcrumbsFieldSlug: 'breadcrumbs',
     }),
-    cloudinaryStorage({
-      cloudConfig: {
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME as string,
-        api_key: process.env.CLOUDINARY_API_KEY as string,
-        api_secret: process.env.CLOUDINARY_API_SECRET as string,
-      },
-      collections: {
-        media: true,
-      },
-    }),
+    ...(process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+      ? [
+          cloudinaryStorage({
+            cloudConfig: {
+              cloud_name: process.env.CLOUDINARY_CLOUD_NAME as string,
+              api_key: process.env.CLOUDINARY_API_KEY as string,
+              api_secret: process.env.CLOUDINARY_API_SECRET as string,
+            },
+            collections: {
+              media: true,
+            },
+          }),
+        ]
+      : []),
   ],
 })

@@ -1,32 +1,20 @@
-version: '3'
-
 services:
   payload:
-    image: node:18-alpine
+    image: node:22-alpine
     ports:
       - '3000:3000'
     volumes:
       - .:/home/node/app
       - node_modules:/home/node/app/node_modules
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /home/node/app/
-    command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm dev"
+    command: sh -c "apk add --no-cache docker-cli docker-compose && corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm dev"
     depends_on:
-      - mongo
-      # - postgres
+      - postgres
     env_file:
       - .env
-
-  # Ensure your DATABASE_URL uses 'mongo' as the hostname ie. mongodb://mongo/my-db-name
-  mongo:
-    image: mongo:latest
-    ports:
-      - '27017:27017'
-    command:
-      - --storageEngine=wiredTiger
-    volumes:
-      - data:/data/db
-    logging:
-      driver: none
+    environment:
+      DATABASE_URL: postgres://postgres:yourpassword@postgres:5432/aracze
 
   postgres:
     restart: always
@@ -41,6 +29,5 @@ services:
       - '5432:5432'
 
 volumes:
-  data:
   pgdata:
   node_modules:
