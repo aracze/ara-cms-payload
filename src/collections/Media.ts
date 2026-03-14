@@ -11,8 +11,7 @@ export const Media: CollectionConfig = {
       async ({ data, req, operation }) => {
         if ((operation === 'create' || operation === 'update') && req.file) {
           try {
-            // Uživatel mohl vložit endpoint i se jménem bucketu na konci (např. .../aracze),
-            // S3 SDK ale vyžaduje jen základní endpoint (https://<account>.r2.cloudflarestorage.com)
+            req.payload.logger.info(`Zahajuji zálohování do R2 pro soubor: ${req.file.name}`)
             const rawEndpoint = process.env.S3_ENDPOINT as string
             const cleanedEndpoint = rawEndpoint.endsWith(`/${process.env.S3_BUCKET}`)
               ? rawEndpoint.replace(`/${process.env.S3_BUCKET}`, '')
@@ -27,20 +26,18 @@ export const Media: CollectionConfig = {
               },
             })
 
-            const file = req.file
-
             await s3.send(
               new PutObjectCommand({
                 Bucket: process.env.S3_BUCKET as string,
-                Key: file.name,
-                Body: file.data,
-                ContentType: file.mimetype,
+                Key: req.file.name,
+                Body: req.file.data,
+                ContentType: req.file.mimetype,
                 Metadata: {
-                  alt: data.alt || '', // Uložení Alt textu do metadat souboru v R2
+                  alt: encodeURIComponent(data.alt || ''),
                 },
               }),
             )
-            req.payload.logger.info(`Záloha souboru ${file.name} do R2 proběhla úspěšně.`)
+            req.payload.logger.info(`Záloha souboru ${req.file.name} do R2 proběhla úspěšně.`)
           } catch (error) {
             req.payload.logger.error(
               `Chyba při zálohování do R2: ${error instanceof Error ? error.message : String(error)}`,
