@@ -52,8 +52,10 @@ export const Media: CollectionConfig = {
     {
       name: 'alt',
       type: 'text',
-      required: true,
     },
   ],
-  upload: true,
+  upload: {
+    disableLocalStorage: true,
+    adminThumbnail: ({ doc }) => (doc.thumbnailURL as string) || (doc.url as string) || null,
+  },
 }
