@@ -35,6 +35,9 @@ export const Media: CollectionConfig = {
                 Key: file.name,
                 Body: file.data,
                 ContentType: file.mimetype,
+                Metadata: {
+                  alt: data.alt || '', // Uložení Alt textu do metadat souboru v R2
+                },
               }),
             )
             req.payload.logger.info(`Záloha souboru ${file.name} do R2 proběhla úspěšně.`)

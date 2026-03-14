@@ -45,7 +45,7 @@ async function syncCloudinaryToPayload() {
 
   // Pro testování stáhneme jen jednu dávku o 5 položkách
   const result = await cloudinary.api.resources({
-    max_results: 10,
+    max_results: 5,
     resource_type: 'image',
     type: 'upload',
     context: true,
@@ -72,22 +72,31 @@ async function syncCloudinaryToPayload() {
 
     const filename = resource.public_id.split('/').pop() + '.' + resource.format
 
-    // Mapování dat
+    // Generování URL pro thumbnail (150x150)
+    const baseUrl = resource.secure_url.split('/upload/')[0] + '/upload/'
+    const transformPath = 'c_fill,f_auto,g_auto,h_150,q_auto,w_150/'
+    const versionAndId = resource.secure_url.split('/upload/')[1]
+    const thumbnailURL = `${baseUrl}${transformPath}${versionAndId}`
+
+    // Mapování dat - musí odpovídat schématu v DB
     const mediaData = {
-      alt: resource.context?.custom?.alt || resource.context?.alt || resource.public_id,
+      alt: resource.context?.custom?.alt || resource.context?.alt || null,
       cloudinaryPublicId: resource.public_id,
       cloudinaryUrl: resource.secure_url,
       cloudinaryResourceType: resource.resource_type,
       cloudinaryFormat: resource.format,
-      cloudinaryVersion: resource.version,
+      cloudinaryVersion: resource.version.toString(),
       originalUrl: resource.secure_url,
-      transformedUrl: resource.secure_url,
+      transformedUrl: null, // Podle pluginu je NULL, dokud nejsou vybrány presety
+      thumbnailURL: thumbnailURL,
       url: resource.secure_url,
       filename: filename,
       mimeType: `image/${resource.format}`,
       filesize: resource.bytes,
       width: resource.width,
       height: resource.height,
+      focalX: 50,
+      focalY: 50,
       updatedAt: new Date().toISOString(),
       createdAt: new Date(resource.created_at).toISOString(),
     }
