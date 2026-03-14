@@ -30,4 +30,6 @@ services:
 
 volumes:
   pgdata:
+    external: true
+    name: aracze_pgdata
   node_modules:
