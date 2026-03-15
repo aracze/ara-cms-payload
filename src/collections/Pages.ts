@@ -58,13 +58,27 @@ export const Pages: CollectionConfig = {
       },
     },
     {
-      name: 'finalUrl',
-      type: 'ui',
+      name: 'fullUrl',
+      type: 'text',
+      index: true,
       admin: {
         position: 'sidebar',
+        readOnly: true,
         components: {
           Field: '/components/FinalUrl#FinalUrl',
         },
+      },
+      hooks: {
+        beforeChange: [
+          ({ data, originalDoc }) => {
+            // Použijeme breadcrumbs, které spravuje nestedDocsPlugin
+            const breadcrumbs = data?.breadcrumbs || originalDoc?.breadcrumbs || []
+            if (breadcrumbs.length > 0) {
+              return breadcrumbs[breadcrumbs.length - 1].url
+            }
+            return undefined
+          },
+        ],
       },
     },
     {
