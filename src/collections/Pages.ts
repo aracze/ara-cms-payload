@@ -138,7 +138,11 @@ export const Pages: CollectionConfig = {
       hooks: {
         afterRead: [
           async ({ value, req }) => {
-            if (value && typeof value === 'object') {
+            // Only convert to markdown if we are in the REST API and NOT the admin panel
+            // This prevents the Admin UI editor from crashing
+            const isApiRequest = req.url?.includes('/api/') && !req.url?.includes('/admin')
+
+            if (value && typeof value === 'object' && isApiRequest) {
               try {
                 const editorConfig = await editorConfigFactory.default({
                   config: req.payload.config,
