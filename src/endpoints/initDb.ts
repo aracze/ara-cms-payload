@@ -12,10 +12,10 @@ export const initDbEndpoint: PayloadHandler = async (req) => {
 
   try {
     payload.logger.info('--- MANUAL DB INITIALIZATION STARTING ---')
-    
+
     // We use the underlying db adapter to run the SQL
     const db = payload.db as any
-    
+
     // Wipe and rebuild the public schema
     await db.drizzle.execute(sql`
       DROP SCHEMA public CASCADE;
@@ -140,10 +140,13 @@ export const initDbEndpoint: PayloadHandler = async (req) => {
 
       CREATE TABLE "payload_locked_documents_rels" (
           "id" serial PRIMARY KEY NOT NULL,
-          "order" integer NOT NULL,
+          "order" integer,
           "parent_id" integer NOT NULL,
           "path" varchar NOT NULL,
-          "users_id" integer
+          "users_id" integer,
+          "media_id" integer,
+          "pages_id" integer,
+          "articles_id" integer
       );
 
       CREATE TABLE "payload_preferences" (
@@ -156,7 +159,7 @@ export const initDbEndpoint: PayloadHandler = async (req) => {
 
       CREATE TABLE "payload_preferences_rels" (
           "id" serial PRIMARY KEY NOT NULL,
-          "order" integer NOT NULL,
+          "order" integer,
           "parent_id" integer NOT NULL,
           "path" varchar NOT NULL,
           "users_id" integer
@@ -185,10 +188,13 @@ export const initDbEndpoint: PayloadHandler = async (req) => {
   } catch (_error: any) {
     payload.logger.error('Database initialization failed: ' + _error.message)
     // Return the actual error message so we can debug
-    return Response.json({ 
-      error: _error.message,
-      stack: _error.stack,
-      detail: _error.detail || 'No extra detail'
-    }, { status: 500 })
+    return Response.json(
+      {
+        error: _error.message,
+        stack: _error.stack,
+        detail: _error.detail || 'No extra detail',
+      },
+      { status: 500 },
+    )
   }
 }
