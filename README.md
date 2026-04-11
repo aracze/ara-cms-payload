@@ -17,6 +17,7 @@ To spin up this project locally, follow these steps:
 4. **Install & Run**:
    ```bash
    pnpm install
+   pnpm payload migrate
    pnpm dev
    ```
 5. **Access Admin**: Open `http://localhost:3000/admin` to create your first admin user.

@@ -58,7 +58,7 @@ export const Pages: CollectionConfig = {
       },
     },
     {
-      name: 'fullUrl',
+      name: 'fullSlug',
       type: 'text',
       index: true,
       admin: {

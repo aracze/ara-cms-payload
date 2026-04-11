@@ -211,7 +211,7 @@ export interface Page {
     | 'Ubytování'
     | 'Články';
   parent?: (number | null) | Page;
-  fullUrl?: string | null;
+  fullSlug?: string | null;
   includeInChildUrlPaths?: boolean | null;
   breadcrumbs?:
     | {
@@ -438,7 +438,7 @@ export interface PagesSelect<T extends boolean = true> {
   slug?: T;
   category?: T;
   parent?: T;
-  fullUrl?: T;
+  fullSlug?: T;
   includeInChildUrlPaths?: T;
   breadcrumbs?:
     | T
