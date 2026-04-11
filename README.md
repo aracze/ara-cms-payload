@@ -69,13 +69,17 @@ The project includes a `docker-compose.yml` pre-configured for PostgreSQL.
 The project includes two GitHub Action workflows:
 
 ### CI (`.github/workflows/ci.yml`)
+
 Runs on **every push** to any branch.
+
 1.  **Lint**: Runs `pnpm run lint` for code quality.
 2.  **Format Check**: Runs `npx prettier --check .` for code style.
 3.  **Tests**: Runs integration and E2E tests using `pnpm run test` (uses a PostgreSQL service container).
 
 ### CD (`.github/workflows/cd.yml`)
+
 Runs only on **push to the `main` branch**.
+
 1.  **Docker Build**: Validates and builds the production Docker image.
 
 ## Production

@@ -1,6 +1,7 @@
 import type { Endpoint } from 'payload'
 import { APIError } from 'payload'
 import { spawn } from 'node:child_process'
+import { sql } from '@payloadcms/db-postgres'
 import { createReadStream, createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -8,6 +9,39 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web'
 import { pipeline } from 'node:stream/promises'
+
+const runPgRestoreDirect = async (dbUrl: string, filePath: string) => {
+  return await new Promise<{ code: number; stderr: string }>((resolve, reject) => {
+    const child = spawn(
+      'pg_restore',
+      [
+        '--dbname',
+        dbUrl,
+        '--clean',
+        '--if-exists',
+        '--no-owner',
+        '--no-acl',
+        '--single-transaction',
+        '--exit-on-error',
+      ],
+      { stdio: ['pipe', 'ignore', 'pipe'] },
+    )
+
+    const input = createReadStream(filePath)
+    input.pipe(child.stdin)
+
+    let stderr = ''
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+
+    child.on('error', reject)
+    input.on('error', reject)
+    child.on('close', (code) => {
+      resolve({ code: code ?? 1, stderr })
+    })
+  })
+}
 
 const runPgRestoreDocker = async (
   composeCmd: string[],
@@ -178,15 +212,35 @@ export const dbImportEndpoint: Endpoint = {
       const stream = Readable.fromWeb(file.stream() as NodeReadableStream)
       await pipeline(stream, createWriteStream(filePath))
 
-      const url = new URL(databaseUrl)
-      url.hostname = dockerHost
-      url.port = url.port || '5432'
+      const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER
+      let result: { code: number; stderr: string }
 
-      let result = await runPgRestoreDockerAuto(dockerService, url.toString(), filePath)
-      if (result.code !== 0) {
-        const containerId = dockerContainer || (await findContainerId(dockerService)) || undefined
-        if (containerId) {
-          result = await runPgRestoreDockerExec(containerId, url.toString(), filePath)
+      if (isProduction) {
+        // Wipe the schema manualy first to prevent dependency errors during restore
+        const db = req.payload.db as any
+        if (db && db.drizzle) {
+          await db.drizzle.execute(sql`
+            DROP SCHEMA IF EXISTS public CASCADE;
+            CREATE SCHEMA public;
+            GRANT ALL ON SCHEMA public TO public;
+            GRANT ALL ON SCHEMA public TO postgres;
+          `)
+        }
+
+        // Direct pg_restore in production
+        result = await runPgRestoreDirect(databaseUrl, filePath)
+      } else {
+        // Local Docker logic
+        const url = new URL(databaseUrl)
+        url.hostname = dockerHost
+        url.port = url.port || '5432'
+
+        result = await runPgRestoreDockerAuto(dockerService, url.toString(), filePath)
+        if (result.code !== 0) {
+          const containerId = dockerContainer || (await findContainerId(dockerService)) || undefined
+          if (containerId) {
+            result = await runPgRestoreDockerExec(containerId, url.toString(), filePath)
+          }
         }
       }
 
