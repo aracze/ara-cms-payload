@@ -134,13 +134,9 @@ export const Pages: CollectionConfig = {
     },
     {
       name: 'children',
-      type: 'ui',
-      admin: {
-        components: {
-          Field: '/components/ChildrenPlaceholder#ChildrenPlaceholder',
-        },
-      },
-      label: 'Children (Managed via Parent field on child pages)',
+      type: 'join',
+      collection: 'pages',
+      on: 'parent',
     },
     {
       name: 'featuredImage',
