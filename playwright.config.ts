@@ -26,11 +26,12 @@ export default defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    headless: true,
   },
   projects: [
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+      name: 'chrome',
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     },
   ],
   webServer: {

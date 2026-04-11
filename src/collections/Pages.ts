@@ -1,10 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { imageFields } from '../fields/image'
 import { slugField } from '../fields/slug'
-import { 
-  convertLexicalToMarkdown, 
-  editorConfigFactory,
-} from '@payloadcms/richtext-lexical'
+import { convertLexicalToMarkdown, editorConfigFactory } from '@payloadcms/richtext-lexical'
 
 export const Pages: CollectionConfig = {
   slug: 'pages',

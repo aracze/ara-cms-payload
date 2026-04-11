@@ -50,7 +50,17 @@ const runPgDumpDockerExec = async (containerId: string, dbUrl: string, filePath:
   return await new Promise<{ code: number; stderr: string }>((resolve, reject) => {
     const child = spawn(
       'docker',
-      ['exec', '-i', containerId, 'pg_dump', '--dbname', dbUrl, '--format=c', '--no-owner', '--no-acl'],
+      [
+        'exec',
+        '-i',
+        containerId,
+        'pg_dump',
+        '--dbname',
+        dbUrl,
+        '--format=c',
+        '--no-owner',
+        '--no-acl',
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     )
 
@@ -101,10 +111,7 @@ const findContainerId = async (service: string) => {
 }
 
 const runPgDumpDockerAuto = async (service: string, dbUrl: string, filePath: string) => {
-  const candidates: string[][] = [
-    ['docker', 'compose'],
-    ['docker-compose'],
-  ]
+  const candidates: string[][] = [['docker', 'compose'], ['docker-compose']]
 
   let lastError: Error | null = null
   let lastStderr = ''
@@ -155,8 +162,7 @@ export const dbDumpEndpoint: Endpoint = {
 
       let result = await runPgDumpDockerAuto(dockerService, url.toString(), filePath)
       if (result.code !== 0) {
-        const containerId =
-          dockerContainer || (await findContainerId(dockerService)) || undefined
+        const containerId = dockerContainer || (await findContainerId(dockerService)) || undefined
         if (containerId) {
           result = await runPgDumpDockerExec(containerId, url.toString(), filePath)
         }

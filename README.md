@@ -62,6 +62,37 @@ The project includes a `docker-compose.yml` pre-configured for PostgreSQL.
 - **Stop DB**: `docker compose stop postgres`
 - **Full Reset (Warning: deletes data)**: `docker compose down -v`
 
+## Production
+
+### Docker image
+
+To build and run the production-optimized Docker image:
+
+1. **Build the image**:
+
+   ```bash
+   docker build -t payload-cms:latest .
+   ```
+
+2. **Run the container**:
+   ```bash
+   docker run -p 3000:3000 \
+     --env-file .env \
+     -e DATABASE_URL=postgres://postgres:yourpassword@host.docker.internal:5432/aracze \
+     payload-cms:latest
+   ```
+
+### Command Explanations:
+
+- `-p 3000:3000`: Maps the container's internal port 3000 to your host's port 3000.
+- `--env-file .env`: Automatically loads all environment variables (secrets, keys, etc.) from your `.env` file.
+- `-e DATABASE_URL=...`: Overrides the database connection string.
+  - **Note**: On Mac or Windows, use `host.docker.internal` to allow the container to connect to a database running on your host machine.
+- `payload-cms:latest`: Specifies the image to run.
+
+> [!TIP]
+> This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
+
 ---
 
 ## How it works

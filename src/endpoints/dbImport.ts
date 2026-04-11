@@ -120,10 +120,7 @@ const findContainerId = async (service: string) => {
 }
 
 const runPgRestoreDockerAuto = async (service: string, dbUrl: string, filePath: string) => {
-  const candidates: string[][] = [
-    ['docker', 'compose'],
-    ['docker-compose'],
-  ]
+  const candidates: string[][] = [['docker', 'compose'], ['docker-compose']]
 
   let lastError: Error | null = null
   let lastStderr = ''
@@ -187,8 +184,7 @@ export const dbImportEndpoint: Endpoint = {
 
       let result = await runPgRestoreDockerAuto(dockerService, url.toString(), filePath)
       if (result.code !== 0) {
-        const containerId =
-          dockerContainer || (await findContainerId(dockerService)) || undefined
+        const containerId = dockerContainer || (await findContainerId(dockerService)) || undefined
         if (containerId) {
           result = await runPgRestoreDockerExec(containerId, url.toString(), filePath)
         }

@@ -81,8 +81,8 @@ const DbImportPage = () => {
     <div style={{ padding: 24, maxWidth: 640 }}>
       <h1 style={{ marginBottom: 12 }}>Database Import</h1>
       <p style={{ marginBottom: 12 }}>
-        Upload a PostgreSQL dump created with <code>pg_dump</code> (custom format). This
-        operation overwrites all existing data.
+        Upload a PostgreSQL dump created with <code>pg_dump</code> (custom format). This operation
+        overwrites all existing data.
       </p>
       <form onSubmit={handleSubmit}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
