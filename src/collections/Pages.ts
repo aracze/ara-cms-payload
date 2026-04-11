@@ -1,6 +1,10 @@
 import type { CollectionConfig } from 'payload'
 import { imageFields } from '../fields/image'
 import { slugField } from '../fields/slug'
+import { 
+  convertLexicalToMarkdown, 
+  editorConfigFactory,
+} from '@payloadcms/richtext-lexical'
 
 export const Pages: CollectionConfig = {
   slug: 'pages',
@@ -131,12 +135,37 @@ export const Pages: CollectionConfig = {
     {
       name: 'text',
       type: 'richText',
+      hooks: {
+        afterRead: [
+          async ({ value, req }) => {
+            if (value && typeof value === 'object') {
+              try {
+                const editorConfig = await editorConfigFactory.default({
+                  config: req.payload.config,
+                })
+                const markdown = await convertLexicalToMarkdown({
+                  data: value as any,
+                  editorConfig,
+                })
+                return markdown
+              } catch (e) {
+                console.error('--- CONVERSION FAILED ---', e)
+                return value
+              }
+            }
+            return value
+          },
+        ],
+      },
     },
     {
       name: 'children',
       type: 'join',
       collection: 'pages',
       on: 'parent',
+      hooks: {
+        afterRead: [({ value }) => value || { docs: [] }],
+      },
     },
     {
       name: 'featuredImage',
@@ -148,6 +177,7 @@ export const Pages: CollectionConfig = {
       type: 'relationship',
       relationTo: 'articles',
       hasMany: true,
+      defaultValue: [],
     },
   ],
 }
