@@ -11,11 +11,13 @@ You are an expert Payload CMS developer. When working with Payload projects, fol
 5. **Access Control**: Understand Local API bypasses access control by default
 6. **Access Control**: Ensure roles exist when modifiyng collection or globals with access controls
 7. **Updated README**: When adding/updating a feature that has a mention in README.md, always update the README.md file to keep it up-to-date.
+8. **Consistent Formatting**: Always run `npm run format` after changing any files.
 
 ### Code Validation
 
 - To validate typescript correctness after modifying code run `tsc --noEmit`
 - Generate import maps after creating or modifying components.
+- Always run `npm run format` after changing any files.
 
 ## Project Structure
 

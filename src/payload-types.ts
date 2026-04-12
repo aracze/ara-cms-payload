@@ -563,14 +563,14 @@ export interface Homepage {
  */
 export interface Header {
   id: number
-  logo: {
+  logo?: {
     link?: {
       title?: string | null
       href?: string | null
       isExternal?: boolean | null
       isButtonLink?: boolean | null
     }
-    image: number | Media
+    image?: (number | null) | Media
     svgCode?: string | null
   }
   navItems?:
@@ -589,7 +589,7 @@ export interface Header {
  */
 export interface Footer {
   id: number
-  logo: {
+  logo?: {
     link?: {
       title?: string | null
       href?: string | null
@@ -597,7 +597,7 @@ export interface Footer {
       isButtonLink?: boolean | null
       id?: string | null
     }
-    image: number | Media
+    image?: (number | null) | Media
     svgCode?: string | null
   }
   navItems?:

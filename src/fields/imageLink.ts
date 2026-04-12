@@ -11,7 +11,6 @@ export const imageLinkFields: Field[] = [
     name: 'image',
     type: 'upload',
     relationTo: 'media',
-    required: true,
   },
   {
     name: 'svgCode',
