@@ -342,11 +342,22 @@ export const Pages: CollectionConfig = {
       },
     },
     {
-      name: 'articles',
-      label: 'Main Articles',
+      name: 'primaryArticles',
+      label: 'Main Article (Canonical)',
       type: 'join',
       collection: 'articles',
       on: 'mainPage',
+      admin: {
+        position: 'sidebar',
+        allowCreate: false,
+      },
+    },
+    {
+      name: 'secondaryArticles',
+      label: 'Other Articles',
+      type: 'join',
+      collection: 'articles',
+      on: 'pages',
       admin: {
         position: 'sidebar',
         allowCreate: false,

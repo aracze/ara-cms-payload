@@ -79,7 +79,8 @@ export interface Config {
   collectionsJoins: {
     pages: {
       subPages: 'pages';
-      articles: 'articles';
+      primaryArticles: 'articles';
+      secondaryArticles: 'articles';
     };
   };
   collectionsSelect: {
@@ -283,7 +284,12 @@ export interface Page {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
-  articles?: {
+  primaryArticles?: {
+    docs?: (number | Article)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  secondaryArticles?: {
     docs?: (number | Article)[];
     hasNextPage?: boolean;
     totalDocs?: number;
@@ -539,7 +545,8 @@ export interface PagesSelect<T extends boolean = true> {
         id?: T;
       };
   subPages?: T;
-  articles?: T;
+  primaryArticles?: T;
+  secondaryArticles?: T;
   updatedAt?: T;
   createdAt?: T;
 }
