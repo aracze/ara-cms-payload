@@ -137,7 +137,8 @@ export const Pages: CollectionConfig = {
           async ({ value, req }) => {
             // Only convert to markdown if we are in the REST API and NOT the admin panel
             // This prevents the Admin UI editor from crashing
-            const isApiRequest = req.url?.includes('/api/') && !req.url?.includes('/admin')
+            const referer = req.headers?.get('referer')
+            const isApiRequest = req.url?.includes('/api/') && !referer?.includes('/admin')
 
             if (value && typeof value === 'object' && isApiRequest) {
               try {
@@ -154,6 +155,14 @@ export const Pages: CollectionConfig = {
                 return value
               }
             }
+
+            // Safety check: Lexical editor in Admin UI expects an object or null.
+            // If the value in the DB is a string (e.g. from manual SQL input or bad import),
+            // we must not pass it to the editor or it will crash.
+            if (!isApiRequest && typeof value === 'string') {
+              return null
+            }
+
             return value
           },
         ],
