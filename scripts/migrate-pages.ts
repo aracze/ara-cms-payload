@@ -24,29 +24,26 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 
 import { getPayload } from 'payload'
 import mysql from 'mysql2/promise'
-import {
-  convertHTMLToLexical,
-  editorConfigFactory,
-} from '@payloadcms/richtext-lexical'
+import { convertHTMLToLexical, editorConfigFactory } from '@payloadcms/richtext-lexical'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KONFIGURACE — upravte nebo doplňte do .env
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OLD_DB_CONFIG = {
-  host:     process.env.OLD_DB_HOST     || 'localhost',
-  port:     Number(process.env.OLD_DB_PORT || 3306),
-  user:     process.env.OLD_DB_USER     || 'root',
+  host: process.env.OLD_DB_HOST || 'localhost',
+  port: Number(process.env.OLD_DB_PORT || 3306),
+  user: process.env.OLD_DB_USER || 'root',
   password: process.env.OLD_DB_PASSWORD || '',
-  database: process.env.OLD_DB_NAME     || 'stara_databaze',
+  database: process.env.OLD_DB_NAME || 'stara_databaze',
 }
 
 // ⚠️ DOPLŇTE: Název tabulky a sloupců ve starém MySQL DB
-const OLD_TABLE   = 'destinations'   // tabulka s texty
-const COL_ID      = 'id'
-const COL_TITLE   = 'title'          // název stránky/destinace
-const COL_SLUG    = 'slug'
-const COL_HTML    = 'text'           // HTML obsah
+const OLD_TABLE = 'destinations' // tabulka s texty
+const COL_ID = 'id'
+const COL_TITLE = 'title' // název stránky/destinace
+const COL_SLUG = 'slug'
+const COL_HTML = 'text' // HTML obsah
 // const COL_PLAIN = 'unformatted_text' // plain text (nepoužijeme, HTML stačí)
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +51,7 @@ const COL_HTML    = 'text'           // HTML obsah
 // Parsování argumentů
 const isDryRun = process.argv.includes('--dry-run')
 const limitArg = process.argv.find((a) => a.startsWith('--limit='))
-const limit    = limitArg ? parseInt(limitArg.split('=')[1]) : null
+const limit = limitArg ? parseInt(limitArg.split('=')[1]) : null
 
 type OldRecord = {
   id: number
@@ -103,11 +100,29 @@ async function htmlToLexical(
     if (!plainText) return emptyLexical()
     return {
       root: {
-        type: 'root', format: '', indent: 0, version: 1,
-        children: [{
-          type: 'paragraph', format: '', indent: 0, version: 1,
-          children: [{ type: 'text', text: plainText, format: 0, style: '', mode: 'normal', detail: 0, version: 1 }],
-        }],
+        type: 'root',
+        format: '',
+        indent: 0,
+        version: 1,
+        children: [
+          {
+            type: 'paragraph',
+            format: '',
+            indent: 0,
+            version: 1,
+            children: [
+              {
+                type: 'text',
+                text: plainText,
+                format: 0,
+                style: '',
+                mode: 'normal',
+                detail: 0,
+                version: 1,
+              },
+            ],
+          },
+        ],
       },
     }
   }
@@ -140,9 +155,9 @@ async function main() {
   const records = await fetchOldRecords(conn)
   console.log(`📦 Nalezeno ${records.length} záznamů\n`)
 
-  let created  = 0
-  let updated  = 0
-  let skipped  = 0
+  let created = 0
+  let updated = 0
+  let skipped = 0
   let errCount = 0
 
   for (const [i, record] of records.entries()) {
@@ -165,8 +180,8 @@ async function main() {
     // ───────────────────────────────────────────────────────────────────────
     const pageData = {
       title: String(record.title || '').substring(0, 255),
-      slug:  String(record.slug  || '').substring(0, 255),
-      text:  lexicalText,
+      slug: String(record.slug || '').substring(0, 255),
+      text: lexicalText,
       // category: mapCategory(record.category),
       // parent: null,
     }

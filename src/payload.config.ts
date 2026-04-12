@@ -109,12 +109,12 @@ export default buildConfig({
       },
       generateURL: async ({ doc, collectionSlug, req }) => {
         const slug = (doc as any).slug || ''
-        
+
         if (collectionSlug === 'pages') {
           const fullSlug = (doc as any).fullSlug || ''
           return `https://www.ara.cz${fullSlug}`
         }
-        
+
         if (collectionSlug === 'articles') {
           const mainPageId = (doc as any).mainPage
           if (mainPageId) {
@@ -134,7 +134,7 @@ export default buildConfig({
           }
           return `https://www.ara.cz/${slug}` // Fallback bez hlavní stránky
         }
-        
+
         return `https://www.ara.cz/${slug}`
       },
       generateImage: ({ doc }) => (doc as any).featuredImage?.image,
