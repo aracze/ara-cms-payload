@@ -338,7 +338,7 @@ export const Pages: CollectionConfig = {
       on: 'parent',
       admin: {
         position: 'sidebar',
-        readOnly: true,
+        allowCreate: false,
       },
     },
     {
@@ -349,7 +349,7 @@ export const Pages: CollectionConfig = {
       on: 'mainPage',
       admin: {
         position: 'sidebar',
-        readOnly: true,
+        allowCreate: false,
       },
     },
   ],
