@@ -1,10 +1,8 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import {
   FixedToolbarFeature,
-  HeadingFeature,
   InlineToolbarFeature,
   lexicalEditor,
-  LinkFeature,
   UploadFeature,
   HTMLConverterFeature,
   BlocksFeature,

@@ -5,7 +5,6 @@ import { convertLexicalToMarkdown, editorConfigFactory } from '@payloadcms/richt
 
 import {
   MetaDescriptionField,
-  MetaImageField,
   MetaTitleField,
   OverviewField,
   PreviewField,

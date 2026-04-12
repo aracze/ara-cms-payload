@@ -4,7 +4,6 @@ import { slugField } from '../fields/slug'
 
 import {
   MetaDescriptionField,
-  MetaImageField,
   MetaTitleField,
   OverviewField,
   PreviewField,
