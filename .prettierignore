@@ -1,0 +1,6 @@
+node_modules
+.next
+src/payload-types.ts
+dist
+build
+pnpm-lock.yaml
