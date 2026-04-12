@@ -3,6 +3,14 @@ import { imageFields } from '../fields/image'
 import { slugField } from '../fields/slug'
 import { convertLexicalToMarkdown, editorConfigFactory } from '@payloadcms/richtext-lexical'
 
+import {
+  MetaDescriptionField,
+  MetaImageField,
+  MetaTitleField,
+  OverviewField,
+  PreviewField,
+} from '@payloadcms/plugin-seo/fields'
+
 export const Pages: CollectionConfig = {
   slug: 'pages',
   admin: {
@@ -18,29 +26,114 @@ export const Pages: CollectionConfig = {
       type: 'text',
       required: true,
     },
-    slugField(),
     {
-      name: 'category',
-      type: 'select',
-      options: [
-        { label: 'Místo k navštívení', value: 'Místo k navštívení' },
-        { label: 'Turistický cíl', value: 'Turistický cíl' },
-        { label: 'Místa', value: 'Místa' },
-        { label: 'Praktické informace', value: 'Praktické informace' },
-        { label: 'Vstupní podmínky', value: 'Vstupní podmínky' },
-        { label: 'Cesta', value: 'Cesta' },
-        { label: 'Počasí', value: 'Počasí' },
-        { label: 'Doprava', value: 'Doprava' },
-        { label: 'Měna a ceny', value: 'Měna a ceny' },
-        { label: 'Zdraví a bezpečí', value: 'Zdraví a bezpečí' },
-        { label: 'Jazyk a kultura', value: 'Jazyk a kultura' },
-        { label: 'Jídlo a pití', value: 'Jídlo a pití' },
-        { label: 'Ubytování', value: 'Ubytování' },
-        { label: 'Články', value: 'Články' },
+      type: 'tabs',
+      tabs: [
+        {
+          label: 'Content',
+          fields: [
+            {
+              name: 'category',
+              type: 'select',
+              options: [
+                { label: 'Místo k navštívení', value: 'Místo k navštívení' },
+                { label: 'Turistický cíl', value: 'Turistický cíl' },
+                { label: 'Místa', value: 'Místa' },
+                { label: 'Praktické informace', value: 'Praktické informace' },
+                { label: 'Vstupní podmínky', value: 'Vstupní podmínky' },
+                { label: 'Cesta', value: 'Cesta' },
+                { label: 'Počasí', value: 'Počasí' },
+                { label: 'Doprava', value: 'Doprava' },
+                { label: 'Měna a ceny', value: 'Měna a ceny' },
+                { label: 'Zdraví a bezpečí', value: 'Zdraví a bezpečí' },
+                { label: 'Jazyk a kultura', value: 'Jazyk a kultura' },
+                { label: 'Jídlo a pití', value: 'Jídlo a pití' },
+                { label: 'Ubytování', value: 'Ubytování' },
+                { label: 'Články', value: 'Články' },
+              ],
+              required: true,
+              defaultValue: 'Místo k navštívení',
+            },
+            {
+              name: 'text',
+              type: 'richText',
+              hooks: {
+                afterRead: [
+                  async ({ value, req }) => {
+                    const referer = req.headers?.get('referer')
+                    const isApiRequest = req.url?.includes('/api/') && !referer?.includes('/admin')
+
+                    if (value && typeof value === 'object' && isApiRequest) {
+                      try {
+                        const editorConfig = await editorConfigFactory.default({
+                          config: req.payload.config,
+                        })
+                        const markdown = await convertLexicalToMarkdown({
+                          data: value as any,
+                          editorConfig,
+                        })
+                        return markdown
+                      } catch (e) {
+                        console.error('--- CONVERSION FAILED ---', e)
+                        return value
+                      }
+                    }
+
+                    if (!isApiRequest && typeof value === 'string') {
+                      return null
+                    }
+
+                    return value
+                  },
+                ],
+              },
+            },
+            {
+              name: 'children',
+              type: 'join',
+              collection: 'pages',
+              on: 'parent',
+              hooks: {
+                afterRead: [({ value }) => value || { docs: [] }],
+              },
+            },
+            {
+              name: 'featuredImage',
+              type: 'group',
+              fields: imageFields,
+            },
+            {
+              name: 'articles',
+              type: 'relationship',
+              relationTo: 'articles',
+              hasMany: true,
+              defaultValue: [],
+            },
+          ],
+        },
+        {
+          name: 'meta',
+          label: 'SEO',
+          fields: [
+            OverviewField({
+              titlePath: 'meta.title',
+              descriptionPath: 'meta.description',
+              imagePath: 'featuredImage.image',
+            }),
+            MetaTitleField({
+              hasGenerateFn: true,
+            }),
+            MetaDescriptionField({}),
+            PreviewField({
+              hasGenerateFn: true,
+              titlePath: 'meta.title',
+              descriptionPath: 'meta.description',
+            }),
+          ],
+        },
       ],
-      required: true,
-      defaultValue: 'Místo k navštívení',
     },
+    slugField(),
     {
       name: 'parent',
       type: 'relationship',
@@ -72,7 +165,6 @@ export const Pages: CollectionConfig = {
       hooks: {
         beforeChange: [
           ({ data, originalDoc }) => {
-            // Použijeme breadcrumbs, které spravuje nestedDocsPlugin
             const breadcrumbs = data?.breadcrumbs || originalDoc?.breadcrumbs || []
             if (breadcrumbs.length > 0) {
               return breadcrumbs[breadcrumbs.length - 1].url
@@ -128,66 +220,6 @@ export const Pages: CollectionConfig = {
         position: 'sidebar',
         readOnly: true,
       },
-    },
-    {
-      name: 'text',
-      type: 'richText',
-      hooks: {
-        afterRead: [
-          async ({ value, req }) => {
-            // Only convert to markdown if we are in the REST API and NOT the admin panel
-            // This prevents the Admin UI editor from crashing
-            const referer = req.headers?.get('referer')
-            const isApiRequest = req.url?.includes('/api/') && !referer?.includes('/admin')
-
-            if (value && typeof value === 'object' && isApiRequest) {
-              try {
-                const editorConfig = await editorConfigFactory.default({
-                  config: req.payload.config,
-                })
-                const markdown = await convertLexicalToMarkdown({
-                  data: value as any,
-                  editorConfig,
-                })
-                return markdown
-              } catch (e) {
-                console.error('--- CONVERSION FAILED ---', e)
-                return value
-              }
-            }
-
-            // Safety check: Lexical editor in Admin UI expects an object or null.
-            // If the value in the DB is a string (e.g. from manual SQL input or bad import),
-            // we must not pass it to the editor or it will crash.
-            if (!isApiRequest && typeof value === 'string') {
-              return null
-            }
-
-            return value
-          },
-        ],
-      },
-    },
-    {
-      name: 'children',
-      type: 'join',
-      collection: 'pages',
-      on: 'parent',
-      hooks: {
-        afterRead: [({ value }) => value || { docs: [] }],
-      },
-    },
-    {
-      name: 'featuredImage',
-      type: 'group',
-      fields: imageFields,
-    },
-    {
-      name: 'articles',
-      type: 'relationship',
-      relationTo: 'articles',
-      hasMany: true,
-      defaultValue: [],
     },
   ],
 }

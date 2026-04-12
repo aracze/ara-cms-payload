@@ -14,6 +14,7 @@ import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
 import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
+import { seoPlugin } from '@payloadcms/plugin-seo'
 import { cloudinaryStorage } from 'payload-storage-cloudinary'
 
 import { Users } from './collections/Users'
@@ -101,6 +102,18 @@ export default buildConfig({
         }, ''),
       parentFieldSlug: 'parent',
       breadcrumbsFieldSlug: 'breadcrumbs',
+    }),
+    seoPlugin({
+      generateTitle: ({ doc }) => `${(doc as any).title || ''} | Ara.cz`,
+      generateDescription: ({ doc }) => {
+        const title = (doc as any).title || ''
+        return `Informace o destinaci ${title} na Ara.cz – cestovatelský průvodce.`
+      },
+      generateURL: ({ doc }) => {
+        const fullSlug = (doc as any).fullSlug || ''
+        return `https://www.ara.cz${fullSlug}`
+      },
+      generateImage: ({ doc }) => (doc as any).featuredImage?.image,
     }),
     ...(process.env.CLOUDINARY_CLOUD_NAME &&
     process.env.CLOUDINARY_API_KEY &&

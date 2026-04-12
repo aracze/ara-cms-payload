@@ -198,7 +198,6 @@ export interface Media {
 export interface Page {
   id: number;
   title: string;
-  slug?: string | null;
   category:
     | 'Místo k navštívení'
     | 'Turistický cíl'
@@ -214,17 +213,6 @@ export interface Page {
     | 'Jídlo a pití'
     | 'Ubytování'
     | 'Články';
-  parent?: (number | null) | Page;
-  fullSlug?: string | null;
-  includeInChildUrlPaths?: boolean | null;
-  breadcrumbs?:
-    | {
-        doc?: (number | null) | Page;
-        url?: string | null;
-        label?: string | null;
-        id?: string | null;
-      }[]
-    | null;
   text?: {
     root: {
       type: string;
@@ -261,6 +249,22 @@ export interface Page {
     svgCode?: string | null;
   };
   articles?: (number | Article)[] | null;
+  meta?: {
+    title?: string | null;
+    description?: string | null;
+  };
+  slug?: string | null;
+  parent?: (number | null) | Page;
+  fullSlug?: string | null;
+  includeInChildUrlPaths?: boolean | null;
+  breadcrumbs?:
+    | {
+        doc?: (number | null) | Page;
+        url?: string | null;
+        label?: string | null;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -444,19 +448,7 @@ export interface MediaSelect<T extends boolean = true> {
  */
 export interface PagesSelect<T extends boolean = true> {
   title?: T;
-  slug?: T;
   category?: T;
-  parent?: T;
-  fullSlug?: T;
-  includeInChildUrlPaths?: T;
-  breadcrumbs?:
-    | T
-    | {
-        doc?: T;
-        url?: T;
-        label?: T;
-        id?: T;
-      };
   text?: T;
   children?: T;
   featuredImage?:
@@ -474,6 +466,24 @@ export interface PagesSelect<T extends boolean = true> {
         svgCode?: T;
       };
   articles?: T;
+  meta?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+      };
+  slug?: T;
+  parent?: T;
+  fullSlug?: T;
+  includeInChildUrlPaths?: T;
+  breadcrumbs?:
+    | T
+    | {
+        doc?: T;
+        url?: T;
+        label?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
