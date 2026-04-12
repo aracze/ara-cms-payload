@@ -27,33 +27,33 @@ export const Pages: CollectionConfig = {
       required: true,
     },
     {
+      name: 'category',
+      type: 'select',
+      options: [
+        { label: 'Místo k navštívení', value: 'Místo k navštívení' },
+        { label: 'Turistický cíl', value: 'Turistický cíl' },
+        { label: 'Místa', value: 'Místa' },
+        { label: 'Praktické informace', value: 'Praktické informace' },
+        { label: 'Vstupní podmínky', value: 'Vstupní podmínky' },
+        { label: 'Cesta', value: 'Cesta' },
+        { label: 'Počasí', value: 'Počasí' },
+        { label: 'Doprava', value: 'Doprava' },
+        { label: 'Měna a ceny', value: 'Měna a ceny' },
+        { label: 'Zdraví a bezpečí', value: 'Zdraví a bezpečí' },
+        { label: 'Jazyk a kultura', value: 'Jazyk a kultura' },
+        { label: 'Jídlo a pití', value: 'Jídlo a pití' },
+        { label: 'Ubytování', value: 'Ubytování' },
+        { label: 'Články', value: 'Články' },
+      ],
+      required: true,
+      defaultValue: 'Místo k navštívení',
+    },
+    {
       type: 'tabs',
       tabs: [
         {
           label: 'Content',
           fields: [
-            {
-              name: 'category',
-              type: 'select',
-              options: [
-                { label: 'Místo k navštívení', value: 'Místo k navštívení' },
-                { label: 'Turistický cíl', value: 'Turistický cíl' },
-                { label: 'Místa', value: 'Místa' },
-                { label: 'Praktické informace', value: 'Praktické informace' },
-                { label: 'Vstupní podmínky', value: 'Vstupní podmínky' },
-                { label: 'Cesta', value: 'Cesta' },
-                { label: 'Počasí', value: 'Počasí' },
-                { label: 'Doprava', value: 'Doprava' },
-                { label: 'Měna a ceny', value: 'Měna a ceny' },
-                { label: 'Zdraví a bezpečí', value: 'Zdraví a bezpečí' },
-                { label: 'Jazyk a kultura', value: 'Jazyk a kultura' },
-                { label: 'Jídlo a pití', value: 'Jídlo a pití' },
-                { label: 'Ubytování', value: 'Ubytování' },
-                { label: 'Články', value: 'Články' },
-              ],
-              required: true,
-              defaultValue: 'Místo k navštívení',
-            },
             {
               name: 'text',
               type: 'richText',
@@ -89,25 +89,89 @@ export const Pages: CollectionConfig = {
               },
             },
             {
-              name: 'children',
-              type: 'join',
-              collection: 'pages',
-              on: 'parent',
-              hooks: {
-                afterRead: [({ value }) => value || { docs: [] }],
-              },
-            },
-            {
               name: 'featuredImage',
               type: 'group',
               fields: imageFields,
             },
+          ],
+        },
+        {
+          name: 'detail',
+          label: 'Detail',
+          admin: {
+            condition: (data) =>
+              ['Místo k navštívení', 'Turistický cíl', 'Místa'].includes(data?.category),
+          },
+          fields: [
             {
-              name: 'articles',
-              type: 'relationship',
-              relationTo: 'articles',
-              hasMany: true,
-              defaultValue: [],
+              type: 'row',
+              fields: [
+                {
+                  name: 'googleMapsAddress',
+                  label: 'Adresa v Google Maps',
+                  type: 'text',
+                  admin: { width: '50%' },
+                },
+                {
+                  name: 'latitude',
+                  label: 'Latitude',
+                  type: 'text',
+                  admin: { width: '25%' },
+                },
+                {
+                  name: 'longitude',
+                  label: 'Longitude',
+                  type: 'text',
+                  admin: { width: '25%' },
+                },
+              ],
+            },
+            {
+              name: 'googleMapsZoom',
+              label: 'Google Maps Zoom Level',
+              type: 'number',
+              defaultValue: 10,
+              admin: { width: '50%' },
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  name: 'locative',
+                  label: 'Šestý pád (v kom, v čem)',
+                  type: 'text',
+                  admin: { width: '50%' },
+                },
+                {
+                  name: 'genitive',
+                  label: 'Druhý pád (do koho, do čeho)',
+                  type: 'text',
+                  admin: { width: '50%' },
+                },
+              ],
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  name: 'timezone',
+                  label: 'Název čas. pásma (např. Europe/London)',
+                  type: 'text',
+                  admin: { width: '50%' },
+                },
+                {
+                  name: 'currencyCode',
+                  label: 'Kód měny (např. GBP)',
+                  type: 'text',
+                  admin: { width: '50%' },
+                },
+              ],
+            },
+            {
+              name: 'showWeather',
+              label: 'Zobrazit přehled počasí',
+              type: 'checkbox',
+              defaultValue: false,
             },
           ],
         },
@@ -131,9 +195,54 @@ export const Pages: CollectionConfig = {
             }),
           ],
         },
+        {
+          name: 'affiliate',
+          label: 'Affiliate',
+          fields: [
+            {
+              name: 'toursUrl',
+              label: 'Zájezdy (URL)',
+              type: 'text',
+            },
+            {
+              name: 'accommodationUrl',
+              label: 'Rezervace ubytování (URL)',
+              type: 'text',
+            },
+            {
+              name: 'carRentalUrl',
+              label: 'Půjčení auta (URL)',
+              type: 'text',
+            },
+            {
+              name: 'kiwiIataCode',
+              label: 'Kiwi Fly To (IATA kód letiště)',
+              type: 'text',
+            },
+          ],
+        },
       ],
     },
     slugField(),
+    {
+      name: 'createdBy',
+      label: 'Autor',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: {
+        position: 'sidebar',
+      },
+      hooks: {
+        beforeChange: [
+          ({ req, operation, value }) => {
+            if (operation === 'create' && req.user) {
+              return req.user.id
+            }
+            return value
+          },
+        ],
+      },
+    },
     {
       name: 'parent',
       type: 'relationship',
@@ -216,6 +325,28 @@ export const Pages: CollectionConfig = {
           ],
         },
       ],
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'subPages',
+      label: 'Sub Pages',
+      type: 'join',
+      collection: 'pages',
+      on: 'parent',
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'articles',
+      label: 'Main Articles',
+      type: 'join',
+      collection: 'articles',
+      on: 'mainPage',
       admin: {
         position: 'sidebar',
         readOnly: true,

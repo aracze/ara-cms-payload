@@ -78,7 +78,8 @@ export interface Config {
   };
   collectionsJoins: {
     pages: {
-      children: 'pages';
+      subPages: 'pages';
+      articles: 'articles';
     };
   };
   collectionsSelect: {
@@ -228,11 +229,6 @@ export interface Page {
     };
     [k: string]: unknown;
   } | null;
-  children?: {
-    docs?: (number | Page)[];
-    hasNextPage?: boolean;
-    totalDocs?: number;
-  };
   featuredImage?: {
     image?: (number | null) | Media;
     featureImageStyleCss?: string | null;
@@ -248,12 +244,29 @@ export interface Page {
      */
     svgCode?: string | null;
   };
-  articles?: (number | Article)[] | null;
+  detail?: {
+    googleMapsAddress?: string | null;
+    latitude?: string | null;
+    longitude?: string | null;
+    googleMapsZoom?: number | null;
+    locative?: string | null;
+    genitive?: string | null;
+    timezone?: string | null;
+    currencyCode?: string | null;
+    showWeather?: boolean | null;
+  };
   meta?: {
     title?: string | null;
     description?: string | null;
   };
+  affiliate?: {
+    toursUrl?: string | null;
+    accommodationUrl?: string | null;
+    carRentalUrl?: string | null;
+    kiwiIataCode?: string | null;
+  };
   slug?: string | null;
+  createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
   includeInChildUrlPaths?: boolean | null;
@@ -265,6 +278,16 @@ export interface Page {
         id?: string | null;
       }[]
     | null;
+  subPages?: {
+    docs?: (number | Page)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  articles?: {
+    docs?: (number | Article)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
   updatedAt: string;
   createdAt: string;
 }
@@ -275,10 +298,7 @@ export interface Page {
 export interface Article {
   id: number;
   title: string;
-  slug?: string | null;
-  category?: ('Článek' | 'Průvodce' | 'RadyNaCestu') | null;
-  mainPage?: (number | null) | Page;
-  pages?: (number | Page)[] | null;
+  category: 'Článek' | 'Průvodce' | 'RadyNaCestu';
   text?: {
     root: {
       type: string;
@@ -309,6 +329,20 @@ export interface Article {
      */
     svgCode?: string | null;
   };
+  meta?: {
+    title?: string | null;
+    description?: string | null;
+  };
+  slug?: string | null;
+  createdBy?: (number | null) | User;
+  /**
+   * Určuje výslednou domovskou URL adresu článku a kanonický odkaz pro Google.
+   */
+  mainPage?: (number | null) | Page;
+  /**
+   * Vyberte další destinace, ve kterých se má tento článek zobrazit v doporučeném výpisu.
+   */
+  pages?: (number | Page)[] | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -450,7 +484,6 @@ export interface PagesSelect<T extends boolean = true> {
   title?: T;
   category?: T;
   text?: T;
-  children?: T;
   featuredImage?:
     | T
     | {
@@ -465,14 +498,35 @@ export interface PagesSelect<T extends boolean = true> {
         creativeCommonsLicense?: T;
         svgCode?: T;
       };
-  articles?: T;
+  detail?:
+    | T
+    | {
+        googleMapsAddress?: T;
+        latitude?: T;
+        longitude?: T;
+        googleMapsZoom?: T;
+        locative?: T;
+        genitive?: T;
+        timezone?: T;
+        currencyCode?: T;
+        showWeather?: T;
+      };
   meta?:
     | T
     | {
         title?: T;
         description?: T;
       };
+  affiliate?:
+    | T
+    | {
+        toursUrl?: T;
+        accommodationUrl?: T;
+        carRentalUrl?: T;
+        kiwiIataCode?: T;
+      };
   slug?: T;
+  createdBy?: T;
   parent?: T;
   fullSlug?: T;
   includeInChildUrlPaths?: T;
@@ -484,6 +538,8 @@ export interface PagesSelect<T extends boolean = true> {
         label?: T;
         id?: T;
       };
+  subPages?: T;
+  articles?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -493,10 +549,7 @@ export interface PagesSelect<T extends boolean = true> {
  */
 export interface ArticlesSelect<T extends boolean = true> {
   title?: T;
-  slug?: T;
   category?: T;
-  mainPage?: T;
-  pages?: T;
   text?: T;
   featuredImage?:
     | T
@@ -512,6 +565,16 @@ export interface ArticlesSelect<T extends boolean = true> {
         creativeCommonsLicense?: T;
         svgCode?: T;
       };
+  meta?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+      };
+  slug?: T;
+  createdBy?: T;
+  mainPage?: T;
+  pages?: T;
   updatedAt?: T;
   createdAt?: T;
 }

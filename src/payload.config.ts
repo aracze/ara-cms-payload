@@ -107,11 +107,37 @@ export default buildConfig({
       generateTitle: ({ doc }) => `${(doc as any).title || ''} | Ara.cz`,
       generateDescription: ({ doc }) => {
         const title = (doc as any).title || ''
-        return `Informace o destinaci ${title} na Ara.cz – cestovatelský průvodce.`
+        return `Informace o destinaci ${title} na Ara.cz – inspirace a rady na cesty.`
       },
-      generateURL: ({ doc }) => {
-        const fullSlug = (doc as any).fullSlug || ''
-        return `https://www.ara.cz${fullSlug}`
+      generateURL: async ({ doc, collectionSlug, req }) => {
+        const slug = (doc as any).slug || ''
+        
+        if (collectionSlug === 'pages') {
+          const fullSlug = (doc as any).fullSlug || ''
+          return `https://www.ara.cz${fullSlug}`
+        }
+        
+        if (collectionSlug === 'articles') {
+          const mainPageId = (doc as any).mainPage
+          if (mainPageId) {
+            try {
+              // Najdeme hlavní stránku, abychom získali její fullSlug
+              const mainPage = await req.payload.findByID({
+                collection: 'pages',
+                id: typeof mainPageId === 'object' ? mainPageId.id : mainPageId,
+                depth: 0,
+              })
+              if (mainPage?.fullSlug) {
+                return `https://www.ara.cz${mainPage.fullSlug}/${slug}`
+              }
+            } catch (e) {
+              console.error('Error generating Article URL:', e)
+            }
+          }
+          return `https://www.ara.cz/${slug}` // Fallback bez hlavní stránky
+        }
+        
+        return `https://www.ara.cz/${slug}`
       },
       generateImage: ({ doc }) => (doc as any).featuredImage?.image,
     }),
