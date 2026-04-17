@@ -9,6 +9,21 @@ export const Users: CollectionConfig = {
   fields: [
     // Email added by default
     {
+      name: 'legacyUserId',
+      type: 'number',
+      unique: true,
+      index: true,
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'username',
+      type: 'text',
+      index: true,
+    },
+    {
       name: 'roles',
       type: 'select',
       hasMany: true,
