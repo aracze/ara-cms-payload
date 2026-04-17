@@ -12,7 +12,7 @@
 import 'dotenv/config'
 import mysql from 'mysql2/promise'
 import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import configPromise from '../src/payload.config'
 
 type MySQLUserRow = mysql.RowDataPacket & {
   id?: number
@@ -162,7 +162,9 @@ async function run() {
     }
 
     if (!email) {
-      console.log(`${progress} ⚠️  Přeskakuji uživatele ID=${String(row.id ?? 'N/A')} (chybí validní email)`)
+      console.log(
+        `${progress} ⚠️  Přeskakuji uživatele ID=${String(row.id ?? 'N/A')} (chybí validní email)`,
+      )
       skippedNoEmail++
       continue
     }
@@ -188,7 +190,9 @@ async function run() {
 
     if (isDryRun) {
       const action = existing.totalDocs > 0 ? 'UPDATE' : 'CREATE'
-      console.log(`${progress} 📋 DRY RUN [${action}] ${email} (total_amount=${totalAmount.toFixed(2)})`)
+      console.log(
+        `${progress} 📋 DRY RUN [${action}] ${email} (total_amount=${totalAmount.toFixed(2)})`,
+      )
       skippedDryRun++
       continue
     }

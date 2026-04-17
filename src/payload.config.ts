@@ -19,6 +19,7 @@ import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
 import { Articles } from './collections/Articles'
+import { ContentImage } from './blocks/ContentImage'
 import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
@@ -62,7 +63,7 @@ export default buildConfig({
       }),
       HTMLConverterFeature({}),
       BlocksFeature({
-        blocks: [], // Zde můžete přidat své bloky, které chcete vkládat do textu
+        blocks: [ContentImage],
       }),
     ],
   }),
