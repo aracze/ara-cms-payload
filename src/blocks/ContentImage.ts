@@ -30,10 +30,15 @@ export const ContentImage: Block = {
   ],
   jsx: {
     export: ({ fields }) => {
-      const image = fields.image as Record<string, unknown> | undefined
+      const image = fields.image
+      if (!image || typeof image !== 'object') {
+        console.warn('[ContentImage] jsx.export: image not populated (got ID instead of object)')
+        return ''
+      }
+      const imgObj = image as Record<string, unknown>
       const caption = String(fields.caption ?? '')
-      const src = String(image?.url ?? '')
-      const alt = escapeHtml(String(image?.alt ?? ''))
+      const src = String(imgObj.url ?? '')
+      const alt = escapeHtml(String(imgObj.alt ?? ''))
       if (!src) return ''
       let html = `<img src="${escapeHtml(src)}" alt="${alt}" />`
       if (caption) {
