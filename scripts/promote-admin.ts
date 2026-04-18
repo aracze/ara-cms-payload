@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { getPayload } from 'payload'
-import configPromise from '@payload-config'
+import configPromise from '../src/payload.config'
 
 const email = process.argv[2]
 

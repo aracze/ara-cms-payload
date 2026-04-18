@@ -1,8 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { imageFields } from '../fields/image'
 import { slugField } from '../fields/slug'
-import { convertLexicalToMarkdown, editorConfigFactory } from '@payloadcms/richtext-lexical'
-
 import {
   MetaDescriptionField,
   MetaTitleField,
@@ -56,36 +54,6 @@ export const Pages: CollectionConfig = {
             {
               name: 'text',
               type: 'richText',
-              hooks: {
-                afterRead: [
-                  async ({ value, req }) => {
-                    const referer = req.headers?.get('referer')
-                    const isApiRequest = req.url?.includes('/api/') && !referer?.includes('/admin')
-
-                    if (value && typeof value === 'object' && isApiRequest) {
-                      try {
-                        const editorConfig = await editorConfigFactory.default({
-                          config: req.payload.config,
-                        })
-                        const markdown = await convertLexicalToMarkdown({
-                          data: value as any,
-                          editorConfig,
-                        })
-                        return markdown
-                      } catch (e) {
-                        console.error('--- CONVERSION FAILED ---', e)
-                        return value
-                      }
-                    }
-
-                    if (!isApiRequest && typeof value === 'string') {
-                      return null
-                    }
-
-                    return value
-                  },
-                ],
-              },
             },
             {
               name: 'featuredImage',
