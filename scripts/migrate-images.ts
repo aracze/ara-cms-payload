@@ -29,7 +29,10 @@ cloudinary.config({
  * publicId is the path relative to sourceDir, without extension, using forward slashes.
  * e.g. "0ab/caf35e0e2c3f6be2b9218a72aceae"
  */
-function collectImages(dir: string, baseDir: string = dir): { filePath: string; publicId: string }[] {
+function collectImages(
+  dir: string,
+  baseDir: string = dir,
+): { filePath: string; publicId: string }[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
   const result: { filePath: string; publicId: string }[] = []
 
