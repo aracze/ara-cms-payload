@@ -1,21 +1,49 @@
 import dotenv from 'dotenv'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import fs from 'fs'
+
+import { v2 as cloudinary } from 'cloudinary'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 dotenv.config({ path: path.resolve(dirname, '../.env') })
 
-import { v2 as cloudinary } from 'cloudinary'
-
 // --- Config ---
-const dirArg = process.argv.find((a) => a.startsWith('--dir='))
-const SOURCE_DIR = dirArg
-  ? path.resolve(process.cwd(), dirArg.slice(6))
-  : path.resolve(dirname, '../../ara-nextjs-frontend/grails/cms/images')
+const dirArgs = process.argv.filter((arg) => arg.startsWith('--dir='))
+const envSourceDir = process.env.IMAGE_MIGRATION_SOURCE_DIR?.trim()
+const lastDirArg = dirArgs[dirArgs.length - 1]
+const cliSourceDir = (lastDirArg ? lastDirArg.slice(6) : '').trim()
 const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
 const DRY_RUN = process.argv.includes('--dry-run')
+
+function resolveSourceDir(): string {
+  if (dirArgs.length > 1) {
+    console.warn(
+      `[migrate-images] Multiple --dir= arguments detected; using last one: ${lastDirArg}`,
+    )
+  }
+
+  if (envSourceDir) {
+    return path.resolve(process.cwd(), envSourceDir)
+  }
+
+  if (lastDirArg && !cliSourceDir) {
+    console.error('[migrate-images] --dir= was provided with an empty value')
+    process.exit(1)
+  }
+
+  if (cliSourceDir) {
+    return path.resolve(process.cwd(), cliSourceDir)
+  }
+
+  console.error(
+    '[migrate-images] Source directory is required. Provide IMAGE_MIGRATION_SOURCE_DIR or --dir=<path>.',
+  )
+  process.exit(1)
+}
+
+const SOURCE_DIR = resolveSourceDir()
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -56,14 +84,18 @@ function collectImages(
 
 /**
  * Check whether a public_id already exists in Cloudinary.
+ * Returns null when Cloudinary check fails (e.g. 401/403/429) so caller can continue.
  */
-async function existsInCloudinary(publicId: string): Promise<boolean> {
+async function existsInCloudinary(publicId: string): Promise<boolean | null> {
   try {
     await cloudinary.api.resource(publicId)
     return true
   } catch (err: any) {
     if (err?.http_code === 404 || err?.error?.http_code === 404) return false
-    throw err
+    console.warn(
+      `[migrate-images] Failed to check existing resource for ${publicId}: ${err?.message ?? JSON.stringify(err)}`,
+    )
+    return null
   }
 }
 
@@ -97,14 +129,16 @@ async function run() {
     process.stdout.write(`  ${publicId} ... `)
 
     if (DRY_RUN) {
-      // In dry run, check existence without uploading
       const exists = await existsInCloudinary(publicId)
-      if (exists) {
+      if (exists === true) {
         console.log('skipped (already exists)')
         skipped++
-      } else {
+      } else if (exists === false) {
         console.log('would upload')
         uploaded++
+      } else {
+        console.log('skipped (existence check failed)')
+        skipped++
       }
       continue
     }
@@ -116,19 +150,16 @@ async function run() {
         invalidate: false,
         resource_type: 'image',
       })
-      // When overwrite=false and asset already exists, Cloudinary returns 200
-      // with the existing resource — detect this by comparing created_at vs current time
-      const createdAt = new Date(result.created_at).getTime()
-      const isNew = Date.now() - createdAt < 10_000
-      if (isNew) {
-        console.log('uploaded ✓')
-        uploaded++
-      } else {
+
+      if (result.existing === true) {
         console.log('skipped (already exists)')
         skipped++
+      } else {
+        console.log('uploaded ✓')
+        uploaded++
       }
     } catch (err: any) {
-      // Cloudinary returns 409 when overwrite=false and asset already exists
+      // Rare race-condition: file may be uploaded between check and upload
       if (err?.http_code === 409 || err?.error?.http_code === 409) {
         console.log('skipped (already exists)')
         skipped++
