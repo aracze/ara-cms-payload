@@ -30,9 +30,16 @@ export const ContentImage: Block = {
   ],
   jsx: {
     export: ({ fields }) => {
-      // Block nodes are extracted from Lexical JSON before markdown conversion
-      // (see Pages.ts afterRead hook), so this is just a fallback.
-      return ''
+      const image = fields.image as Record<string, unknown> | undefined
+      const caption = String(fields.caption ?? '')
+      const src = String(image?.url ?? '')
+      const alt = escapeHtml(String(image?.alt ?? ''))
+      if (!src) return ''
+      let html = `<img src="${escapeHtml(src)}" alt="${alt}" />`
+      if (caption) {
+        html = `<figure>${html}<figcaption>${escapeHtml(caption)}</figcaption></figure>`
+      }
+      return html
     },
     import: () => false,
   },
