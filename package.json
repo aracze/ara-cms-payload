@@ -16,6 +16,7 @@
     "promote:admin": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/promote-admin.ts",
     "migrate:users": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-users.ts",
     "migrate:pages": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-pages.ts",
+    "migrate:images": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-images.ts",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "pnpm run test:int && pnpm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=--no-deprecation playwright test --config=playwright.config.ts",
