@@ -172,6 +172,7 @@ export interface User {
 export interface Media {
   id: number;
   alt?: string | null;
+  r2BackupStatus?: ('pending' | 'success' | 'error') | null;
   cloudinaryPublicId?: string | null;
   cloudinaryUrl?: string | null;
   cloudinaryResourceType?: string | null;
@@ -477,6 +478,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  r2BackupStatus?: T;
   cloudinaryPublicId?: T;
   cloudinaryUrl?: T;
   cloudinaryResourceType?: T;
