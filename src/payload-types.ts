@@ -140,6 +140,11 @@ export interface User {
   id: number;
   legacyUserId?: number | null;
   username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  description?: string | null;
+  myWebUrl?: string | null;
+  avatar?: (number | null) | Media;
   roles: ('admin' | 'editor' | 'user')[];
   updatedAt: string;
   createdAt: string;
@@ -443,6 +448,11 @@ export interface PayloadMigration {
 export interface UsersSelect<T extends boolean = true> {
   legacyUserId?: T;
   username?: T;
+  firstName?: T;
+  lastName?: T;
+  description?: T;
+  myWebUrl?: T;
+  avatar?: T;
   roles?: T;
   updatedAt?: T;
   createdAt?: T;

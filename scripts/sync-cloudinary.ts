@@ -40,88 +40,97 @@ async function syncCloudinaryToPayload() {
   let count = 0
   let skipped = 0
   let inserted = 0
+  let failures = 0
 
-  console.log('Fetching resources from Cloudinary (TEST MODE: 5 items reset limits)...')
+  console.log('Fetching all resources from Cloudinary...')
 
-  // Pro testování stáhneme jen jednu dávku o 5 položkách
-  const result = await cloudinary.api.resources({
-    max_results: 5,
-    resource_type: 'image',
-    type: 'upload',
-    context: true,
-    tags: true,
-  })
-
-  for (const resource of result.resources) {
-    count++
-
-    // Zkontrolujeme, zda již existuje v DB
-    const existing = await payload.find({
-      collection: 'media',
-      where: {
-        cloudinaryPublicId: { equals: resource.public_id },
-      },
-      limit: 1,
+  do {
+    const result = await cloudinary.api.resources({
+      max_results: 500, // Maximum allowed by Cloudinary Admin API
+      next_cursor: next_cursor,
+      resource_type: 'image',
+      type: 'upload',
+      context: true,
+      tags: true,
     })
 
-    if (existing.totalDocs > 0) {
-      console.log(`Skipping ${resource.public_id} (already exists)`)
-      skipped++
-      continue
-    }
+    next_cursor = result.next_cursor
 
-    const filename = resource.public_id.split('/').pop() + '.' + resource.format
+    for (const resource of result.resources) {
+      count++
 
-    // Generování URL pro thumbnail (150x150)
-    const baseUrl = resource.secure_url.split('/upload/')[0] + '/upload/'
-    const transformPath = 'c_fill,f_auto,g_auto,h_150,q_auto,w_150/'
-    const versionAndId = resource.secure_url.split('/upload/')[1]
-    const thumbnailURL = `${baseUrl}${transformPath}${versionAndId}`
+      // Zkontrolujeme, zda již existuje v DB
+      const existing = await payload.find({
+        collection: 'media',
+        where: {
+          cloudinaryPublicId: { equals: resource.public_id },
+        },
+        limit: 1,
+      })
 
-    // Mapování dat - musí odpovídat schématu v DB
-    const mediaData = {
-      alt: resource.context?.custom?.alt || resource.context?.alt || null,
-      cloudinaryPublicId: resource.public_id,
-      cloudinaryUrl: resource.secure_url,
-      cloudinaryResourceType: resource.resource_type,
-      cloudinaryFormat: resource.format,
-      cloudinaryVersion: resource.version.toString(),
-      originalUrl: resource.secure_url,
-      transformedUrl: null, // Podle pluginu je NULL, dokud nejsou vybrány presety
-      thumbnailURL: thumbnailURL,
-      url: resource.secure_url,
-      filename: filename,
-      mimeType: `image/${resource.format}`,
-      filesize: resource.bytes,
-      width: resource.width,
-      height: resource.height,
-      focalX: 50,
-      focalY: 50,
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date(resource.created_at).toISOString(),
-    }
-
-    try {
-      const db = payload.db
-      // @ts-ignore
-      if (db.drizzle && db.schema && db.schema.media) {
-        // @ts-ignore
-        await db.drizzle.insert(db.schema.media).values(mediaData)
-        console.log(`Inserted ${resource.public_id}`)
-        inserted++
-      } else {
-        console.error('Could not access Drizzle schema for media table.')
-        process.exit(1)
+      if (existing.totalDocs > 0) {
+        console.log(`Skipping ${resource.public_id} (already exists)`)
+        skipped++
+        continue
       }
-    } catch (err) {
-      console.error(`Error inserting ${resource.public_id}:`, err)
+
+      let filename = resource.public_id.replace(/\//g, '_') + '.' + resource.format
+      if (resource.public_id.startsWith('avatars/')) {
+        filename = 'avatar_' + filename.replace('avatars_', '')
+      }
+
+      // Generování URL pro thumbnail (150x150)
+      const baseUrl = resource.secure_url.split('/upload/')[0] + '/upload/'
+      const transformPath = 'c_fill,f_auto,g_auto,h_150,q_auto,w_150/'
+      const versionAndId = resource.secure_url.split('/upload/')[1]
+      const thumbnailURL = `${baseUrl}${transformPath}${versionAndId}`
+
+      // Mapování dat - musí odpovídat schématu v DB
+      const mediaData = {
+        alt: resource.context?.custom?.alt || resource.context?.alt || null,
+        cloudinaryPublicId: resource.public_id,
+        cloudinaryUrl: resource.secure_url,
+        cloudinaryResourceType: resource.resource_type,
+        cloudinaryFormat: resource.format,
+        cloudinaryVersion: resource.version.toString(),
+        originalUrl: resource.secure_url,
+        transformedUrl: null, // Podle pluginu je NULL, dokud nejsou vybrány presety
+        thumbnailURL: thumbnailURL,
+        url: resource.secure_url,
+        filename: filename,
+        mimeType: `image/${resource.format}`,
+        filesize: resource.bytes,
+        width: resource.width,
+        height: resource.height,
+        focalX: 50,
+        focalY: 50,
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date(resource.created_at).toISOString(),
+      }
+
+      try {
+        const db = payload.db
+        // @ts-ignore
+        if (db.drizzle && db.schema && db.schema.media) {
+          // @ts-ignore
+          await db.drizzle.insert(db.schema.media).values(mediaData)
+          console.log(`Inserted ${resource.public_id} (${count} processed)`)
+          inserted++
+        } else {
+          console.error('Could not access Drizzle schema for media table.')
+          process.exit(1)
+        }
+      } catch (err) {
+        console.error(`Error inserting ${resource.public_id}:`, err)
+        failures++
+      }
     }
-  }
+  } while (next_cursor)
 
   console.log(
-    `Sync complete. Total processed: ${count}, Inserted: ${inserted}, Skipped: ${skipped}`,
+    `Sync complete. Total processed: ${count}, Inserted: ${inserted}, Skipped: ${skipped}, Failures: ${failures}`,
   )
-  process.exit(0)
+  process.exit(failures > 0 ? 1 : 0)
 }
 
 syncCloudinaryToPayload()
