@@ -24,6 +24,27 @@ export const Users: CollectionConfig = {
       index: true,
     },
     {
+      name: 'firstName',
+      type: 'text',
+    },
+    {
+      name: 'lastName',
+      type: 'text',
+    },
+    {
+      name: 'description',
+      type: 'textarea',
+    },
+    {
+      name: 'myWebUrl',
+      type: 'text',
+    },
+    {
+      name: 'avatar',
+      type: 'upload',
+      relationTo: 'media',
+    },
+    {
       name: 'roles',
       type: 'select',
       hasMany: true,
