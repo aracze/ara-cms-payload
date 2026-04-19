@@ -12,8 +12,8 @@
 
 import 'dotenv/config'
 import mysql from 'mysql2/promise'
-import { getPayload } from 'payload'
-import { convertHTMLToLexical } from '@payloadcms/richtext-lexical'
+import { getPayload, type Payload } from 'payload'
+import { convertHTMLToLexical, editorConfigFactory } from '@payloadcms/richtext-lexical'
 // @ts-ignore
 import { JSDOM } from 'jsdom'
 import configPromise from '../src/payload.config.js'
@@ -41,7 +41,13 @@ const COL_HTML = 'text'
 
 const isDryRun = process.argv.includes('--dry-run')
 const limitArg = process.argv.find((arg) => arg.startsWith('--limit='))
-const limit = limitArg ? Number(limitArg.split('=')[1]) : null
+let limit: number | null = null
+if (limitArg) {
+  const parsed = parseInt(limitArg.split('=')[1], 10)
+  if (!isNaN(parsed) && parsed > 0) {
+    limit = parsed
+  }
+}
 
 type OldRecord = {
   id: number
@@ -67,14 +73,14 @@ async function fetchOldRecords(conn: mysql.Connection): Promise<OldRecord[]> {
   return rows as OldRecord[]
 }
 
-async function htmlToLexical(html: string | null | undefined, payload: any): Promise<object> {
+async function htmlToLexical(html: string | null | undefined, payload: Payload): Promise<object> {
   if (!html || html.trim() === '') {
     return emptyLexical()
   }
 
   try {
-    // V Payload 3 lze editor config získat přímo z nabootovaného payloadu
-    const editorConfig = await payload.config.editor({ config: payload.config })
+    // @ts-ignore
+    const editorConfig = await editorConfigFactory.default({ config: payload.config })
     return await convertHTMLToLexical({ html, editorConfig, JSDOM })
   } catch (err) {
     console.warn(`    ⚠️  HTML → Lexical selhalo, ukládám jako plain text. (${err})`)
@@ -120,85 +126,90 @@ async function run() {
   console.log(`\n🚀 Migrace pages spuštěna${isDryRun ? ' (DRY RUN)' : ''}`)
   if (limit) console.log(`   Limit: ${limit}`)
 
-  const conn = await mysql.createConnection(OLD_DB_CONFIG)
-  console.log(`✅ Připojeno k MySQL: ${OLD_DB_CONFIG.database}@${OLD_DB_CONFIG.host}`)
+  let conn
+  try {
+    conn = await mysql.createConnection(OLD_DB_CONFIG)
+    console.log(`✅ Připojeno k MySQL: ${OLD_DB_CONFIG.database}@${OLD_DB_CONFIG.host}`)
 
-  // @ts-ignore
-  const payload = await getPayload({ config: configPromise })
-  console.log('✅ Payload inicializován')
+    // @ts-ignore
+    const payload = await getPayload({ config: configPromise })
+    console.log('✅ Payload inicializován')
 
-  const records = await fetchOldRecords(conn)
-  console.log(`📦 Nalezeno ${records.length} záznamů v tabulce \`${OLD_TABLE}\`\n`)
+    const records = await fetchOldRecords(conn)
+    console.log(`📦 Nalezeno ${records.length} záznamů v tabulce \`${OLD_TABLE}\`\n`)
 
-  let created = 0
-  let updated = 0
-  let skippedDryRun = 0
-  let errors = 0
+    let created = 0
+    let updated = 0
+    let skippedDryRun = 0
+    let errors = 0
 
-  for (const [index, record] of records.entries()) {
-    const progress = `[${index + 1}/${records.length}]`
+    for (const [index, record] of records.entries()) {
+      const progress = `[${index + 1}/${records.length}]`
 
-    // Zkontroluj zda záznam v Payload už existuje
-    const existing = await payload.find({
-      collection: 'pages',
-      where: { slug: { equals: record.slug } },
-      depth: 0,
-      limit: 1,
-    })
+      // Zkontroluj zda záznam v Payload už existuje
+      const existing = await payload.find({
+        collection: 'pages',
+        where: { slug: { equals: record.slug } },
+        depth: 0,
+        limit: 1,
+      })
 
-    if (isDryRun) {
-      const action = existing.totalDocs > 0 ? 'UPDATE' : 'CREATE'
-      console.log(`${progress} 📋 DRY RUN [${action}] "${record.title}" (slug: ${record.slug})`)
-      skippedDryRun++
-      continue
+      if (isDryRun) {
+        const action = existing.totalDocs > 0 ? 'UPDATE' : 'CREATE'
+        console.log(`${progress} 📋 DRY RUN [${action}] "${record.title}" (slug: ${record.slug})`)
+        skippedDryRun++
+        continue
+      }
+
+      try {
+        // Převod HTML → Lexical JSON
+        const lexicalText = await htmlToLexical(record.text, payload)
+
+        const pageData = {
+          title: String(record.title || '').substring(0, 255),
+          slug: String(record.slug || '').substring(0, 255),
+          text: lexicalText,
+          category: 'Místa', // Povinné pole v Pages.ts
+        }
+
+        if (existing.totalDocs > 0) {
+          await payload.update({
+            collection: 'pages',
+            id: existing.docs[0].id,
+            data: pageData,
+            overrideAccess: true,
+          })
+          console.log(`${progress} ✅ Aktualizováno: "${record.title}"`)
+          updated++
+        } else {
+          await payload.create({
+            collection: 'pages',
+            data: pageData,
+            overrideAccess: true,
+          })
+          console.log(`${progress} ✅ Vytvořeno: "${record.title}"`)
+          created++
+        }
+      } catch (err) {
+        console.error(`${progress} ❌ Chyba u "${record.title}":`, err)
+        errors++
+      }
     }
 
-    try {
-      // Převod HTML → Lexical JSON
-      const lexicalText = await htmlToLexical(record.text, payload)
+    console.log('\n══════════════════════════════════════════')
+    console.log('📊 Výsledky migrace pages:')
+    console.log(`   Vytvořeno:            ${created}`)
+    console.log(`   Aktualizováno:        ${updated}`)
+    console.log(`   Přeskočeno (dry-run): ${skippedDryRun}`)
+    console.log(`   Chyby:                ${errors}`)
+    console.log('══════════════════════════════════════════\n')
 
-      const pageData = {
-        title: String(record.title || '').substring(0, 255),
-        slug: String(record.slug || '').substring(0, 255),
-        text: lexicalText,
-        category: 'Místa', // Povinné pole v Pages.ts
-      }
-
-      if (existing.totalDocs > 0) {
-        await payload.update({
-          collection: 'pages',
-          id: existing.docs[0].id,
-          data: pageData,
-          overrideAccess: true,
-        })
-        console.log(`${progress} ✅ Aktualizováno: "${record.title}"`)
-        updated++
-      } else {
-        await payload.create({
-          collection: 'pages',
-          data: pageData,
-          overrideAccess: true,
-        })
-        console.log(`${progress} ✅ Vytvořeno: "${record.title}"`)
-        created++
-      }
-    } catch (err) {
-      console.error(`${progress} ❌ Chyba u "${record.title}":`, err)
-      errors++
+    process.exit(errors > 0 ? 1 : 0)
+  } finally {
+    if (conn) {
+      await conn.end()
     }
   }
-
-  await conn.end()
-
-  console.log('\n══════════════════════════════════════════')
-  console.log('📊 Výsledky migrace pages:')
-  console.log(`   Vytvořeno:            ${created}`)
-  console.log(`   Aktualizováno:        ${updated}`)
-  console.log(`   Přeskočeno (dry-run): ${skippedDryRun}`)
-  console.log(`   Chyby:                ${errors}`)
-  console.log('══════════════════════════════════════════\n')
-
-  process.exit(errors > 0 ? 1 : 0)
 }
 
 run().catch((error) => {

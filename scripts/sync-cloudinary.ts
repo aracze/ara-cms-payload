@@ -40,6 +40,7 @@ async function syncCloudinaryToPayload() {
   let count = 0
   let skipped = 0
   let inserted = 0
+  let failures = 0
 
   console.log('Fetching all resources from Cloudinary...')
 
@@ -73,9 +74,9 @@ async function syncCloudinaryToPayload() {
         continue
       }
 
-      let filename = resource.public_id.split('/').pop() + '.' + resource.format
+      let filename = resource.public_id.replace(/\//g, '_') + '.' + resource.format
       if (resource.public_id.startsWith('avatars/')) {
-        filename = 'avatar_' + filename
+        filename = 'avatar_' + filename.replace('avatars_', '')
       }
 
       // Generování URL pro thumbnail (150x150)
@@ -121,14 +122,15 @@ async function syncCloudinaryToPayload() {
         }
       } catch (err) {
         console.error(`Error inserting ${resource.public_id}:`, err)
+        failures++
       }
     }
   } while (next_cursor)
 
   console.log(
-    `Sync complete. Total processed: ${count}, Inserted: ${inserted}, Skipped: ${skipped}`,
+    `Sync complete. Total processed: ${count}, Inserted: ${inserted}, Skipped: ${skipped}, Failures: ${failures}`,
   )
-  process.exit(0)
+  process.exit(failures > 0 ? 1 : 0)
 }
 
 syncCloudinaryToPayload()
