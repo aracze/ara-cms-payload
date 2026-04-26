@@ -1,4 +1,8 @@
 /**
+ * ⚠️ DŮLEŽITÉ: Tento skript vyžaduje zafixovanou verzi @payloadcms/richtext-lexical (aktuálně 3.76.1).
+ * Používá EXPERIMENTAL_TableFeature, jehož schéma se může v novějších verzích změnit a zneplatnit tuto migraci.
+ * Před upgrady balíčků vždy ověřte kompatibilitu generovaných Lexical JSON uzlů.
+ *
  * Migrační skript: MySQL DB (HTML text) → Payload CMS (Lexical JSON)
  *
  * Prerekvizity (nainstalujte před spuštěním):
@@ -88,7 +92,7 @@ async function fetchOldRecords(conn: mysql.Connection): Promise<OldRecord[]> {
       \`main_image_css\`,
       \`main_image_name\`
     FROM \`${OLD_TABLE}\`
-    WHERE \`${COL_ID}\` = 4496
+    WHERE \`${COL_ID}\` = 782
     ORDER BY \`${COL_ID}\`
     ${limitClause}
   `
@@ -137,6 +141,94 @@ async function htmlToLexical(
 
     const blocks: any[] = []
 
+    // ─────────────────────────────────────────────────────────────────────────────
+    // EXTRAKCE SEZÓNNOSTI (KALENDÁŘ)
+    // ─────────────────────────────────────────────────────────────────────────────
+    const seasonalityContainer = doc.querySelector('.climate__months')
+    const legendContainer = doc.querySelector('.climate-legend')
+
+    if (seasonalityContainer) {
+      const index = blocks.length
+      const months: any[] = []
+
+      const monthBlocks = seasonalityContainer.querySelectorAll('.climate-month-block')
+      monthBlocks.forEach((mb: any, i: number) => {
+        const segment = mb.querySelector('.month-block__segment')
+        let status = 'off'
+        if (segment) {
+          if (segment.classList.contains('month-block__segment--green')) status = 'peak'
+          else if (segment.classList.contains('month-block__segment--blue')) status = 'mid'
+        }
+        months.push({
+          monthNumber: i + 1,
+          status,
+        })
+      })
+
+      const legend: any[] = []
+      if (legendContainer) {
+        const labels = legendContainer.querySelectorAll('.climate-legend__label')
+        labels.forEach((l: any) => {
+          let status = 'off'
+          if (l.classList.contains('climate-legend__label--high')) status = 'peak'
+          else if (l.classList.contains('climate-legend__label--middle')) status = 'mid'
+
+          // Ponecháme původní text včetně měsíců v závorce
+          const labelText = (l.textContent || '').trim()
+          legend.push({
+            status,
+            label: labelText,
+          })
+        })
+      }
+
+      // Hledáme titulek a ideální text (často bývají nad tím)
+      const idealTextEl = Array.from(doc.querySelectorAll('p, div')).find((el: any) =>
+        el.textContent?.includes('Ideální doba do'),
+      ) as any
+
+      let prefixText = ''
+      let idealMonths = ''
+      if (idealTextEl) {
+        const text = (idealTextEl.textContent as string) || ''
+        if (text.includes(':')) {
+          const parts = text.split(':')
+          prefixText = parts[0].trim() + ':'
+          idealMonths = parts[1].trim()
+        } else {
+          prefixText = 'Ideální doba k návštěvě je:'
+          idealMonths = text.replace('Ideální doba do Chorvatska je', '').trim()
+        }
+      }
+
+      blocks.push({
+        type: 'block',
+        version: 2,
+        format: '',
+        fields: {
+          blockType: 'seasonalityBlock',
+          prefixText,
+          idealMonthsText: idealMonths,
+          months,
+          legend,
+        },
+      })
+
+      // Vytvoříme placeholder a nahradíme původní elementy
+      const p = doc.createElement('p')
+      p.textContent = `__PAYLOAD_BLOCK_${index}__`
+      seasonalityContainer.parentNode?.replaceChild(p, seasonalityContainer)
+      legendContainer?.parentNode?.removeChild(legendContainer)
+      if (idealTextEl) {
+        const parent = idealTextEl.parentNode
+        idealTextEl.parentNode?.removeChild(idealTextEl)
+        // Pokud po smazání zůstal rodič (např. div) prázdný, smažeme ho taky
+        if (parent && parent.childNodes.length === 0) {
+          parent.parentNode?.removeChild(parent)
+        }
+      }
+    }
+
     // Extrakce <table> pro nativní Lexical tabulku
     const tables = doc.querySelectorAll('table')
     tables.forEach((table: any) => {
@@ -148,14 +240,23 @@ async function htmlToLexical(
       trs.forEach((tr: any) => {
         const cells: any[] = []
         const tds = tr.querySelectorAll('td, th')
-        tds.forEach((td: any) => {
-          // Běžné staré tabulky často používají td i pro hlavičku. Pokud je to první řádek, bereme to jako hlavičku.
-          const isHeader = td.tagName.toLowerCase() === 'th' || rowIndex === 0 ? 1 : 0
-          const cellText = td.textContent?.trim() || ''
+        tds.forEach((td: any, colIndex: number) => {
+          // Bitmask: 1 = ROW, 2 = COLUMN, 3 = BOTH
+          let headerState = 0
+          if (rowIndex === 0 && colIndex === 0) {
+            headerState = 3
+          } else if (rowIndex === 0) {
+            headerState = 2
+          } else if (colIndex === 0) {
+            headerState = 1
+          } else if (td.tagName.toLowerCase() === 'th') {
+            headerState = 1
+          }
 
+          const cellText = td.textContent?.trim() || ''
           cells.push({
             type: 'tablecell',
-            headerState: isHeader,
+            headerState: headerState,
             colSpan: parseInt(td.getAttribute('colspan') || '1', 10),
             rowSpan: parseInt(td.getAttribute('rowspan') || '1', 10),
             value: 0,
@@ -303,35 +404,64 @@ async function htmlToLexical(
       if (img.parentNode) img.parentNode.replaceChild(p, img)
     }
 
-    const cleanedHtml = doc.body.innerHTML
+    // Čištění prázdných odstavců před převodem
+    doc.querySelectorAll('p').forEach((p: any) => {
+      const text = p.textContent?.trim() || ''
+      if (text === '' && p.children.length === 0) {
+        p.parentNode?.removeChild(p)
+      }
+    })
+
+    const finalHtml = doc.body.innerHTML
 
     // @ts-ignore
     const editorConfig = await editorConfigFactory.default({ config: payload.config })
-    const lexicalData: any = await convertHTMLToLexical({ html: cleanedHtml, editorConfig, JSDOM })
+    const lexicalData: any = await convertHTMLToLexical({ html: finalHtml, editorConfig, JSDOM })
 
     // Rekurzivní nahrazení placeholderů v Lexical stromu
     function replaceBlocks(node: any) {
       if (!node || typeof node !== 'object') return
+
       if (node.children && Array.isArray(node.children)) {
+        const newChildren: any[] = []
+
         for (let i = 0; i < node.children.length; i++) {
           const child = node.children[i]
-          if (child.type === 'paragraph' && child.children?.length > 0) {
-            // Zkusíme najít textový uzel, který obsahuje náš placeholder
-            const textNode = child.children.find(
-              (c: any) => c.type === 'text' && c.text.includes('__PAYLOAD_BLOCK_'),
-            )
-            if (textNode) {
-              const match = textNode.text.match(/__PAYLOAD_BLOCK_(\d+)__/)
+
+          if (child.type === 'text' && child.text.includes('__PAYLOAD_BLOCK_')) {
+            const parts = child.text.split(/(__PAYLOAD_BLOCK_\d+__)/g)
+            for (const part of parts) {
+              if (!part) continue
+              const match = part.match(/__PAYLOAD_BLOCK_(\d+)__/)
               if (match) {
                 const blockIndex = parseInt(match[1], 10)
                 if (blocks[blockIndex]) {
-                  node.children[i] = blocks[blockIndex]
+                  newChildren.push(blocks[blockIndex])
                 }
-                continue
+              } else {
+                newChildren.push({ ...child, text: part })
               }
             }
+          } else {
+            newChildren.push(child)
+            replaceBlocks(child)
           }
-          replaceBlocks(child)
+        }
+        node.children = newChildren
+
+        // Speciální případ: Pokud je v rootu paragraph, který obsahuje jen blok,
+        // a nic jiného, můžeme ten paragraph odstranit a nechat jen ten blok (flattening).
+        if (node.type === 'root') {
+          node.children = node.children.flatMap((c: any) => {
+            if (
+              c.type === 'paragraph' &&
+              c.children?.length === 1 &&
+              c.children[0].type === 'block'
+            ) {
+              return [c.children[0]]
+            }
+            return [c]
+          })
         }
       }
     }
@@ -406,7 +536,11 @@ async function run() {
       depth: 0,
       pagination: false,
     })
-    const usersMap = new Map(allUsers.docs.map((u: any) => [Number(u.legacyUserId), u.id]))
+    const usersMap = new Map(
+      allUsers.docs
+        .filter((u: any) => u.legacyUserId != null)
+        .map((u: any) => [Number(u.legacyUserId), u.id]),
+    )
 
     // 2. Načtení všech médií
     const allMedia = await payload.find({
@@ -416,8 +550,14 @@ async function run() {
       pagination: false,
     })
     const mediaMap = {
-      filename: new Map(allMedia.docs.map((m: any) => [m.filename, m.id])),
-      cloudinary: new Map(allMedia.docs.map((m: any) => [m.cloudinaryPublicId, m.id])),
+      filename: new Map(
+        allMedia.docs.filter((m: any) => m.filename != null).map((m: any) => [m.filename, m.id]),
+      ),
+      cloudinary: new Map(
+        allMedia.docs
+          .filter((m: any) => m.cloudinaryPublicId != null)
+          .map((m: any) => [m.cloudinaryPublicId, m.id]),
+      ),
     }
 
     // 3. Načtení stávajících stránek (pro update a parent vztahy)
@@ -428,7 +568,9 @@ async function run() {
       pagination: false,
     })
     const pagesMap = new Map(
-      allPages.docs.map((p: any) => [Number(p.legacyPageId), { id: p.id, slug: p.slug }]),
+      allPages.docs
+        .filter((p: any) => p.legacyPageId != null)
+        .map((p: any) => [Number(p.legacyPageId), { id: p.id, slug: p.slug }]),
     )
 
     console.log(
@@ -596,8 +738,13 @@ async function run() {
           console.log(`${progress} ✅ Vytvořeno: "${record.title}"`)
           created++
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(`${progress} ❌ Chyba u "${record.title}":`, err)
+        if (err.data?.errors) {
+          console.error('   [DETAIL CHYBY]:', JSON.stringify(err.data.errors, null, 2))
+        } else if (err.response?.data) {
+          console.error('   [DETAIL CHYBY]:', JSON.stringify(err.response.data, null, 2))
+        }
         errors++
       }
     }

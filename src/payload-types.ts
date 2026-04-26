@@ -785,6 +785,42 @@ export interface FooterSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "MapBlock".
+ */
+export interface MapBlock {
+  iframeUrl: string;
+  caption?: string | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'mapBlock';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "SeasonalityBlock".
+ */
+export interface SeasonalityBlock {
+  prefixText?: string | null;
+  idealMonthsText?: string | null;
+  months?:
+    | {
+        monthNumber: number;
+        status: 'off' | 'mid' | 'peak';
+        id?: string | null;
+      }[]
+    | null;
+  legend?:
+    | {
+        status: 'off' | 'mid' | 'peak';
+        label: string;
+        id?: string | null;
+      }[]
+    | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'seasonalityBlock';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "auth".
  */
 export interface Auth {
