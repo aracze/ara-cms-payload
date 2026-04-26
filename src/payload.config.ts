@@ -6,6 +6,8 @@ import {
   UploadFeature,
   HTMLConverterFeature,
   BlocksFeature,
+  // TODO: Replace EXPERIMENTAL_TableFeature with stable TableFeature once it graduates
+  EXPERIMENTAL_TableFeature,
 } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
@@ -20,6 +22,8 @@ import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
 import { Articles } from './collections/Articles'
 import { ContentImage } from './blocks/ContentImage'
+import { MapBlock } from './blocks/Map'
+import { SeasonalityBlock } from './blocks/Seasonality'
 import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
@@ -62,8 +66,9 @@ export default buildConfig({
         },
       }),
       HTMLConverterFeature({}),
+      EXPERIMENTAL_TableFeature(),
       BlocksFeature({
-        blocks: [ContentImage],
+        blocks: [ContentImage, MapBlock, SeasonalityBlock],
       }),
     ],
   }),

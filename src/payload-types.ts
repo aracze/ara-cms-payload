@@ -275,6 +275,7 @@ export interface Page {
     kiwiIataCode?: string | null;
   };
   slug?: string | null;
+  legacyPageId?: number | null;
   createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
@@ -548,6 +549,7 @@ export interface PagesSelect<T extends boolean = true> {
         kiwiIataCode?: T;
       };
   slug?: T;
+  legacyPageId?: T;
   createdBy?: T;
   parent?: T;
   fullSlug?: T;
@@ -780,6 +782,42 @@ export interface FooterSelect<T extends boolean = true> {
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "MapBlock".
+ */
+export interface MapBlock {
+  iframeUrl: string;
+  caption?: string | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'mapBlock';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "SeasonalityBlock".
+ */
+export interface SeasonalityBlock {
+  prefixText?: string | null;
+  idealMonthsText?: string | null;
+  months?:
+    | {
+        monthNumber: number;
+        status: 'off' | 'mid' | 'peak';
+        id?: string | null;
+      }[]
+    | null;
+  legend?:
+    | {
+        status: 'off' | 'mid' | 'peak';
+        label: string;
+        id?: string | null;
+      }[]
+    | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'seasonalityBlock';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

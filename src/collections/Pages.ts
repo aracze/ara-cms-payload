@@ -192,6 +192,20 @@ export const Pages: CollectionConfig = {
     },
     slugField(),
     {
+      name: 'legacyPageId',
+      label: 'Legacy Page ID',
+      type: 'number',
+      unique: true,
+      index: true,
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+      },
+      access: {
+        update: ({ req: { user } }) => Boolean(user?.roles?.includes('admin')),
+      },
+    },
+    {
       name: 'createdBy',
       label: 'Autor',
       type: 'relationship',
