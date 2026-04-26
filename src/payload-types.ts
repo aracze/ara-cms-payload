@@ -275,6 +275,7 @@ export interface Page {
     kiwiIataCode?: string | null;
   };
   slug?: string | null;
+  legacyPageId?: number | null;
   createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
@@ -548,6 +549,7 @@ export interface PagesSelect<T extends boolean = true> {
         kiwiIataCode?: T;
       };
   slug?: T;
+  legacyPageId?: T;
   createdBy?: T;
   parent?: T;
   fullSlug?: T;
