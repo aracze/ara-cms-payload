@@ -67,10 +67,12 @@ export function CommentForm({
       setState(result)
       if (result.status === 'success') {
         formRef.current?.reset()
-        turnstileRef.current?.reset()
         setReplyTo(null)
         router.refresh()
       }
+      // Turnstile token je jednorázový — reset i po CHYBĚ, jinak by opakované
+      // odeslání posílalo už spotřebovaný token a selhávalo donekonečna.
+      turnstileRef.current?.reset()
     })
   }
 

@@ -34,6 +34,8 @@ export function StarInput({
       // Plná (tichá) varianta kopíruje rozestupy StarRating (gap-px, bez
       // paddingu tlačítek), ať hlavičky cílů lícují s průměry na pixel.
       className={`flex items-center ${appearance === 'filled' ? 'gap-px' : ''} ${className}`}
+      // role=group: aria-label na holém divu čtečky nemusí přečíst.
+      role="group"
       aria-label="Tvé hodnocení (1–5 hvězdiček)"
     >
       {[1, 2, 3, 4, 5].map((n) => (

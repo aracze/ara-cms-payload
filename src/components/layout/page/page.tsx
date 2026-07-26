@@ -354,7 +354,10 @@ function touristPointJsonLd(
       bestRating: 5,
       worstRating: 1,
     },
-    review: reviews.map((r) => ({
+    // Do JSON-LD stačí VZOREK (nejnovějších 10) — vyhledávače víc nepotřebují
+    // a u oblíbeného cíle by kompletní výpis zbytečně nafukoval HTML;
+    // souhrn drží aggregateRating a plný výpis je v těle stránky.
+    review: reviews.slice(0, 10).map((r) => ({
       '@type': 'Review',
       author: { '@type': 'Person', name: r.authorName },
       ...(r.reviewedAt ? { datePublished: r.reviewedAt.slice(0, 10) } : {}),

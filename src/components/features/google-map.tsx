@@ -203,6 +203,9 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
+  // gmp-click je nativní DOM listener na AdvancedMarkerElement —
+  // clearInstanceListeners ho neodstraní, uklízíme ho sami při odmountu.
+  const advancedClickHandlersRef = useRef<Array<{ marker: any; fn: () => void }>>([])
   const infoWindowRef = useRef<any>(null)
   const [inView, setInView] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -374,6 +377,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       }
       if (useAdvancedMarkers) {
         marker.addEventListener('gmp-click', openInfoWindow)
+        advancedClickHandlersRef.current.push({ marker, fn: openInfoWindow })
       } else {
         marker.addListener('click', openInfoWindow)
       }
@@ -495,6 +499,14 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         if (mapInstanceRef.current) ev.clearInstanceListeners(mapInstanceRef.current)
         if (infoWindowRef.current) ev.clearInstanceListeners(infoWindowRef.current)
       }
+      // Nativní gmp-click listenery advanced markerů (mimo dosah
+      // clearInstanceListeners) odregistrujeme ručně.
+      advancedClickHandlersRef.current.forEach(({ marker, fn }) => {
+        if (marker && typeof marker.removeEventListener === 'function') {
+          marker.removeEventListener('gmp-click', fn)
+        }
+      })
+      advancedClickHandlersRef.current = []
       // Odpojíme markery od mapy (AdvancedMarkerElement přes `map`, klasický `setMap`).
       markersRef.current.forEach((marker) => {
         if (marker && typeof marker.setMap === 'function') marker.setMap(null)

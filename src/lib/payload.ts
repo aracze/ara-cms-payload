@@ -767,18 +767,22 @@ async function fetchPageReviewsUncached(pageId: number): Promise<{ reviews: Revi
 
   // Nejnovější nahoře (legacy: comments.reverse()). Řadíme v JS podle efektivního
   // času `commentedAt ?? createdAt` (commentedAt může být null) s `id` jako rozhodčím.
+  // Záznam bez hodnocení (nemělo by nastat — kolekce ho u recenze vynucuje) se
+  // VYŘADÍ; fallback na číslo by tiše ukazoval falešné hvězdičky. Stejně
+  // přeskakuje null rating i souhrn fetchPageReviewStats níže.
   const effectiveTime = (c: RawComment) => new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
-  const docs = (res.docs as unknown as RawComment[]).slice().sort((a, b) => {
-    const diff = effectiveTime(b) - effectiveTime(a)
-    return diff !== 0 ? diff : b.id - a.id
-  })
+  const docs = (res.docs as unknown as RawComment[])
+    .filter((c) => c.rating != null)
+    .sort((a, b) => {
+      const diff = effectiveTime(b) - effectiveTime(a)
+      return diff !== 0 ? diff : b.id - a.id
+    })
 
   const reviews: ReviewPublic[] = docs.map((c) => ({
     id: c.id,
     authorName: c.authorName,
     body: c.body,
-    // Kolekce hodnocení u recenze vynucuje (1–5); fallback jen pro jistotu typu.
-    rating: c.rating ?? 5,
+    rating: c.rating!,
     reviewedAt: c.commentedAt ?? c.createdAt ?? null,
     authorUsername: c.authorPublic?.username ?? null,
     avatarUrl: c.authorPublic?.avatar?.url ?? null,

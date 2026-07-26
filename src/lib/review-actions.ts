@@ -5,6 +5,7 @@ import { getDb } from './db'
 import { fetchPageReviews } from './payload'
 import { isBotSubmission, isRateLimited, looksLikeSpam, verifyTurnstile } from './comment-spam'
 import { PageCategory, ReviewPublic } from '@/types/payload'
+import type { Page as GeneratedPage } from '@/payload-types'
 
 /**
  * Veřejné vložení recenze turistického cíle (stránka kategorie Turistický cíl).
@@ -43,7 +44,7 @@ export async function getPageReviews(
       depth: 0,
       overrideAccess: true,
       select: { _status: true },
-    })) as { _status?: string | null }
+    })) as Pick<GeneratedPage, '_status'>
     if (page._status === 'draft') {
       return { error: 'Stránka nebyla nalezena.' }
     }
@@ -124,14 +125,16 @@ export async function createReview(
   //    tam — jako na legacy webu). `_status` chybí u migrovaných stránek → bereme
   //    jako publikované (stejně jako access control kolekce comments).
   try {
+    // Typ odvozený z generovaného schématu — přejmenování category/_status
+    // v CMS by tu spadlo už při kompilaci, ne až za běhu.
     const page = (await payload.findByID({
       collection: 'pages',
       id: pageId,
       depth: 0,
       overrideAccess: true,
       select: { category: true, _status: true },
-    })) as { category?: string | null; _status?: string | null }
-    if (page.category !== PageCategory.Turisticky_cil || page._status === 'draft') {
+    })) as Pick<GeneratedPage, 'category' | '_status'>
+    if (String(page.category) !== PageCategory.Turisticky_cil || page._status === 'draft') {
       return { status: 'error', message: 'Na této stránce nelze psát recenze.' }
     }
   } catch {

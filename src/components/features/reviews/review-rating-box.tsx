@@ -58,10 +58,12 @@ export function ReviewRatingBox({
       setState(result)
       if (result.status === 'success') {
         formRef.current?.reset()
-        turnstileRef.current?.reset()
         setRating(0)
         router.refresh()
       }
+      // Turnstile token je jednorázový — reset i po CHYBĚ, jinak by opakované
+      // odeslání posílalo už spotřebovaný token a selhávalo donekonečna.
+      turnstileRef.current?.reset()
     })
   }
 
