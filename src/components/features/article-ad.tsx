@@ -19,6 +19,12 @@ const AD_VARIANTS = {
     width: 160,
     height: 600,
   },
+  // "Highlights 300x250" – menší box vedle recenzí (méně než 2 recenze)
+  box: {
+    slot: process.env.NEXT_PUBLIC_ADSENSE_REVIEWS_SLOT || '2488499643',
+    width: 300,
+    height: 250,
+  },
 } as const
 
 /**
@@ -58,6 +64,43 @@ export function AdSenseScript() {
   }, [])
 
   return null
+}
+
+// "Leaderboard responsive" – spodní pruh přes šířku obsahu (legacy bottomAds)
+const LEADERBOARD_SLOT = process.env.NEXT_PUBLIC_ADSENSE_LEADERBOARD_SLOT || '1155633303'
+
+/**
+ * Responzivní reklamní pruh na spodku stránek (legacy `bottomAds` / slot
+ * „Leaderboard responsive"). Výšku si určuje AdSense podle šířky; min-height
+ * drží místo, ať se stránka neposkakuje. Vyžaduje `<AdSenseScript />`
+ * vykreslený jednou kdekoliv na stránce.
+ */
+export function LeaderboardAd({ className = '' }: { className?: string }) {
+  const pushedRef = useRef(false)
+
+  useEffect(() => {
+    if (pushedRef.current) return
+    pushedRef.current = true
+    try {
+      const w = window as unknown as { adsbygoogle?: unknown[] }
+      ;(w.adsbygoogle = w.adsbygoogle || []).push({})
+    } catch {
+      // AdSense nedostupný (např. blokovaný) — zůstane prázdný box.
+    }
+  }, [])
+
+  return (
+    <div className={`min-h-[120px] ${className}`}>
+      <ins
+        className="adsbygoogle block"
+        style={{ display: 'block' }}
+        data-ad-client={ADSENSE_CLIENT}
+        data-ad-slot={LEADERBOARD_SLOT}
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      />
+    </div>
+  )
 }
 
 /**

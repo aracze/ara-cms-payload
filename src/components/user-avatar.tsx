@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { getPayloadURL } from '@/lib/utils'
+import { cn, getPayloadURL } from '@/lib/utils'
 import { isCloudinary } from '@/lib/cloudinary-loader'
 
 /**
@@ -48,10 +48,13 @@ export function UserAvatar({
   name,
   avatarUrl,
   size = 42,
+  className,
 }: {
   name: string
   avatarUrl?: string | null
   size?: number
+  /** Doladění vzhledu podle kontextu (např. tenčí rámeček `border-2` u mini avataru). */
+  className?: string
 }) {
   const [errored, setErrored] = useState(false)
   const src = avatarUrl ? resolveAvatarUrl(avatarUrl) : null
@@ -60,7 +63,7 @@ export function UserAvatar({
     const parrot = Math.round(size * 0.6)
     return (
       <div
-        className={`grid shrink-0 place-items-center overflow-hidden ${RING}`}
+        className={cn('grid shrink-0 place-items-center overflow-hidden', RING, className)}
         style={{ width: size, height: size, background: pickGradient(name) }}
       >
         <Image src="/assets/avatar-parrot.png" alt="" width={parrot} height={parrot} unoptimized />
@@ -75,7 +78,7 @@ export function UserAvatar({
       width={size}
       height={size}
       onError={() => setErrored(true)}
-      className={`shrink-0 object-cover ${RING}`}
+      className={cn('shrink-0 object-cover', RING, className)}
       style={{ width: size, height: size }}
       unoptimized={!isCloudinary(src)}
     />

@@ -3,8 +3,28 @@ import Link from 'next/link'
 import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import { GoogleMap, MapMarker } from '@/components/features/google-map'
 import { richTextToHtml } from '@/lib/rich-text-html'
-import { ExpandableTouristPoint } from './expandable-tourist-point'
+import { getTurnstileSiteKey } from '@/lib/comment-spam'
+import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
 import { PlaceCardImage } from './place-card-image'
+import type { PageReviewStats } from '@/lib/payload'
+
+/**
+ * Autor cíle pro výpis — VÝHRADNĚ z veřejného virtuálního pole `createdByPublic`
+ * (bezpečná podmnožina; surová relace createdBy se na frontend nevystavuje).
+ * Mini podoba: jen avatar + jméno (username, případně jméno a příjmení).
+ */
+function touristPointAuthor(child: PageChild): TouristPointAuthor | null {
+  const author = child.createdByPublic
+  if (!author) return null
+  const name =
+    author.username || [author.firstName, author.lastName].filter(Boolean).join(' ') || null
+  if (!name) return null
+  return {
+    name,
+    avatarUrl: author.avatar?.url ?? null,
+    profileHref: author.username ? `/profil/${author.username}` : null,
+  }
+}
 
 interface PlacesToVisitProps {
   pageChildren: PageChild[]
@@ -14,6 +34,8 @@ interface PlacesToVisitProps {
   imageUrlMap?: Map<number | string, string>
   /** Title of the parent page (e.g. "Dubrovníku") for the section heading */
   parentLocative?: string | null
+  /** Souhrny recenzí dětí (id → počet + průměr) pro hvězdičky ve výpisu cílů */
+  reviewStats?: Record<number, PageReviewStats>
 }
 
 function getFullHtml(text: string | RichTextRoot | null | undefined): string {
@@ -42,6 +64,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
   mapZoom = 7,
   imageUrlMap,
   parentLocative,
+  reviewStats,
 }) => {
   const placeCategories = [
     PageCategory.Misto_k_navstiveni,
@@ -101,7 +124,12 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
             {isSuperordinate ? (
               <SuperordinateGrid places={places} imageUrlMap={imageUrlMap} hasMap={!!hasMap} />
             ) : (
-              <TouristPointList places={places} imageUrlMap={imageUrlMap} />
+              <TouristPointList
+                places={places}
+                imageUrlMap={imageUrlMap}
+                reviewStats={reviewStats}
+                turnstileSiteKey={getTurnstileSiteKey()}
+              />
             )}
           </div>
 
@@ -189,9 +217,13 @@ function SuperordinateGrid({
 function TouristPointList({
   places,
   imageUrlMap,
+  reviewStats,
+  turnstileSiteKey,
 }: {
   places: PageChild[]
   imageUrlMap?: Map<number | string, string>
+  reviewStats?: Record<number, PageReviewStats>
+  turnstileSiteKey?: string | null
 }) {
   return (
     <div className="divide-y divide-gray-100">
@@ -202,6 +234,7 @@ function TouristPointList({
         const plainFull = htmlToPlain(fullHtml)
         const previewText = toPreviewText(plainFull)
         const hasMoreContent = plainFull.length > 280
+        const stats = reviewStats?.[Number(place.id)]
 
         return (
           <div key={place.id} className={`${index > 0 ? 'pt-10' : ''} pb-10`}>
@@ -213,6 +246,12 @@ function TouristPointList({
               previewText={previewText}
               fullHtml={fullHtml}
               hasMoreContent={hasMoreContent}
+              reviewCount={stats?.count}
+              reviewAvg={stats?.avg}
+              turnstileSiteKey={turnstileSiteKey}
+              address={place.detail?.googleMapsAddress ?? null}
+              websiteUrl={place.detail?.website ?? null}
+              author={touristPointAuthor(place)}
             />
           </div>
         )

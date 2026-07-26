@@ -14,6 +14,25 @@ export function isProduction() {
   return process.env.NODE_ENV === 'production'
 }
 
+/** České skloňování počtu recenzí: 1 recenze, 2–4 recenze, 5+ recenzí. */
+export function reviewsCountLabel(count: number): string {
+  if (count >= 1 && count <= 4) return 'recenze'
+  return 'recenzí'
+}
+
+/** Zobrazovaný text webu cíle: bez protokolu, www a koncového lomítka. */
+export function websiteLabel(url: string): string {
+  return url
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/, '')
+}
+
+/** Odkaz na web cíle: doplní protokol, když v datech chybí. */
+export function websiteHref(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`
+}
+
 export function getPayloadURL() {
   // Klientsky bezpečné: v prohlížeči je dostupná jen proměnná s prefixem
   // `NEXT_PUBLIC_`. Fallback na localhost drží lokální vývoj.

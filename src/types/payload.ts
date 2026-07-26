@@ -63,6 +63,8 @@ export interface PageChild {
   }
   // Odvozeno ze schématu (superset — web čte jen latitude/longitude/zoom/adresu).
   detail?: GeneratedPage['detail']
+  /** Bezpečný veřejný autor (virtuální pole) — výpis cílů zobrazuje avatar + jméno. */
+  createdByPublic?: Page['createdByPublic']
 }
 
 export interface RichTextRoot {
@@ -179,6 +181,26 @@ export interface CommentPublic {
 export interface CommentThread {
   comment: CommentPublic
   replies: CommentPublic[]
+}
+
+/**
+ * Normalizovaná recenze turistického cíle pro veřejný web. Skládá ji datová
+ * vrstva (fetchPageReviews) z kolekce `comments` (type = review): bezpečná pole
+ * + veřejný autor (username/avatar z virtuálního `authorPublic`). Recenze nemají
+ * vlákna (odpovědi) — jen plochý seznam s hvězdičkovým hodnocením.
+ */
+export interface ReviewPublic {
+  id: number
+  authorName: string
+  body: string
+  /** Hvězdičkové hodnocení 1–5 (kolekce ho u recenze vynucuje). */
+  rating: number
+  /** Datum vložení (legacy `commentedAt`, u nových = čas vytvoření). */
+  reviewedAt: string | null
+  /** Username registrovaného autora (odkaz na profil), jinak null. */
+  authorUsername: string | null
+  /** URL avataru registrovaného autora, jinak null (frontend vykreslí papouška). */
+  avatarUrl: string | null
 }
 
 export enum PageCategory {

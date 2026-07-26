@@ -424,36 +424,48 @@ export const Pages: CollectionConfig = {
 
             if (!authorId) return null
 
-            try {
-              const user = (await req.payload.findByID({
-                collection: 'users',
-                id: authorId,
-                depth: 1,
-                // Taháme jen pole, která níže skládáme do veřejného objektu —
-                // ne celého uživatele (heslo/hash, role, e-mail sem nepatří).
-                select: {
-                  username: true,
-                  firstName: true,
-                  lastName: true,
-                  avatar: true,
-                },
-                overrideAccess: true,
-                req,
-              })) as any
+            // Memo v req.context: výpis dětí (např. 11 cílů na stránce místa)
+            // spouští tento hook pro KAŽDÝ dokument, ale autoři se opakují.
+            // Sdílený Promise per autor v rámci jedné operace srazí N dotazů
+            // na počet unikátních autorů (typicky 1–2) a pokryje i souběh.
+            const memo = ((
+              req.context as { createdByPublicMemo?: Map<number, Promise<unknown>> }
+            ).createdByPublicMemo ??= new Map())
 
-              return {
-                id: user.id,
-                username: user.username ?? null,
-                firstName: user.firstName ?? null,
-                lastName: user.lastName ?? null,
-                avatar:
-                  user.avatar && typeof user.avatar === 'object'
-                    ? { url: user.avatar.url ?? null }
-                    : null,
-              }
-            } catch {
-              return null
+            let lookup = memo.get(authorId)
+            if (!lookup) {
+              lookup = req.payload
+                .findByID({
+                  collection: 'users',
+                  id: authorId,
+                  depth: 1,
+                  // Taháme jen pole, která níže skládáme do veřejného objektu —
+                  // ne celého uživatele (heslo/hash, role, e-mail sem nepatří).
+                  select: {
+                    username: true,
+                    firstName: true,
+                    lastName: true,
+                    avatar: true,
+                  },
+                  overrideAccess: true,
+                  req,
+                })
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .then((user: any) => ({
+                  id: user.id,
+                  username: user.username ?? null,
+                  firstName: user.firstName ?? null,
+                  lastName: user.lastName ?? null,
+                  avatar:
+                    user.avatar && typeof user.avatar === 'object'
+                      ? { url: user.avatar.url ?? null }
+                      : null,
+                }))
+                .catch(() => null)
+              memo.set(authorId, lookup)
             }
+
+            return lookup
           },
         ],
       },

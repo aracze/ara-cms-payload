@@ -16,6 +16,8 @@ interface GoogleMapProps {
   centerLat: number
   centerLng: number
   zoom: number
+  /** Výška mapy (CSS hodnota). Bez zadání vysoká mapa vedle výpisu cílů. */
+  height?: string
 }
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
@@ -190,11 +192,20 @@ function loadGoogleMaps(): Promise<void> {
   return mapsReadyPromise
 }
 
-export const GoogleMap: React.FC<GoogleMapProps> = ({ markers, centerLat, centerLng, zoom }) => {
+export const GoogleMap: React.FC<GoogleMapProps> = ({
+  markers,
+  centerLat,
+  centerLng,
+  zoom,
+  height,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
+  // gmp-click je nativní DOM listener na AdvancedMarkerElement —
+  // clearInstanceListeners ho neodstraní, uklízíme ho sami při odmountu.
+  const advancedClickHandlersRef = useRef<Array<{ marker: any; fn: () => void }>>([])
   const infoWindowRef = useRef<any>(null)
   const [inView, setInView] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -355,12 +366,21 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({ markers, centerLat, center
         marker = new googleApi.maps.Marker(markerOptions)
       }
 
-      marker.addListener('click', () => {
+      // AdvancedMarkerElement má vlastní událost `gmp-click` — obyčejný
+      // 'click' na něm funguje, ale Maps API kvůli němu hlásí deprecation
+      // warning do konzole. Klasický Marker zůstává u 'click'.
+      const openInfoWindow = () => {
         const content = buildInfoWindowContent(m)
         infoWindow.setContent(content)
         // Objektová forma open() funguje pro Marker i AdvancedMarkerElement.
         infoWindow.open({ anchor: marker, map })
-      })
+      }
+      if (useAdvancedMarkers) {
+        marker.addEventListener('gmp-click', openInfoWindow)
+        advancedClickHandlersRef.current.push({ marker, fn: openInfoWindow })
+      } else {
+        marker.addListener('click', openInfoWindow)
+      }
 
       markersRef.current.push(marker)
     }
@@ -479,6 +499,14 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({ markers, centerLat, center
         if (mapInstanceRef.current) ev.clearInstanceListeners(mapInstanceRef.current)
         if (infoWindowRef.current) ev.clearInstanceListeners(infoWindowRef.current)
       }
+      // Nativní gmp-click listenery advanced markerů (mimo dosah
+      // clearInstanceListeners) odregistrujeme ručně.
+      advancedClickHandlersRef.current.forEach(({ marker, fn }) => {
+        if (marker && typeof marker.removeEventListener === 'function') {
+          marker.removeEventListener('gmp-click', fn)
+        }
+      })
+      advancedClickHandlersRef.current = []
       // Odpojíme markery od mapy (AdvancedMarkerElement přes `map`, klasický `setMap`).
       markersRef.current.forEach((marker) => {
         if (marker && typeof marker.setMap === 'function') marker.setMap(null)
@@ -496,7 +524,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({ markers, centerLat, center
     <div
       ref={containerRef}
       className="w-full rounded-lg"
-      style={{ height: 'calc(100vh - 40px)', minHeight: '400px' }}
+      style={height ? { height } : { height: 'calc(100vh - 40px)', minHeight: '400px' }}
     >
       {loadError ? (
         <div className="h-full w-full rounded-lg border border-[#e4e4e4] bg-[#f8fafc] p-6 text-center text-sm text-[#4f5f74]">

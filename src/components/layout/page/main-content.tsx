@@ -1,10 +1,24 @@
 import React from 'react'
 import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import Link from 'next/link'
+import { Globe, MapPin } from 'lucide-react'
 import { LocalTime } from '@/components/features/local-time'
+import { GoogleMap } from '@/components/features/google-map'
+import { UserAvatar } from '@/components/user-avatar'
 import { richTextToHtml } from '@/lib/rich-text-html'
+import { websiteHref, websiteLabel } from '@/lib/utils'
 import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
+
+/** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
+export interface TouristPointInfo {
+  address: string | null
+  websiteUrl: string | null
+  mapCenter: { lat: number; lng: number } | null
+  mapZoom: number
+  title: string
+  fullSlug: string
+}
 
 interface TocItem {
   id: string
@@ -47,6 +61,7 @@ export const MainContent = ({
   pageTitle,
   genitive,
   createdByPublic,
+  touristPointInfo = null,
 }: {
   text: string | RichTextRoot
   pageChildren: PageChild[]
@@ -62,6 +77,8 @@ export const MainContent = ({
     lastName?: string | null
     avatar?: { url?: string | null } | null
   } | null
+  /** Karta Praktické informace (jen turistické cíle) — adresa, web, mapa, autor. */
+  touristPointInfo?: TouristPointInfo | null
 }) => {
   const placeCategories: PageCategory[] = [
     PageCategory.Misto_k_navstiveni,
@@ -111,7 +128,9 @@ export const MainContent = ({
     <main
       id="obsah"
       tabIndex={-1}
-      className="max-w-7xl mx-auto px-4 py-12 md:py-20 flex flex-col items-stretch lg:flex-row lg:justify-center gap-8 lg:gap-10 focus:outline-none"
+      // Turistický cíl: menší spodní odsazení — hned pod obsahem navazuje
+      // sekce recenzí a plných 80 px by mezi nimi dělalo zbytečnou díru.
+      className={`max-w-7xl mx-auto px-4 pt-12 ${touristPointInfo ? 'pb-6 md:pb-8' : 'pb-12 md:pb-20'} flex flex-col items-stretch lg:flex-row lg:justify-center gap-8 lg:gap-10 focus:outline-none`}
     >
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
@@ -120,13 +139,121 @@ export const MainContent = ({
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
           // i na informačních podstránkách (Vstupní podmínky, Měna a ceny, Počasí…)
           // — jako na původním webu. Rubriky a statické stránky autora nemají.
-          contributor={showAktualniInfo || showTableOfContents ? contributor : null}
+          // Na turistickém cíli se autor přesouvá do karty Praktické informace
+          // v pravém sloupci (legacy rozložení), pod textem by byl dvakrát.
+          contributor={
+            (showAktualniInfo || showTableOfContents) && !touristPointInfo ? contributor : null
+          }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
+          // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
+          // orientované fotky by jinak zabraly celou obrazovku.
+          proseClassName={touristPointInfo ? 'poi-prose' : undefined}
         />
       </div>
 
       {/* Sidebar / Info Column */}
       <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-12 relative">
+        {/* Praktické informace turistického cíle — adresa, web, mapa, autor.
+            Vzdušné legacy rozložení: bez rámečku, přes celou šířku sloupce,
+            větší modré ikony a velká mapa; autor ve standardní podobě
+            (avatar + jméno + „Cestovní průvodce"). */}
+        {touristPointInfo &&
+          (touristPointInfo.address ||
+            touristPointInfo.websiteUrl ||
+            touristPointInfo.mapCenter ||
+            contributor) && (
+            <div className="relative">
+              <div className="flex flex-col gap-5">
+                {/* Stejná velikost písma jako běžný text stránky (prose 18 px;
+                    20 px má jen úvodní „lead" odstavec) — postranní informace
+                    jsou plnohodnotný obsah, ne popisek. */}
+                {touristPointInfo.address && (
+                  <span className="flex items-start gap-3.5 text-[18px] leading-relaxed text-[#4a4a4a]">
+                    <MapPin
+                      aria-hidden="true"
+                      className="mt-[5px] h-[20px] w-[20px] shrink-0 text-[#215491]"
+                      strokeWidth={2}
+                    />
+                    {touristPointInfo.address}
+                  </span>
+                )}
+                {touristPointInfo.websiteUrl && (
+                  <a
+                    href={websiteHref(touristPointInfo.websiteUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3.5 text-[18px] font-semibold leading-relaxed text-[#215491] hover:underline"
+                  >
+                    <Globe
+                      aria-hidden="true"
+                      className="mt-[5px] h-[20px] w-[20px] shrink-0 text-[#215491]"
+                      strokeWidth={2}
+                    />
+                    {websiteLabel(touristPointInfo.websiteUrl)}
+                  </a>
+                )}
+
+                {touristPointInfo.mapCenter && (
+                  <div className="mt-2">
+                    <GoogleMap
+                      markers={[
+                        {
+                          id: 'cil',
+                          title: touristPointInfo.title,
+                          fullSlug: touristPointInfo.fullSlug,
+                          lat: touristPointInfo.mapCenter.lat,
+                          lng: touristPointInfo.mapCenter.lng,
+                        },
+                      ]}
+                      centerLat={touristPointInfo.mapCenter.lat}
+                      centerLng={touristPointInfo.mapCenter.lng}
+                      zoom={touristPointInfo.mapZoom}
+                      height="420px"
+                    />
+                  </div>
+                )}
+
+                {contributor && (
+                  <div className="mt-1 flex items-start">
+                    <div className="mr-[15px] shrink-0">
+                      {contributor.profileHref ? (
+                        <Link href={contributor.profileHref} className="block">
+                          <UserAvatar
+                            name={contributor.name}
+                            avatarUrl={contributor.avatarUrl}
+                            size={40}
+                          />
+                        </Link>
+                      ) : (
+                        <UserAvatar
+                          name={contributor.name}
+                          avatarUrl={contributor.avatarUrl}
+                          size={40}
+                        />
+                      )}
+                    </div>
+                    <div className="inline-block pt-[3px]">
+                      <div className="block text-[12px] leading-[20.4px] text-[#565656]">
+                        {contributor.profileHref ? (
+                          <Link
+                            href={contributor.profileHref}
+                            className="font-semibold text-[#565656] no-underline hover:underline"
+                          >
+                            {contributor.name}
+                          </Link>
+                        ) : (
+                          <span className="font-semibold">{contributor.name}</span>
+                        )}
+                      </div>
+                      <div className="block text-[12px] leading-[20.4px] text-[#898e95]">
+                        Cestovní průvodce
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         {/* Time, Exchange & Practical Info — for place-type pages */}
         {showAktualniInfo && (timezone || exchangeRate || practicalInfoChild) && (
           <div className="relative">

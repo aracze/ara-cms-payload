@@ -42,3 +42,24 @@ export function formatCommentDate(iso: string | null): { relative: string; absol
   const years = Math.round(days / 365)
   return { relative: rtf.format(-years, 'year'), absolute }
 }
+
+// Recenze používají absolutní datum bez mezer („14.09.2014") — jako legacy web.
+// en-CA dává stabilně ISO tvar YYYY-MM-DD, ze kterého složíme obojí (display
+// i strojově čitelné datum pro schema.org datePublished).
+const reviewDateFmt = new Intl.DateTimeFormat('en-CA', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: 'Europe/Prague',
+})
+
+/** Datum recenze: `display` = „dd.MM.yyyy" (legacy formát), `isoDate` = „yyyy-MM-dd". */
+export function formatReviewDate(iso: string | null): { display: string; isoDate: string } | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+
+  const isoDate = reviewDateFmt.format(date) // YYYY-MM-DD
+  const [year, month, day] = isoDate.split('-')
+  return { display: `${day}.${month}.${year}`, isoDate }
+}

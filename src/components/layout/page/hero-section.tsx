@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { StaticHeroOverlay } from '@/components/features/static-hero-overlay'
 import { StaticHeroWave } from '@/components/features/static-hero-wave'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
+import { StarRating } from '@/components/features/reviews/star-rating'
+import { reviewsCountLabel } from '@/lib/utils'
 
 interface Breadcrumb {
   title: string
@@ -14,6 +16,8 @@ interface HeroSectionProps {
   styleCss?: string
   filterId?: string
   breadcrumbs?: Breadcrumb[]
+  /** Souhrn recenzí (turistické cíle) — hvězdičky + počet pod názvem, odkaz na #recenze. */
+  rating?: { avg: number; count: number } | null
 }
 
 export const HeroSection = ({
@@ -22,6 +26,7 @@ export const HeroSection = ({
   styleCss,
   filterId,
   breadcrumbs,
+  rating = null,
 }: HeroSectionProps) => {
   return (
     <section className="relative w-full h-[315px] bg-[#3b444f]">
@@ -68,10 +73,39 @@ export const HeroSection = ({
             </ol>
           </nav>
         )}
-        <h1 className="-translate-y-[16px] text-[40px] font-semibold text-white text-center tracking-normal [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)]">
-          {title}
-        </h1>
+        {/* Hodnocení cíle: titulek drží PŘESNĚ střed (stejně široké pružné
+            sloupce po obou stranách) a hvězdičky jsou vycentrované v pravém
+            sloupci — tedy přesně uprostřed mezery mezi titulkem a okrajem,
+            pro jakkoli dlouhý název. Na menších zařízeních jsou pod názvem.
+            Odkaz sroluje na recenze. */}
+        <div className="mx-auto flex w-full max-w-7xl -translate-y-[16px] items-center px-6">
+          <div className="hidden flex-1 lg:block" />
+          <h1 className="w-full text-[40px] font-semibold text-white text-center tracking-normal [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] lg:w-auto">
+            {title}
+          </h1>
+          <div className="hidden flex-1 justify-center lg:flex">
+            {rating && rating.count > 0 && (
+              <a
+                href="#recenze"
+                className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
+              >
+                <StarRating rating={Math.round(rating.avg * 2) / 2} size={17} />
+                {rating.count} {reviewsCountLabel(rating.count)}
+              </a>
+            )}
+          </div>
+        </div>
         <div className="-translate-y-[12px] w-[30px] h-px bg-[#D7E1EF] rounded-full mx-auto"></div>
+
+        {rating && rating.count > 0 && (
+          <a
+            href="#recenze"
+            className="lg:hidden -translate-y-[4px] inline-flex items-center gap-2 text-[13.5px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
+          >
+            <StarRating rating={Math.round(rating.avg * 2) / 2} size={14} />
+            {rating.count} {reviewsCountLabel(rating.count)}
+          </a>
+        )}
       </div>
 
       <StaticHeroOverlay filterId={filterId} />

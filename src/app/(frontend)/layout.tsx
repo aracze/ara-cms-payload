@@ -73,7 +73,15 @@ export default async function RootLayout({
   const headerLogoSvg = headerLogo?.svgCode ? sanitizeHeaderLogoSvg(headerLogo.svgCode) : null
 
   return (
-    <html lang="cs" className={`${openSans.variable} ${poppins.variable}`}>
+    // data-scroll-behavior říká Nextu, že plynulé scrollování (globals.css:
+    // scroll-behavior smooth) je záměr — Next ho pak při přechodech mezi
+    // stránkami dočasně vypne (scroll nahoru je okamžitý) a zmizí warning
+    // „missing-data-scroll-behavior" v konzoli.
+    <html
+      lang="cs"
+      data-scroll-behavior="smooth"
+      className={`${openSans.variable} ${poppins.variable}`}
+    >
       <body className="antialiased">
         {/* Skip link pro klávesnici/čtečky — skrytý, dokud nedostane fokus (Tab). */}
         <a

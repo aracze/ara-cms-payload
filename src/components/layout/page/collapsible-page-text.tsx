@@ -33,6 +33,7 @@ export function CollapsiblePageTextWithContributor({
   textHtml,
   contributor,
   collapsible = true,
+  proseClassName,
 }: {
   /**
    * BEZPEČNOST: HTML se vkládá přes dangerouslySetInnerHTML. Volající MUSÍ předat
@@ -43,6 +44,8 @@ export function CollapsiblePageTextWithContributor({
   contributor?: Contributor | null
   /** Sbalování textu + „zobrazit více" — jen na stránkách „Místo k navštívení". */
   collapsible?: boolean
+  /** Extra třída prose boxu (např. `poi-prose` = omezená výška fotek u cílů). */
+  proseClassName?: string
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const { previewHtml, shouldCollapse: canCollapse } = useMemo(
@@ -62,7 +65,10 @@ export function CollapsiblePageTextWithContributor({
             (úvodní lead odstavec). dangerouslySetInnerHTML nesmí být na stejném
             elementu jako sourozenecký JSX (bílý přechod níže), proto vlastní div. */}
         <div
-          className="reading-prose prose max-w-[808px] prose-a:text-[#215491] prose-a:no-underline hover:prose-a:underline"
+          className={cn(
+            'reading-prose prose max-w-[808px] prose-a:text-[#215491] prose-a:no-underline hover:prose-a:underline',
+            proseClassName,
+          )}
           dangerouslySetInnerHTML={{ __html: displayedHtml }}
         />
         {/* Text mizí do bílé — naznačuje, že pokračuje dál. */}

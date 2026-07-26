@@ -1,5 +1,6 @@
 import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
+import { AdSenseScript, LeaderboardAd } from '@/components/features/article-ad'
 import {
   fetchPageByFullSlug,
   fetchPageLightByFullSlug,
@@ -105,9 +106,32 @@ export default async function PageRoute({ params }: Props) {
   // NAD loading kostrou; tady jen vykreslíme obsah (notFound() zůstává jako
   // pojistka, kdyby se sem 404 dostal).
   const resolution = await resolveSlugRoute(fullSlug)
-  if (resolution.kind === 'page') return <Page page={resolution.page} />
+  // Spodní reklamní pruh (legacy bottomAds) — na všech stránkách i článcích;
+  // homepage je samostatná route, tam pruh záměrně není.
+  if (resolution.kind === 'page')
+    return (
+      <>
+        <Page page={resolution.page} />
+        <BottomAdStrip />
+      </>
+    )
   if (resolution.kind === 'article')
-    return <Article article={resolution.article} contextSlug={resolution.parentSlug} />
+    return (
+      <>
+        <Article article={resolution.article} contextSlug={resolution.parentSlug} />
+        <BottomAdStrip />
+      </>
+    )
 
   notFound()
+}
+
+/** Spodní responzivní reklamní pruh pod obsahem stránky/článku. */
+function BottomAdStrip() {
+  return (
+    <div className="mx-auto w-full max-w-7xl px-4 pb-12 pt-4">
+      <AdSenseScript />
+      <LeaderboardAd />
+    </div>
+  )
 }

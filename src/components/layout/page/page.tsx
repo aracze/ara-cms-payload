@@ -5,10 +5,20 @@ import { HeroSection } from './hero-section'
 import { Subnavigation } from './subnavigation'
 import { MainContent } from './main-content'
 import { PlacesToVisit } from './places-to-visit'
-import { fetchPageLightByFullSlug, fetchMediaUrlsByIds, pageHasArticlesBySlug } from '@/lib/payload'
+import { ReviewsSection } from '@/components/features/reviews/reviews-section'
+import { RelatedTouristPoints } from './related-tourist-points'
+import {
+  fetchPageLightByFullSlug,
+  fetchMediaUrlsByIds,
+  fetchPageReviews,
+  fetchPageReviewStats,
+  fetchTouristPointSiblings,
+  pageHasArticlesBySlug,
+} from '@/lib/payload'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
-import { getPayloadURL } from '@/lib/utils'
+import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
+import type { ReviewPublic } from '@/types/payload'
 
 // Categories that can "own" a sub-navigation menu.
 // Turistický cíl is excluded – it should always delegate to its parent Place.
@@ -54,6 +64,34 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     shouldFetchExchangeRate && effectiveCurrencyCode
       ? fetchExchangeRate(effectiveCurrencyCode)
       : Promise.resolve(null)
+  // Recenze mají jen turistické cíle (jako na legacy webu). Dotaz startuje hned,
+  // await až v poslední vlně s ostatními.
+  const reviewsPromise =
+    page.category === PageCategory.Turisticky_cil
+      ? fetchPageReviews(Number(page.id))
+      : Promise.resolve(null)
+  // Souhrny recenzí dětí-cílů (hvězdičky + počet ve výpisu „Co vidět…") —
+  // jeden hromadný dotaz pro všechny cíle.
+  const touristPointChildIds = pageChildren
+    .filter((c) => c.category?.trim() === PageCategory.Turisticky_cil)
+    .map((c) => Number(c.id))
+    .filter((id) => Number.isInteger(id))
+  const reviewStatsPromise =
+    touristPointChildIds.length > 0
+      ? fetchPageReviewStats(touristPointChildIds)
+      : Promise.resolve({})
+  // Sousední cíle pro pás „Další vyhledávaná Místa…" (jen na detailu cíle).
+  const siblingsParentSlug =
+    page.category === PageCategory.Turisticky_cil
+      ? page.fullSlug
+          .replace(/^\/+|\/+$/g, '')
+          .split('/')
+          .slice(0, -1)
+          .join('/')
+      : null
+  const siblingsPromise = siblingsParentSlug
+    ? fetchTouristPointSiblings(siblingsParentSlug, Number(page.id))
+    : Promise.resolve([])
   const [breadcrumbs, menuContext] = await Promise.all([
     getBreadcrumbs(page),
     fetchMenuContext(page, safeRootPage),
@@ -66,7 +104,14 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // "Místa"/"Články" v sekundárním menu patří kontextovému místu (např. Chorvatsko),
   // ne aktuální podstránce (Vstupní podmínky). Data kontextové stránky načítáme jen když
   // se menu vůbec renderuje (jinak zbytečný fetch pro rubriky/statické stránky).
-  const [practicalInfoSourceChildren, contextFlags, exchangeData] = await Promise.all([
+  const [
+    practicalInfoSourceChildren,
+    contextFlags,
+    exchangeData,
+    reviewsData,
+    reviewStats,
+    siblings,
+  ] = await Promise.all([
     fetchPracticalInfoSourceChildren(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
       if (!showSubnavigation) return { hasPlaces: false, hasArticles: false }
@@ -91,9 +136,38 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       }
     })(),
     exchangePromise,
+    reviewsPromise,
+    reviewStatsPromise,
+    siblingsPromise,
   ])
   const contextHasPlaces = contextFlags.hasPlaces
   const contextHasArticles = contextFlags.hasArticles
+
+  // Pás „Další vyhledávaná Místa…" — jen při více než 2 sousedech (legacy
+  // pravidlo). Obrázky a rodič (titulek + lokál pro nadpis) se dotahují až
+  // tady; oba dotazy jsou cachované a rodič je už předehřátý z drobečků.
+  let relatedItems: { id: number; title: string; fullSlug: string; imageUrl: string | null }[] = []
+  let relatedParent: { title: string; fullSlug: string; locative: string | null } | null = null
+  if (siblingsParentSlug && siblings.length > 2) {
+    const [siblingImageMap, parentRes] = await Promise.all([
+      fetchMediaUrlsByIds(siblings.map((s) => s.imageId).filter((id): id is number => id !== null)),
+      fetchPageLightByFullSlug(siblingsParentSlug),
+    ])
+    const parent = parentRes.data.pages[0]
+    if (parent) {
+      relatedParent = {
+        title: parent.title,
+        fullSlug: parent.fullSlug,
+        locative: parent.detail?.locative ?? null,
+      }
+      relatedItems = siblings.map((s) => ({
+        id: s.id,
+        title: s.title,
+        fullSlug: s.fullSlug,
+        imageUrl: s.imageId != null ? (siblingImageMap.get(s.imageId) ?? null) : null,
+      }))
+    }
+  }
 
   // Build a map from child page ID → image URL (imageUrlMap načteno paralelně výše)
   const childImageUrlMap = new Map<number | string, string>()
@@ -122,8 +196,45 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       : null
   const mapZoom = page.detail?.googleMapsZoom ?? 7
 
+  // Souhrn recenzí pro hero (hvězdičky + počet pod názvem cíle) — spočtený
+  // z už načtených recenzí, žádný dotaz navíc.
+  const heroRating =
+    reviewsData && reviewsData.reviews.length > 0
+      ? {
+          avg:
+            reviewsData.reviews.reduce((sum, r) => sum + r.rating, 0) / reviewsData.reviews.length,
+          count: reviewsData.reviews.length,
+        }
+      : null
+
+  // Karta „Praktické informace" v pravém sloupci (jen turistické cíle):
+  // adresa, oficiální web, mapa s pinem cíle; autora si MainContent bere
+  // z createdByPublic (přesouvá se z místa pod textem).
+  const touristPointInfo =
+    page.category === PageCategory.Turisticky_cil
+      ? {
+          address: page.detail?.googleMapsAddress ?? null,
+          websiteUrl: page.detail?.website ?? null,
+          mapCenter,
+          mapZoom,
+          title: page.title,
+          fullSlug: page.fullSlug,
+        }
+      : null
+
   return (
     <div className="flex flex-col bg-white transition-all duration-500">
+      {/* Strukturovaná data pro vyhledávače (TouristAttraction + AggregateRating
+          + recenze) — Google pak může u výsledku zobrazit hvězdičky. Jen na
+          detailu cíle s alespoň jednou recenzí. */}
+      {heroRating && reviewsData && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: touristPointJsonLd(page, reviewsData.reviews, heroRating),
+          }}
+        />
+      )}
       <article key={page.id} className="w-full">
         {/* 1. HERO SECTION (initial-photo) */}
         <HeroSection
@@ -132,6 +243,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           styleCss={page.featuredImage?.featureImageStyleCss || undefined}
           filterId={`blurFilter-${page.id}`}
           breadcrumbs={breadcrumbs}
+          rating={heroRating}
         />
 
         {/* Sub-navigation bar style — not shown on rubric or static content pages */}
@@ -160,7 +272,27 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           pageTitle={page.title}
           genitive={page.detail?.genitive}
           createdByPublic={page.createdByPublic}
+          touristPointInfo={touristPointInfo}
         />
+
+        {/* Recenze — jen turistické cíle (parita s legacy webem) */}
+        {reviewsData && (
+          <ReviewsSection
+            pageId={Number(page.id)}
+            pageTitle={page.title}
+            reviews={reviewsData.reviews}
+          />
+        )}
+
+        {/* Další cíle stejného místa (legacy „Další vyhledávaná Místa…") */}
+        {relatedParent && (
+          <RelatedTouristPoints
+            items={relatedItems}
+            parentTitle={relatedParent.title}
+            parentFullSlug={relatedParent.fullSlug}
+            parentLocative={relatedParent.locative}
+          />
+        )}
 
         {/* 3. PLACES TO VISIT SECTION */}
         {pageChildren.length > 0 && (
@@ -170,6 +302,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             mapZoom={mapZoom}
             imageUrlMap={childImageUrlMap}
             parentLocative={page.detail?.locative ?? null}
+            reviewStats={reviewStats}
           />
         )}
 
@@ -188,6 +321,51 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       </article>
     </div>
   )
+}
+
+/**
+ * JSON-LD pro detail turistického cíle: TouristAttraction s AggregateRating
+ * a jednotlivými recenzemi (schema.org). Znak menšítka se escapuje na
+ * unicode sekvenci (viz replace níže), aby obsah recenze nemohl utéct
+ * ze script tagu.
+ */
+function touristPointJsonLd(
+  page: PayloadPage,
+  reviews: ReviewPublic[],
+  rating: { avg: number; count: number },
+): string {
+  const lat = page.detail?.latitude ? parseFloat(page.detail.latitude) : null
+  const lng = page.detail?.longitude ? parseFloat(page.detail.longitude) : null
+
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'TouristAttraction',
+    name: page.title,
+    url: getSiteURL() + page.fullSlug,
+    ...(page.detail?.googleMapsAddress ? { address: page.detail.googleMapsAddress } : {}),
+    ...(page.detail?.website ? { sameAs: websiteHref(page.detail.website) } : {}),
+    ...(lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
+      ? { geo: { '@type': 'GeoCoordinates', latitude: lat, longitude: lng } }
+      : {}),
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: Math.round(rating.avg * 10) / 10,
+      reviewCount: rating.count,
+      bestRating: 5,
+      worstRating: 1,
+    },
+    // Do JSON-LD stačí VZOREK (nejnovějších 10) — vyhledávače víc nepotřebují
+    // a u oblíbeného cíle by kompletní výpis zbytečně nafukoval HTML;
+    // souhrn drží aggregateRating a plný výpis je v těle stránky.
+    review: reviews.slice(0, 10).map((r) => ({
+      '@type': 'Review',
+      author: { '@type': 'Person', name: r.authorName },
+      ...(r.reviewedAt ? { datePublished: r.reviewedAt.slice(0, 10) } : {}),
+      reviewBody: r.body,
+      reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5, worstRating: 1 },
+    })),
+  }
+  return JSON.stringify(data).replace(/</g, '\\u003c')
 }
 
 function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {
