@@ -4,11 +4,7 @@ import { StaticHeroWave } from '@/components/features/static-hero-wave'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { StarRating } from '@/components/features/reviews/star-rating'
 import { reviewsCountLabel } from '@/lib/utils'
-
-interface Breadcrumb {
-  title: string
-  href: string
-}
+import type { Breadcrumb } from '@/lib/page-hierarchy'
 
 interface HeroSectionProps {
   title: string
@@ -37,31 +33,32 @@ export const HeroSection = ({
 
       {/* Title Content - Overlaid like in Grails */}
       <div className="relative z-[101] h-full flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        {/* Řetězec jde po hierarchii v CMS, takže může mít i 4 položky. Aby
+            dlouhá cesta na mobilu netlačila celou stránku do vodorovného
+            posuvu, přetéká jen pilulka sama (posuvník skrytý — odkazy jsou
+            fokusovatelné, takže se klávesnicí nascrollují samy). */}
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav
             aria-label="Drobečková navigace"
-            className="mb-2 flex items-center gap-2 -translate-y-[20px] bg-white/90 backdrop-blur-md border border-white/20 rounded-full px-5 py-1.5 shadow-sm"
+            className="mb-2 flex max-w-[calc(100vw-2rem)] items-center gap-2 -translate-y-[20px] overflow-x-auto bg-white/90 backdrop-blur-md border border-white/20 rounded-full px-5 py-1.5 shadow-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            <ol className="flex items-center gap-1.5 list-none p-0 m-0">
+            <ol className="flex w-max items-center gap-1.5 list-none p-0 m-0">
+              {/* Každý drobeček je PŘEDEK, aktuální stránka v řetězci není (je
+                  v `<h1>` pod ním) — proto jsou všechny položky odkazem a žádná
+                  nemá `aria-current="page"`. Poslední (přímý rodič) je jen
+                  zvýrazněný. */}
               {breadcrumbs.map((bc, idx) => {
                 const isLast = idx === breadcrumbs.length - 1
                 return (
-                  <li key={bc.href} className="flex items-center gap-1.5">
-                    {isLast ? (
-                      <span
-                        aria-current="page"
-                        className="text-[14px] font-bold tracking-wide text-gray-700"
-                      >
-                        {bc.title}
-                      </span>
-                    ) : (
-                      <Link
-                        href={bc.href}
-                        className="text-[14px] font-medium tracking-wide text-gray-500 transition-colors duration-200 hover:text-[#1a3f6c]"
-                      >
-                        {bc.title}
-                      </Link>
-                    )}
+                  <li key={bc.href} className="flex shrink-0 items-center gap-1.5">
+                    <Link
+                      href={bc.href}
+                      className={`text-[14px] tracking-wide transition-colors duration-200 hover:text-[#1a3f6c] ${
+                        isLast ? 'font-bold text-gray-700' : 'font-medium text-gray-500'
+                      }`}
+                    >
+                      {bc.title}
+                    </Link>
                     {!isLast && (
                       <span className="text-gray-300 text-[12px] px-0.5" aria-hidden="true">
                         /

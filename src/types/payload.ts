@@ -122,6 +122,14 @@ export interface Page {
     docs: PageChild[]
   }
   articles: Article[]
+  /**
+   * Řetězec předků z CMS (pole `breadcrumbs` pluginu nested-docs) — od nejvyšší
+   * úrovně po tuto stránku VČETNĚ. Zdroj drobečkové navigace: jde po HIERARCHII,
+   * takže obsahuje i stránky vynechané z URL (`includeInChildUrlPaths: false`,
+   * např. „Kalifornie" v /usa/san-francisco). Čte se přes `buildBreadcrumbs`
+   * v `src/lib/page-hierarchy.ts`.
+   */
+  breadcrumbs?: { label?: string | null; url?: string | null }[] | null
   // Odvozeno ze schématu (payload-types.ts) — nebude se rozcházet s CMS.
   detail?: GeneratedPage['detail']
   createdBy?:

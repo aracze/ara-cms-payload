@@ -1,10 +1,11 @@
 import React from 'react'
 import { Article as ArticleType } from '@/types/payload'
-import { getPayloadURL } from '@/lib/utils'
+import { getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { fetchPageLightByFullSlug, pageHasArticles, fetchArticleComments } from '@/lib/payload'
+import { breadcrumbListJsonLd, buildBreadcrumbs, menuOwnerCategories } from '@/lib/page-hierarchy'
 import { Subnavigation } from '@/components/layout/page/subnavigation'
 import { HeroSection } from '@/components/layout/page/hero-section'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
@@ -27,9 +28,23 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   const contextPageSlug = contextSlug || article.mainPage?.fullSlug?.replace(/^\//, '') || null
   const { contextPage, rootPage } = await resolveContextPages(contextPageSlug)
 
-  // Má kořenová stránka články? Levný count (přes FK mainPage) místo tahání
+  // Článek se chová jako turistický cíl: sekundární menu patří MÍSTU, pod
+  // kterým visí (např. San Francisco), ne zemi z prvního segmentu URL. Když
+  // článek visí pod něčím jiným než místem (např. pod rubrikou), zůstává
+  // dosavadní chování — menu kořenové stránky.
+  const placePage =
+    contextPage && contextPage.category && menuOwnerCategories.includes(contextPage.category)
+      ? contextPage
+      : rootPage
+
+  // Má kontextové místo články? Levný count (přes FK mainPage) místo tahání
   // celého pole článků těžkým fetchem — rozhoduje jen o záložce „Články".
-  const rootHasArticles = rootPage ? await pageHasArticles(rootPage.id) : false
+  const placeHasArticles = placePage ? await pageHasArticles(placePage.id) : false
+
+  // Drobečky článku jdou po hierarchii v CMS a končí místem, pod kterým článek
+  // visí (proto `includeSelf`) — u článku pod San Franciscem tedy
+  // „USA / Kalifornie / San Francisco".
+  const breadcrumbs = buildBreadcrumbs(placePage, { includeSelf: true })
 
   const heroImage = resolveHeroImage(contextPage || rootPage, article)
 
@@ -48,28 +63,52 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
 
   const { threads, count: commentCount } = await commentsPromise
 
+  // Kanonická adresa článku (mainPage + slug) — tu samou dává i generateMetadata,
+  // takže strukturovaná data ukazují na stejnou URL jako `rel=canonical`.
+  const canonicalHref = article.mainPage?.fullSlug
+    ? `${article.mainPage.fullSlug}/${article.slug}`
+    : placePage
+      ? `${placePage.fullSlug}/${article.slug}`
+      : null
+
   return (
     <div className="bg-white min-h-screen">
+      {/* Drobečky pro vyhledávače (BreadcrumbList) — cesta ve výsledku hledání. */}
+      {breadcrumbs.length > 0 && canonicalHref && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: breadcrumbListJsonLd(
+              breadcrumbs,
+              { title: article.title, href: canonicalHref },
+              getSiteURL(),
+            ),
+          }}
+        />
+      )}
       {/* Article Header / Hero */}
       <HeroSection
         title={article.title}
         imageUrl={heroImage.url}
         styleCss={heroImage.styleCss}
         filterId={`blurFilter-article-${article.documentId}`}
+        breadcrumbs={breadcrumbs}
       />
 
       {/* Subnavigation - keeps user in context of parent destination */}
-      {rootPage && (
+      {placePage && (
         <Subnavigation
-          contextTitle={rootPage.title}
-          contextFullSlug={rootPage.fullSlug}
-          pageChildren={rootPage.children?.docs ?? []}
-          rootChildren={rootPage.children?.docs ?? []}
-          currentPageFullSlug={contextPage?.fullSlug ?? ''}
+          contextTitle={placePage.title}
+          contextFullSlug={placePage.fullSlug}
+          pageChildren={placePage.children?.docs ?? []}
+          // Sbalený odkaz „Praktické informace" bere z kořenové stránky (země) —
+          // stejně jako podstránky a cíle pod nadřazeným místem.
+          rootChildren={rootPage?.children?.docs ?? []}
+          currentPageFullSlug={placePage.fullSlug}
           currentPageCategory={contextPage?.category}
-          isSubPlace={false}
-          hasPlaces={(rootPage.children?.docs?.length ?? 0) > 0}
-          hasArticles={rootHasArticles}
+          isSubPlace={!!rootPage && placePage.fullSlug !== rootPage.fullSlug}
+          hasPlaces={(placePage.children?.docs?.length ?? 0) > 0}
+          hasArticles={placeHasArticles}
           activeSection="clanky"
         />
       )}
