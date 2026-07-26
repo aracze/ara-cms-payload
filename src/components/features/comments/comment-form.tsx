@@ -63,16 +63,22 @@ export function CommentForm({
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     startTransition(async () => {
-      const result = await createComment(state, formData)
-      setState(result)
-      if (result.status === 'success') {
-        formRef.current?.reset()
-        setReplyTo(null)
-        router.refresh()
+      try {
+        const result = await createComment(state, formData)
+        setState(result)
+        if (result.status === 'success') {
+          formRef.current?.reset()
+          setReplyTo(null)
+          router.refresh()
+        }
+      } catch {
+        // Pád akce (např. výpadek sítě) — srozumitelná hláška místo ticha.
+        setState({ status: 'error', message: 'Odeslání se nepodařilo. Zkus to prosím znovu.' })
+      } finally {
+        // Turnstile token je jednorázový — reset po KAŽDÉM dokončení (chyba
+        // i pád), jinak by další odeslání poslalo už spotřebovaný token.
+        turnstileRef.current?.reset()
       }
-      // Turnstile token je jednorázový — reset i po CHYBĚ, jinak by opakované
-      // odeslání posílalo už spotřebovaný token a selhávalo donekonečna.
-      turnstileRef.current?.reset()
     })
   }
 

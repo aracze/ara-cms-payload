@@ -116,18 +116,24 @@ export function InlineReviews({
     }
     const formData = new FormData(e.currentTarget)
     startTransition(async () => {
-      const result = await createReview(state, formData)
-      setState(result)
-      if (result.status === 'success') {
-        formRef.current?.reset()
-        setRating(0)
-        // Nová recenze se objeví hned nahoře; hvězdičky pod názvem obnoví refresh.
-        await loadReviews(pageId)
-        router.refresh()
+      try {
+        const result = await createReview(state, formData)
+        setState(result)
+        if (result.status === 'success') {
+          formRef.current?.reset()
+          setRating(0)
+          // Nová recenze se objeví hned nahoře; hvězdičky pod názvem obnoví refresh.
+          await loadReviews(pageId)
+          router.refresh()
+        }
+      } catch {
+        // Pád akce (např. výpadek sítě) — srozumitelná hláška místo ticha.
+        setState({ status: 'error', message: 'Odeslání se nepodařilo. Zkus to prosím znovu.' })
+      } finally {
+        // Turnstile token je jednorázový — reset po KAŽDÉM dokončení (chyba
+        // i pád), jinak by další odeslání poslalo už spotřebovaný token.
+        turnstileRef.current?.reset()
       }
-      // Turnstile token je jednorázový — reset i po CHYBĚ, jinak by opakované
-      // odeslání posílalo už spotřebovaný token a selhávalo donekonečna.
-      turnstileRef.current?.reset()
     })
   }
 
