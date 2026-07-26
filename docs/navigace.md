@@ -120,14 +120,34 @@ Podstránka se vždy týká **nejbližšího** místa, do kterého je vložená 
 Košicemi je počasí Košic, ne Slovenska. Ze stejného kontextového místa proto vychází:
 
 - **titulek `<h1>`** — `buildPageTitle` skloňuje název kontextového místa přes pole
-  `genitive` / `locative` (např. „Aktuální počasí a kdy jet **do Košice**"). Když pole
-  chybí, použije se `do <název>` / `v <název>`, což u některých názvů gramaticky nesedí
-  (starý web to řešil skloňováním v prohlížeči) — doplňuje se v administraci.
+  `detail.genitive` / `detail.locative` (např. „Aktuální počasí a kdy jet **do Košic**",
+  „Ubytování **ve Wyomingu**"). Když pole chybí, použije se nouzové `do <název>` /
+  `v <název>`, což u řady jmen gramaticky nesedí.
 - **fotka v hero sekci** — bere se z kontextového místa; když žádnou nemá, spadne to
   na kořenovou zemi, ať hero nezůstane prázdné.
 
 Měna a časové pásmo se tímto neřídí — box „Aktuální informace" se vykresluje jen na
 stránkách typu místo/cíl, kde je kontextovým místem stránka sama.
+
+### Skloňování názvů (proč je v databázi, a ne v kódu)
+
+Součástí hodnoty je i **předložka** — a tu z názvu nespočítá žádný algoritmus:
+„**na** Slovensko", ale „**do** Chorvatska". K tomu vzorové skloňovače pletou množná
+jména měst („do Košic", „v Košicích"). Starý web měl v prohlížeči vlastní skloňovač podle
+vzorů, a i tak si držel uložené tvary a používal je jako první — pole je tedy zdroj pravdy
+a v administraci se dá kdykoli přepsat.
+
+Hromadné doplnění dělá seed + skript, ne ruční práce v adminu:
+
+```bash
+pnpm fix:declension -- --dry-run   # jen vypíše, co by se změnilo
+pnpm fix:declension               # ostrý běh
+```
+
+Tvary jsou v `scripts/data/place-declension.json` (v gitu, takže projdou review v PR).
+Skript doplní **jen prázdná pole**; existující hodnotu přepíše pouze u záznamu s
+`"overwrite": true`. Kontroluje i `title` — když se název stránky rozejde s seedem
+(např. po přejmenování), záznam přeskočí a nahlásí to. Je idempotentní.
 
 ### Co je v menu (v tomto pořadí)
 
@@ -163,14 +183,16 @@ stránkách typu místo/cíl, kde je kontextovým místem stránka sama.
 | `src/components/layout/page/hero-section.tsx`  | vykreslení drobečků                                                |
 | `src/components/layout/page/subnavigation.tsx` | vykreslení sekundárního menu                                       |
 | `scripts/fix-page-urls.ts`                     | přepočet adres po změně pravidla                                   |
+| `scripts/fix-declension.ts` + `scripts/data/`  | hromadné doplnění skloňovaných tvarů názvů míst                    |
+| `src/lib/page-title.ts`                        | skládání titulků podstránek z pádů kontextového místa              |
 
 ## 5. Známé odchylky od starého webu
 
-- **Chybějící skloňování názvů míst.** Titulek skládá `genitive`/`locative` z pole
-  `detail`; 67 míst nemá genitiv a 76 lokál, a část hodnot je z legacy převzatá ve
-  špatném pádu („ve Wyoming", „ve Spojených států amerických"). Starý web skloňoval
-  názvy skriptem v prohlížeči, nový web spoléhá na tato pole — doplňuje se obsahově
-  v administraci, ne kódem.
+- **Skloňování je doplněné jen tam, kde ovlivňuje titulky.** Seed pokrývá 79 míst
+  (145 hodnot) — všechna, která mají informační podstránky, plus opravu dvou špatných
+  pádů převzatých z legacy („ve Wyoming", „ve Spojených států amerických"). U zbylých
+  míst chybí lokál dál (~345), ale gramatiku nekazí: nadpisy pruhů mají čistý fallback
+  („Co dalšího vidět" bez názvu místa). Doplnit se dá kdykoli rozšířením seedu.
 - **Místa pod místy si mezistupeň drží.** Legacy dávalo každé místo přímo pod zemi
   (`/usa/north-rim`), nový web zachovává `/usa/grand-canyon/north-rim`. Vědomé
   rozhodnutí — nový tvar je popisnější a nemění se.
