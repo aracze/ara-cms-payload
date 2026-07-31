@@ -11,7 +11,7 @@ import {
   menuOwnerCategories,
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
-import { breadcrumbsFromSlug } from '@/lib/page-ancestors'
+import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { Subnavigation } from '@/components/layout/page/subnavigation'
 import { HeroSection } from '@/components/layout/page/hero-section'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
@@ -35,13 +35,8 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   const { contextPage, rootPage } = await resolveContextPages(contextPageSlug)
 
   // Článek se chová jako turistický cíl: sekundární menu patří MÍSTU, pod
-  // kterým visí (např. San Francisco), ne zemi z prvního segmentu URL. Když
-  // článek visí pod něčím jiným než místem (např. pod rubrikou), zůstává
-  // dosavadní chování — menu kořenové stránky.
-  const placePage =
-    contextPage && contextPage.category && menuOwnerCategories.includes(contextPage.category)
-      ? contextPage
-      : rootPage
+  // kterým visí (např. San Francisco), ne zemi z prvního segmentu URL.
+  const placePage = await resolvePlacePage(contextPage, rootPage)
 
   // Má kontextové místo články? Levný count (přes FK mainPage) místo tahání
   // celého pole článků těžkým fetchem — rozhoduje jen o záložce „Články".
@@ -52,7 +47,9 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   // „USA / Kalifornie / San Francisco".
   const breadcrumbs = await getArticleBreadcrumbs(placePage)
 
-  const heroImage = resolveHeroImage(contextPage || rootPage, article)
+  // Hero fotka ze STEJNÉHO místa jako menu a drobečky (legacy: obrázek článku,
+  // jinak fotka nejbližšího místa).
+  const heroImage = resolveHeroImage(placePage || contextPage, article)
 
   // Author (safe public subset from the backend virtual field)
   const author = article.createdByPublic ?? null
@@ -201,6 +198,40 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
       </div>
     </div>
   )
+}
+
+/**
+ * Místo, kterému patří sekundární menu, drobečky i hero fotka článku = NEJBLIŽŠÍ
+ * místo nad článkem (stejné pravidlo jako u podstránek a turistických cílů).
+ *
+ * Článek jde v CMS připojit k libovolné stránce (`mainPage` i vedlejší `pages`),
+ * takže nad ním může být i stránka, která místem není (rubrika, informační
+ * podstránka). Pak hledáme nejbližší místo v jejích předcích a teprve když žádné
+ * není, spadneme na kořenovou stránku.
+ */
+async function resolvePlacePage(
+  contextPage: PayloadPage | null,
+  rootPage: PayloadPage | null,
+): Promise<PayloadPage | null> {
+  if (!contextPage) return rootPage
+
+  if (contextPage.category && menuOwnerCategories.includes(contextPage.category)) {
+    return contextPage
+  }
+
+  const ancestors = await fetchAncestorChain(contextPage.fullSlug)
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = ancestors[i]
+    if (
+      !('isPlaceholder' in ancestor) &&
+      ancestor.category &&
+      menuOwnerCategories.includes(ancestor.category)
+    ) {
+      return ancestor
+    }
+  }
+
+  return rootPage
 }
 
 /**

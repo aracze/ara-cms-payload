@@ -25,7 +25,7 @@ import 'dotenv/config'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { getPayload } from 'payload'
+import { getPayload, NotFound } from 'payload'
 import configPromise from '../src/payload.config.js'
 
 const isDryRun = process.argv.includes('--dry-run')
@@ -69,9 +69,17 @@ async function run(entries: SeedEntry[]) {
         overrideAccess: true,
         select: { title: true, detail: true },
       })) as { title?: unknown; detail?: PageDetail }
-    } catch {
-      mismatched.push(`#${entry.id} ${entry.title} — stránka neexistuje`)
-      continue
+    } catch (err) {
+      // „Stránka neexistuje" je legitimní stav (ID se posunulo) → přeskočíme.
+      // Cokoliv jiného (výpadek DB, chybná konfigurace) ale NESMÍ vypadat jako
+      // chybějící stránka — jinak by skript projel celý seed „naprázdno" a
+      // skončil úspěchem.
+      const status = (err as { status?: number })?.status
+      if (err instanceof NotFound || status === 404) {
+        mismatched.push(`#${entry.id} ${entry.title} — stránka neexistuje`)
+        continue
+      }
+      throw err
     }
 
     if (String(doc.title ?? '') !== entry.title) {
@@ -144,6 +152,9 @@ async function run(entries: SeedEntry[]) {
   if (failed.length) {
     console.log(`Selhalo (${failed.length}):`)
     failed.forEach((line) => console.log(line))
+    // Nedokončený běh musí skončit nenulovým kódem — jinak vypadá jako úspěch
+    // (a při spuštění proti produkci by se na to nepřišlo).
+    throw new Error(`Skloňování se nepodařilo uložit u ${failed.length} stránek.`)
   }
 }
 

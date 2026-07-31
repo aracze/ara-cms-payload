@@ -145,13 +145,22 @@ async function main() {
     })
     const actual = String((fresh as Record<string, unknown>).fullSlug ?? '')
     if (actual !== expected) {
-      await payload.update({
-        collection: 'pages',
-        id: row.id,
-        data: {},
-        depth: 0,
-        overrideAccess: true,
-      })
+      // Stejná ochrana jako v prvním průchodu: chybu jedné stránky zapíšeme a
+      // jedeme dál. Bez toho by výjimka (typicky stránka, které selhalo už
+      // první uložení) probublala nahoru, zbytek fronty by se nezkontroloval a
+      // souhrn by se vůbec nevypsal.
+      try {
+        await payload.update({
+          collection: 'pages',
+          id: row.id,
+          data: {},
+          depth: 0,
+          overrideAccess: true,
+        })
+      } catch (err) {
+        failed.push({ id: row.id, reason: err instanceof Error ? err.message : String(err) })
+        continue
+      }
       const again = await payload.findByID({
         collection: 'pages',
         id: row.id,
@@ -174,6 +183,13 @@ async function main() {
   if (remaining.length) {
     console.log(`Adresa se nedorovnala ani druhým uložením: ${remaining.length}`)
     remaining.forEach((r) => console.log(`  ${r}`))
+  }
+  if (failed.length || remaining.length) {
+    // Nedokončený běh musí skončit nenulovým kódem — jinak vypadá jako úspěch
+    // (a při spuštění proti produkci by se na to nepřišlo).
+    throw new Error(
+      `Přepočet adres nedokončen: ${failed.length} selhalo, ${remaining.length} se nedorovnalo.`,
+    )
   }
 }
 
