@@ -1,10 +1,17 @@
 import React from 'react'
-import { Article as ArticleType } from '@/types/payload'
-import { getPayloadURL } from '@/lib/utils'
+import { Article as ArticleType, type Page as PayloadPage } from '@/types/payload'
+import { getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { fetchPageLightByFullSlug, pageHasArticles, fetchArticleComments } from '@/lib/payload'
+import {
+  breadcrumbListJsonLd,
+  buildBreadcrumbs,
+  menuOwnerCategories,
+  type Breadcrumb,
+} from '@/lib/page-hierarchy'
+import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { Subnavigation } from '@/components/layout/page/subnavigation'
 import { HeroSection } from '@/components/layout/page/hero-section'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
@@ -27,11 +34,22 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   const contextPageSlug = contextSlug || article.mainPage?.fullSlug?.replace(/^\//, '') || null
   const { contextPage, rootPage } = await resolveContextPages(contextPageSlug)
 
-  // Má kořenová stránka články? Levný count (přes FK mainPage) místo tahání
-  // celého pole článků těžkým fetchem — rozhoduje jen o záložce „Články".
-  const rootHasArticles = rootPage ? await pageHasArticles(rootPage.id) : false
+  // Článek se chová jako turistický cíl: sekundární menu patří MÍSTU, pod
+  // kterým visí (např. San Francisco), ne zemi z prvního segmentu URL.
+  const placePage = await resolvePlacePage(contextPage, rootPage)
 
-  const heroImage = resolveHeroImage(contextPage || rootPage, article)
+  // Má kontextové místo články? Levný count (přes FK mainPage) místo tahání
+  // celého pole článků těžkým fetchem — rozhoduje jen o záložce „Články".
+  const placeHasArticles = placePage ? await pageHasArticles(placePage.id) : false
+
+  // Drobečky článku jdou po hierarchii v CMS a končí místem, pod kterým článek
+  // visí (proto `includeSelf`) — u článku pod San Franciscem tedy
+  // „USA / Kalifornie / San Francisco".
+  const breadcrumbs = await getArticleBreadcrumbs(placePage)
+
+  // Hero fotka ze STEJNÉHO místa jako menu a drobečky (legacy: obrázek článku,
+  // jinak fotka nejbližšího místa).
+  const heroImage = resolveHeroImage(placePage || contextPage, article)
 
   // Author (safe public subset from the backend virtual field)
   const author = article.createdByPublic ?? null
@@ -48,28 +66,52 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
 
   const { threads, count: commentCount } = await commentsPromise
 
+  // Kanonická adresa článku (mainPage + slug) — tu samou dává i generateMetadata,
+  // takže strukturovaná data ukazují na stejnou URL jako `rel=canonical`.
+  const canonicalHref = article.mainPage?.fullSlug
+    ? `${article.mainPage.fullSlug}/${article.slug}`
+    : placePage
+      ? `${placePage.fullSlug}/${article.slug}`
+      : null
+
   return (
     <div className="bg-white min-h-screen">
+      {/* Drobečky pro vyhledávače (BreadcrumbList) — cesta ve výsledku hledání. */}
+      {breadcrumbs.length > 0 && canonicalHref && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: breadcrumbListJsonLd(
+              breadcrumbs,
+              { title: article.title, href: canonicalHref },
+              getSiteURL(),
+            ),
+          }}
+        />
+      )}
       {/* Article Header / Hero */}
       <HeroSection
         title={article.title}
         imageUrl={heroImage.url}
         styleCss={heroImage.styleCss}
         filterId={`blurFilter-article-${article.documentId}`}
+        breadcrumbs={breadcrumbs}
       />
 
       {/* Subnavigation - keeps user in context of parent destination */}
-      {rootPage && (
+      {placePage && (
         <Subnavigation
-          contextTitle={rootPage.title}
-          contextFullSlug={rootPage.fullSlug}
-          pageChildren={rootPage.children?.docs ?? []}
-          rootChildren={rootPage.children?.docs ?? []}
-          currentPageFullSlug={contextPage?.fullSlug ?? ''}
+          contextTitle={placePage.title}
+          contextFullSlug={placePage.fullSlug}
+          pageChildren={placePage.children?.docs ?? []}
+          // Sbalený odkaz „Praktické informace" bere z kořenové stránky (země) —
+          // stejně jako podstránky a cíle pod nadřazeným místem.
+          rootChildren={rootPage?.children?.docs ?? []}
+          currentPageFullSlug={placePage.fullSlug}
           currentPageCategory={contextPage?.category}
-          isSubPlace={false}
-          hasPlaces={(rootPage.children?.docs?.length ?? 0) > 0}
-          hasArticles={rootHasArticles}
+          isSubPlace={!!rootPage && placePage.fullSlug !== rootPage.fullSlug}
+          hasPlaces={(placePage.children?.docs?.length ?? 0) > 0}
+          hasArticles={placeHasArticles}
           activeSection="clanky"
         />
       )}
@@ -156,6 +198,58 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
       </div>
     </div>
   )
+}
+
+/**
+ * Místo, kterému patří sekundární menu, drobečky i hero fotka článku = NEJBLIŽŠÍ
+ * místo nad článkem (stejné pravidlo jako u podstránek a turistických cílů).
+ *
+ * Článek jde v CMS připojit k libovolné stránce (`mainPage` i vedlejší `pages`),
+ * takže nad ním může být i stránka, která místem není (rubrika, informační
+ * podstránka). Pak hledáme nejbližší místo v jejích předcích a teprve když žádné
+ * není, spadneme na kořenovou stránku.
+ */
+async function resolvePlacePage(
+  contextPage: PayloadPage | null,
+  rootPage: PayloadPage | null,
+): Promise<PayloadPage | null> {
+  if (!contextPage) return rootPage
+
+  if (contextPage.category && menuOwnerCategories.includes(contextPage.category)) {
+    return contextPage
+  }
+
+  const ancestors = await fetchAncestorChain(contextPage.fullSlug)
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = ancestors[i]
+    if (
+      !('isPlaceholder' in ancestor) &&
+      ancestor.category &&
+      menuOwnerCategories.includes(ancestor.category)
+    ) {
+      return ancestor
+    }
+  }
+
+  return rootPage
+}
+
+/**
+ * Drobečky článku končí místem, pod kterým visí (stejně jako u turistického
+ * cíle). Hlavní cesta jde po hierarchii v CMS; když místu chybí uložený řetězec
+ * `breadcrumbs` (starý import bez resave), dopočítáme předky z adresy a místo
+ * přidáme na konec — stejná pojistka jako u stránek, ať drobečky ani
+ * strukturovaná data nezmizí úplně.
+ */
+async function getArticleBreadcrumbs(placePage: PayloadPage | null): Promise<Breadcrumb[]> {
+  if (!placePage) return []
+
+  if (placePage.breadcrumbs?.length) {
+    return buildBreadcrumbs(placePage, { includeSelf: true })
+  }
+
+  const ancestors = await breadcrumbsFromSlug(placePage.fullSlug)
+  return [...ancestors, { title: placePage.title, href: placePage.fullSlug }]
 }
 
 async function resolveContextPages(contextPageSlug: string | null) {

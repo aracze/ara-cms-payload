@@ -197,6 +197,10 @@ curl -X PUT http://localhost:3000/api/weather \
 
 The Payload config is tailored specifically for the project needs in `src/payload.config.ts`.
 
+Pravidla navigace na webu (drobečky, sekundární menu, skládání adres z hierarchie stránek
+přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
+`pnpm fix:declension`) jsou popsaná v [docs/navigace.md](docs/navigace.md).
+
 ### Collections
 
 - **Users (Správa uživatelů)**:

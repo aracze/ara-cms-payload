@@ -17,12 +17,15 @@ import {
 } from '@/lib/payload'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
+import {
+  breadcrumbListJsonLd,
+  buildBreadcrumbs,
+  menuOwnerCategories,
+  type Breadcrumb,
+} from '@/lib/page-hierarchy'
+import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import type { ReviewPublic } from '@/types/payload'
-
-// Categories that can "own" a sub-navigation menu.
-// Turistický cíl is excluded – it should always delegate to its parent Place.
-const menuOwnerCategories: PageCategory[] = [PageCategory.Mista, PageCategory.Misto_k_navstiveni]
 
 const exchangeRateCategories: PageCategory[] = [
   PageCategory.Mista,
@@ -48,8 +51,6 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     fetchMediaUrlsByIds(childImageIdsEarly),
   ])
   const safeRootPage = rootPage ?? page
-
-  const imageUrl = getHeroImage(page, safeRootPage)
 
   // Determine which Place "owns" the menu for this page.
   // e.g. on Dubrovník's Počasí → menuContext = Dubrovník's children
@@ -96,6 +97,15 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     getBreadcrumbs(page),
     fetchMenuContext(page, safeRootPage),
   ])
+
+  // Podstránka se vždy týká NEJBLIŽŠÍHO místa, do kterého je vložená — počasí pod
+  // Košicemi je počasí Košic, ne Slovenska. Titulek i hero fotka proto berou
+  // kontextové místo z menu (stejné jako legacy `getRootPage`), ne kořenovou zemi.
+  const contextPlace = menuContext.contextPage
+  // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
+  // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
+  const imageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
+  const pageTitle = buildPageTitle(page, contextPlace)
 
   // Sekundární menu se nezobrazuje na rubrikách ani statických stránkách.
   const showSubnavigation =
@@ -235,10 +245,23 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           }}
         />
       )}
+      {/* Drobečky pro vyhledávače (BreadcrumbList) — cesta ve výsledku hledání. */}
+      {breadcrumbs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: breadcrumbListJsonLd(
+              breadcrumbs,
+              { title: pageTitle, href: page.fullSlug },
+              getSiteURL(),
+            ),
+          }}
+        />
+      )}
       <article key={page.id} className="w-full">
         {/* 1. HERO SECTION (initial-photo) */}
         <HeroSection
-          title={buildPageTitle(page, safeRootPage)}
+          title={pageTitle}
           imageUrl={imageUrl}
           styleCss={page.featuredImage?.featureImageStyleCss || undefined}
           filterId={`blurFilter-${page.id}`}
@@ -380,48 +403,6 @@ function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {
     : null
 }
 
-/**
- * Shared helper to fetch all ancestor pages for a given slug.
- * If an intermediate parent is missing in the CMS, it returns a placeholder.
- */
-async function fetchAncestorChain(
-  fullSlug: string,
-): Promise<
-  (PayloadPage | { title: string; fullSlug: string; category?: never; isPlaceholder: true })[]
-> {
-  const normalizedSlug = fullSlug.replace(/^\/+|\/+$/g, '')
-  if (!normalizedSlug) return []
-
-  const parts = normalizedSlug.split('/')
-  const chain: (
-    PayloadPage | { title: string; fullSlug: string; category?: never; isPlaceholder: true }
-  )[] = []
-
-  // We walk through all segments except the last one (which is the page itself)
-  for (let i = 1; i < parts.length; i++) {
-    const parentSlug = parts.slice(0, i).join('/')
-    // Předky stačí lehce (title/fullSlug/category + děti pro menu), ne celý
-    // detail stránky — šetří opakované těžké dotazy při generování.
-    const { data } = await fetchPageLightByFullSlug(parentSlug)
-    const parentPage = data?.pages?.[0]
-
-    if (parentPage) {
-      chain.push(parentPage)
-    } else {
-      const segment = parts[i - 1]
-      const title = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ')
-      chain.push({
-        title,
-        fullSlug: `/${parentSlug}`,
-        isPlaceholder: true,
-      })
-      console.warn(`[Page] Missing parent page in CMS for slug: ${parentSlug}`)
-    }
-  }
-
-  return chain
-}
-
 async function fetchRootPage(page: PayloadPage): Promise<PayloadPage> {
   if (rootPageCategories.includes(page.category)) {
     return page
@@ -444,6 +425,8 @@ async function fetchMenuContext(
 ): Promise<{
   contextTitle: string
   contextFullSlug: string
+  /** Stránka kontextového místa — kromě menu z ní jde titulek a hero fotka. */
+  contextPage: PayloadPage
   menuChildren: PayloadPage['children']['docs']
   isSubPlace: boolean
 }> {
@@ -457,6 +440,7 @@ async function fetchMenuContext(
     return {
       contextTitle: page.title,
       contextFullSlug: page.fullSlug,
+      contextPage: page,
       menuChildren: page.children?.docs ?? [],
       isSubPlace: hasParentMenuOwner,
     }
@@ -471,6 +455,7 @@ async function fetchMenuContext(
       return {
         contextTitle: ancestor.title,
         contextFullSlug: ancestor.fullSlug,
+        contextPage: ancestor,
         menuChildren: ancestor.children?.docs ?? [],
         isSubPlace: !isRoot,
       }
@@ -480,6 +465,7 @@ async function fetchMenuContext(
   return {
     contextTitle: rootPage.title,
     contextFullSlug: rootPage.fullSlug,
+    contextPage: rootPage,
     menuChildren: rootPage.children?.docs ?? [],
     isSubPlace: false,
   }
@@ -516,10 +502,16 @@ async function fetchPracticalInfoSourceChildren(
   return rootChildren
 }
 
-async function getBreadcrumbs(page: PayloadPage): Promise<{ title: string; href: string }[]> {
-  const ancestors = await fetchAncestorChain(page.fullSlug)
-  return ancestors.map((a) => ({
-    title: a.title,
-    href: a.fullSlug,
-  }))
+async function getBreadcrumbs(page: PayloadPage): Promise<Breadcrumb[]> {
+  // Drobečky jdou po HIERARCHII v CMS, ne po URL — jinak z nich vypadnou
+  // stránky s `includeInChildUrlPaths: false` (např. „Kalifornie" nad San
+  // Franciscem). Detaily pravidel viz buildBreadcrumbs.
+  if (page.breadcrumbs?.length) {
+    return buildBreadcrumbs(page)
+  }
+
+  // Pojistka pro stránku bez uloženého řetězce (starý import, který ještě
+  // neprošel resave pluginu): dopočítáme předky ze slugu jako dřív, ať drobečky
+  // úplně nezmizí. Skryté stránky v nich pak chybí — proto jen fallback.
+  return breadcrumbsFromSlug(page.fullSlug)
 }

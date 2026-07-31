@@ -72,16 +72,28 @@ const MENU_CHILD_SELECT = {
   parent: true,
 } as const
 
-// Pro předky (breadcrumbs, menu kontext, kořen): navíc detail + featuredImage —
-// podstránky z kořene berou hero obrázek a fallback měny/časové zóny.
+// Drobečková navigace — uložený řetězec předků z pluginu nested-docs. Bereme
+// jen `label` + `url`; `doc` ZÁMĚRNĚ ne, protože při depth > 0 by ho Payload
+// populoval celým dokumentem předka (jedno čtení stránky by tahalo celý řetězec
+// stránek navíc). Vnořený select to spolehlivě vypne.
+const BREADCRUMBS_SELECT = {
+  label: true,
+  url: true,
+} as const
+
+// Pro předky (menu kontext, kořen): navíc detail + featuredImage — podstránky
+// z kořene berou hero obrázek a fallback měny/časové zóny. Drobečky navíc čte
+// z `breadcrumbs` stránka článku (kontextové místo).
 const ANCESTOR_SELECT = {
   ...MENU_SELECT,
   detail: true,
   featuredImage: true,
+  breadcrumbs: BREADCRUMBS_SELECT,
 } as const
 
 // Detail stránky = 3 paralelní dotazy (stránka ∥ děti ∥ články), každý jen
-// s poli, která web kreslí (bez SEO meta, breadcrumbs polí, profilů uživatelů).
+// s poli, která web kreslí (bez SEO meta a profilů uživatelů). `breadcrumbs`
+// tu být MUSÍ — drobečky se počítají z hierarchie v CMS, ne z URL.
 const PAGE_SCALAR_SELECT = {
   title: true,
   slug: true,
@@ -90,6 +102,7 @@ const PAGE_SCALAR_SELECT = {
   text: true,
   detail: true,
   featuredImage: true,
+  breadcrumbs: BREADCRUMBS_SELECT,
   createdBy: true,
   // Bezpečný veřejný autor přes VIRTUÁLNÍ pole (afterRead hook čte uživatele s
   // overrideAccess: true). Stejný vzor jako u článků. Ruční dohled přes

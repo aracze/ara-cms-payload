@@ -20,6 +20,7 @@ import { cloudinaryStorage } from 'payload-storage-cloudinary'
 import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
 
 import { migrations } from './migrations'
+import { buildPageUrl } from './lib/page-url'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
@@ -147,14 +148,9 @@ export default buildConfig({
     nestedDocsPlugin({
       collections: ['pages'],
       generateLabel: (_, doc) => doc.title as string,
-      generateURL: (docs) =>
-        docs.reduce((url, doc, index) => {
-          const isLast = index === docs.length - 1
-          if (isLast || doc.includeInChildUrlPaths !== false) {
-            return `${url}/${doc.slug}`
-          }
-          return url
-        }, ''),
+      // Pravidlo pro vypnuté „Zobrazit v URL" viz buildPageUrl — platí jen pro
+      // místa pod danou stránkou, ne pro její informační podstránky.
+      generateURL: (docs) => buildPageUrl(docs),
       parentFieldSlug: 'parent',
       breadcrumbsFieldSlug: 'breadcrumbs',
     }),
