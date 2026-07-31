@@ -1,6 +1,7 @@
 import {
   Page,
   PageChild,
+  PageCategory,
   PagesResponse,
   Article,
   GlobalHeader,
@@ -9,11 +10,17 @@ import {
   CommentPublic,
   CommentThread,
   ReviewPublic,
+  UserProfileData,
+  ProfileArticleItem,
+  ProfilePlaceItem,
+  ProfileReviewItem,
+  ProfileCommentItem,
+  ProfileMapPin,
 } from '@/types/payload'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import { getDb } from './db'
-import { isProduction } from './utils'
+import { getArticleImageUrl, isProduction } from './utils'
 
 /**
  * Datová vrstva webu nad Payload LOCAL API.
@@ -940,6 +947,414 @@ const fetchTouristPointSiblingsCached = cached(
 export const fetchTouristPointSiblings = cache(
   (parentFullSlug: string, excludeId: number): Promise<RelatedTouristPoint[]> =>
     fetchTouristPointSiblingsCached(parentFullSlug, excludeId),
+)
+
+// ————————————————————————————————————————————————————————————————
+// Veřejný profil uživatele (/profil/<username>)
+// ————————————————————————————————————————————————————————————————
+
+type RawProfileUser = {
+  id: number
+  username?: string | null
+  firstName?: string | null
+  lastName?: string | null
+  description?: string | null
+  myWebUrl?: string | null
+  avatar?: { url?: string | null } | number | null
+}
+
+type RawProfileArticle = {
+  id: number
+  title: string
+  slug?: string | null
+  documentId?: string | null
+  text?: unknown
+  featuredImage?: { image?: unknown } | null
+  mainPage?: number | { id: number } | null
+  publishedAt?: string | null
+  createdAt?: string | null
+}
+
+type RawProfilePage = {
+  id: number
+  title: string
+  fullSlug: string
+  category?: string
+  featuredImage?: { image?: unknown } | null
+  breadcrumbs?: { label?: string | null }[] | null
+  createdAt?: string | null
+  /** Souřadnice pro mapu profilu; v CMS jsou uložené jako text. */
+  detail?: { latitude?: string | null; longitude?: string | null } | null
+}
+
+type RawProfileComment = RawComment & {
+  type?: string | null
+  relatedTo?: {
+    relationTo?: string | null
+    value?: number | { id: number } | null
+  } | null
+}
+
+/** Rodičovská/komentovaná stránka dohledaná kvůli názvu, adrese a cestě v hierarchii. */
+type ResolvedParentPage = {
+  id: number
+  title: string
+  fullSlug: string
+  breadcrumbs?: { label?: string | null }[] | null
+}
+
+/**
+ * Cesta v hierarchii z drobečků, např. „Asie / Myanmar".
+ *
+ * `dropLast` = vynechat poslední položku. U KARTY MÍSTA je poslední drobeček to
+ * místo samo (jeho název je titulek karty), takže se vynechává. U KARTY ČLÁNKU
+ * je cesta odvozená z jeho rodičovské stránky, a ta do popisku patří celá —
+ * říká, o jakém místě článek je.
+ */
+function breadcrumbPath(
+  breadcrumbs: { label?: string | null }[] | null | undefined,
+  { dropLast }: { dropLast: boolean },
+): string | null {
+  if (!Array.isArray(breadcrumbs)) return null
+  const items = dropLast ? breadcrumbs.slice(0, -1) : breadcrumbs
+  const labels = items
+    .map((b) => b?.label)
+    .filter((l): l is string => typeof l === 'string' && l.length > 0)
+  return labels.length ? labels.join(' / ') : null
+}
+
+async function fetchUserProfileUncached(username: string): Promise<UserProfileData | null> {
+  const payload = await getDb()
+
+  // Uživatel podle username. Users.read = isAdminOrSelf a web čte anonymně,
+  // proto overrideAccess: true + PŘÍSNÝ select jen veřejných polí (nikdy e-mail,
+  // role ani hash hesla) — stejný princip jako virtuální createdByPublic.
+  const userRes = (await payload.find({
+    collection: 'users',
+    overrideAccess: true,
+    where: { username: { equals: username } },
+    limit: 1,
+    // depth 1 populuje avatar; media dokument se NEOŘEZÁVÁ (viz hlavička souboru).
+    depth: 1,
+    select: {
+      username: true,
+      firstName: true,
+      lastName: true,
+      description: true,
+      myWebUrl: true,
+      avatar: true,
+    },
+  })) as unknown as PayloadDocsResponse<RawProfileUser>
+
+  const user = userRes.docs?.[0]
+  if (!user) return null
+
+  // Obsah uživatele — tři nezávislé dotazy souběžně. Stránky a články čteme s
+  // overrideAccess: false (anonymní přístupová práva → jen publikované),
+  // komentáře s overrideAccess: true + ručním filtrem spamu (vzor recenzí výše).
+  const [articlesRes, pagesRes, commentsRes] = (await Promise.all([
+    payload.find({
+      collection: 'articles',
+      overrideAccess: false,
+      where: { createdBy: { equals: user.id } },
+      depth: 0,
+      limit: 500,
+      pagination: false,
+      select: {
+        title: true,
+        slug: true,
+        documentId: true,
+        text: true,
+        featuredImage: true,
+        mainPage: true,
+        publishedAt: true,
+        createdAt: true,
+      },
+      joins: false,
+    }),
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { createdBy: { equals: user.id } },
+          {
+            category: {
+              in: [PageCategory.Turisticky_cil, PageCategory.Misto_k_navstiveni],
+            },
+          },
+        ],
+      },
+      depth: 0,
+      limit: 500,
+      pagination: false,
+      select: {
+        title: true,
+        fullSlug: true,
+        category: true,
+        featuredImage: true,
+        breadcrumbs: BREADCRUMBS_SELECT,
+        createdAt: true,
+        // Jen souřadnice pro mapu — ne celá skupina `detail` (adresa, web,
+        // skloňování… by se tahaly zbytečně).
+        detail: { latitude: true, longitude: true },
+      },
+      joins: false,
+    }),
+    payload.find({
+      collection: 'comments',
+      overrideAccess: true,
+      where: {
+        and: [{ author: { equals: user.id } }, { status: { not_equals: 'spam' } }],
+      },
+      depth: 0,
+      limit: 1000,
+      pagination: false,
+      // Select vynechává virtuální authorPublic — autora známe (vlastník profilu)
+      // a hook by jinak zbytečně dohledával uživatele pro každé čtení.
+      select: {
+        type: true,
+        rating: true,
+        body: true,
+        commentedAt: true,
+        createdAt: true,
+        relatedTo: true,
+      },
+    }),
+  ])) as unknown as [
+    PayloadDocsResponse<RawProfileArticle>,
+    PayloadDocsResponse<RawProfilePage>,
+    PayloadDocsResponse<RawProfileComment>,
+  ]
+
+  const rawArticles = articlesRes.docs ?? []
+  const rawPages = pagesRes.docs ?? []
+  const rawComments = commentsRes.docs ?? []
+
+  // Cíle komentářů/recenzí (článek / stránka), na které se bude odkazovat.
+  const articleTargetIds = new Set<number>()
+  const pageTargetIds = new Set<number>()
+  for (const c of rawComments) {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) continue
+    if (c.relatedTo?.relationTo === 'articles') articleTargetIds.add(id)
+    else if (c.relatedTo?.relationTo === 'pages') pageTargetIds.add(id)
+  }
+
+  // Komentované články (kvůli titulku + adrese přes jejich mainPage).
+  const targetArticlesRes = articleTargetIds.size
+    ? ((await payload.find({
+        collection: 'articles',
+        overrideAccess: false,
+        where: { id: { in: [...articleTargetIds] } },
+        depth: 0,
+        limit: articleTargetIds.size,
+        pagination: false,
+        select: { title: true, slug: true, mainPage: true },
+        joins: false,
+      })) as unknown as PayloadDocsResponse<RawProfileArticle>)
+    : { docs: [] as RawProfileArticle[] }
+  const targetArticleById = new Map((targetArticlesRes.docs ?? []).map((a) => [a.id, a]))
+
+  // Rodičovské stránky (fullSlug/titulek/drobečky) jedním hromadným dotazem:
+  // mainPage autorových článků + mainPage komentovaných článků + komentované
+  // stránky. `breadcrumbs` slouží k popisku „Asie / Myanmar" na kartě článku.
+  // overrideAccess: false → nepublikovaný cíl se nedohledá a položka se vynechá
+  // (odkaz na 404 je horší než chybějící řádek).
+  const pageIdsToResolve = new Set<number>()
+  for (const a of rawArticles) {
+    const id = relationIdOf(a.mainPage ?? null)
+    if (id != null) pageIdsToResolve.add(id)
+  }
+  for (const a of targetArticlesRes.docs ?? []) {
+    const id = relationIdOf(a.mainPage ?? null)
+    if (id != null) pageIdsToResolve.add(id)
+  }
+  for (const id of pageTargetIds) pageIdsToResolve.add(id)
+
+  const resolvedPagesRes = pageIdsToResolve.size
+    ? ((await payload.find({
+        collection: 'pages',
+        overrideAccess: false,
+        where: { id: { in: [...pageIdsToResolve] } },
+        depth: 0,
+        limit: pageIdsToResolve.size,
+        pagination: false,
+        select: { title: true, fullSlug: true, breadcrumbs: BREADCRUMBS_SELECT },
+        joins: false,
+      })) as unknown as PayloadDocsResponse<ResolvedParentPage>)
+    : { docs: [] as ResolvedParentPage[] }
+  const pageById = new Map((resolvedPagesRes.docs ?? []).map((p) => [p.id, p]))
+
+  // Obrázky karet hromadně (depth 0 nechává featuredImage.image jako id).
+  const [enrichedArticles, enrichedPages] = await Promise.all([
+    enrichFeaturedImages(rawArticles),
+    enrichFeaturedImages(rawPages),
+  ])
+
+  const articleParent = (a: RawProfileArticle): ResolvedParentPage | undefined => {
+    const mainPageId = relationIdOf(a.mainPage ?? null)
+    return mainPageId != null ? pageById.get(mainPageId) : undefined
+  }
+
+  const articleHref = (a: RawProfileArticle): string | null => {
+    const parent = articleParent(a)
+    if (!parent || !a.slug) return null
+    return `${parent.fullSlug.replace(/\/$/, '')}/${a.slug}`
+  }
+
+  // Nejnovější nahoře; publishedAt může být null → fallback createdAt, id jako rozhodčí.
+  const articleTime = (a: RawProfileArticle) =>
+    new Date(a.publishedAt ?? a.createdAt ?? 0).getTime()
+  const articles: ProfileArticleItem[] = enrichedArticles
+    .slice()
+    .sort((x, y) => articleTime(y) - articleTime(x) || y.id - x.id)
+    .flatMap((a) => {
+      const parent = articleParent(a)
+      const href = articleHref(a)
+      // Článek bez dosažitelné adresy (bez mainPage / bez publikovaného rodiče)
+      // vynecháme — nemá kam vést.
+      if (!href) return []
+      return [
+        {
+          key: a.documentId || a.slug || String(a.id),
+          title: a.title,
+          href,
+          imageUrl: getArticleImageUrl(a as unknown as Article),
+          // Kde článek „žije" — celá cesta rodičovské stránky („Asie / Myanmar"),
+          // stejný popisek jako u karet míst. Bez drobečků aspoň název rodiče.
+          path: breadcrumbPath(parent?.breadcrumbs, { dropLast: false }) ?? parent?.title ?? null,
+        },
+      ]
+    })
+
+  const pageTime = (p: RawProfilePage) => new Date(p.createdAt ?? 0).getTime()
+  const toPlaceItem = (p: RawProfilePage): ProfilePlaceItem => ({
+    id: p.id,
+    title: p.title,
+    fullSlug: p.fullSlug,
+    // featuredImage má stejný tvar jako u článků → sdílený helper.
+    imageUrl: getArticleImageUrl(p as unknown as Article),
+    // Poslední drobeček je místo samo (= titulek karty), proto se vynechává.
+    path: breadcrumbPath(p.breadcrumbs, { dropLast: true }),
+  })
+  const sortedPages = enrichedPages.slice().sort((x, y) => pageTime(y) - pageTime(x) || y.id - x.id)
+  const touristPoints = sortedPages
+    .filter((p) => p.category === PageCategory.Turisticky_cil)
+    .map(toPlaceItem)
+  const places = sortedPages
+    .filter((p) => p.category === PageCategory.Misto_k_navstiveni)
+    .map(toPlaceItem)
+
+  // Body na mapu = místa i cíle, které mají v CMS souřadnice. Bereme je ze
+  // STEJNÝCH dat jako karty (žádný dotaz navíc). Články na mapu nepatří —
+  // nemají vlastní souřadnice, jen souřadnice svého místa, takže by se piny
+  // jen zdvojily přes sebe.
+  const mapPins: ProfileMapPin[] = sortedPages.flatMap((p) => {
+    const lat = parseFloat(p.detail?.latitude ?? '')
+    const lng = parseFloat(p.detail?.longitude ?? '')
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return []
+    return [
+      {
+        id: p.id,
+        title: p.title,
+        fullSlug: p.fullSlug,
+        lat,
+        lng,
+        // Fotku bereme z už obohacených stránek (stejná jako na kartě) — mapa
+        // pak kreslí kulaté piny s fotkou a v bublině ukáže náhled místo
+        // nápisu „Bez náhledu".
+        imageUrl: getArticleImageUrl(p as unknown as Article),
+      },
+    ]
+  })
+
+  // Cíl komentáře/recenze → titulek + odkaz; nedohledaný (nepublikovaný) → null.
+  const targetOf = (c: RawProfileComment): { title: string; href: string } | null => {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) return null
+    if (c.relatedTo?.relationTo === 'pages') {
+      const p = pageById.get(id)
+      return p ? { title: p.title, href: p.fullSlug } : null
+    }
+    if (c.relatedTo?.relationTo === 'articles') {
+      const a = targetArticleById.get(id)
+      if (!a) return null
+      const href = articleHref(a)
+      return href ? { title: a.title, href } : null
+    }
+    return null
+  }
+
+  const commentTime = (c: RawProfileComment) =>
+    new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
+  const sortedComments = rawComments
+    .slice()
+    .sort((x, y) => commentTime(y) - commentTime(x) || y.id - x.id)
+
+  // Profil je PŘEHLED — dlouhá těla zkracujeme (legacy komentáře občas obsahují
+  // i kilobajty vloženého balastu z Wordu; plné znění je na stránce cíle/článku).
+  const PROFILE_BODY_LIMIT = 400
+  const trimBody = (body: string): string => {
+    const compact = body.replace(/\s+/g, ' ').trim()
+    return compact.length > PROFILE_BODY_LIMIT
+      ? compact.slice(0, PROFILE_BODY_LIMIT).trimEnd() + '…'
+      : compact
+  }
+
+  const reviews: ProfileReviewItem[] = []
+  const comments: ProfileCommentItem[] = []
+  for (const c of sortedComments) {
+    const target = targetOf(c)
+    if (!target) continue
+    if (c.type === 'review' && c.rating != null) {
+      reviews.push({
+        id: c.id,
+        targetTitle: target.title,
+        targetHref: target.href,
+        rating: c.rating,
+        body: trimBody(c.body),
+        reviewedAt: c.commentedAt ?? c.createdAt ?? null,
+      })
+    } else if (c.type === 'comment') {
+      comments.push({
+        id: c.id,
+        targetTitle: target.title,
+        targetHref: target.href,
+        body: trimBody(c.body),
+        commentedAt: c.commentedAt ?? c.createdAt ?? null,
+      })
+    }
+  }
+
+  return {
+    username: user.username ?? username,
+    firstName: user.firstName ?? null,
+    lastName: user.lastName ?? null,
+    description: user.description ?? null,
+    myWebUrl: user.myWebUrl ?? null,
+    avatarUrl: user.avatar && typeof user.avatar === 'object' ? (user.avatar.url ?? null) : null,
+    articles,
+    touristPoints,
+    places,
+    reviews,
+    comments,
+    mapPins,
+  }
+}
+
+const fetchUserProfileCached = cached(
+  fetchUserProfileUncached,
+  'user-profile',
+  // user_profile_<username> invaliduje hook kolekce users (změna profilu v
+  // adminu); široké tagy pokrývají nový/upravený obsah (publikace článku,
+  // stránky, nový komentář) — všechny je revalidují stávající hooky.
+  ([username]) => ['user_profile_' + username, 'users', 'pages', 'articles', 'comments'],
+)
+
+/** Veřejný profil uživatele podle username; null = uživatel neexistuje. */
+export const fetchUserProfile = cache((username: string): Promise<UserProfileData | null> =>
+  fetchUserProfileCached(username),
 )
 
 const fetchPageByFullSlugCached = cached(

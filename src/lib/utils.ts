@@ -28,6 +28,17 @@ export function websiteLabel(url: string): string {
     .replace(/\/+$/, '')
 }
 
+/**
+ * České skloňování podle počtu: 1 → jednotné číslo, 2–4 → „dva až čtyři",
+ * 5 a víc → množné (genitiv). Sdílené serverem i klientem (statistiky profilu
+ * a popisky tlačítek „Zobrazit další…").
+ */
+export function pluralCs(n: number, [one, few, many]: [string, string, string]): string {
+  if (n === 1) return one
+  if (n >= 2 && n <= 4) return few
+  return many
+}
+
 /** Odkaz na web cíle: doplní protokol, když v datech chybí. */
 export function websiteHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`

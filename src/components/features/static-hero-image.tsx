@@ -3,6 +3,8 @@ import Image from 'next/image'
 interface StaticHeroImageProps {
   imageUrl: string | null
   styleCss?: string
+  /** Rozmazaný náhled (data URI) — zobrazí se, dokud se nenačte fotka. */
+  blurDataURL?: string
 }
 
 /**
@@ -21,7 +23,7 @@ function parseObjectPosition(styleCss?: string): string {
   return pos
 }
 
-export const StaticHeroImage = ({ imageUrl, styleCss }: StaticHeroImageProps) => {
+export const StaticHeroImage = ({ imageUrl, styleCss, blurDataURL }: StaticHeroImageProps) => {
   // Bez obrázku necháme prosvítat tmavé pozadí sekce (bg-[#3b444f]).
   if (!imageUrl) return null
 
@@ -34,6 +36,10 @@ export const StaticHeroImage = ({ imageUrl, styleCss }: StaticHeroImageProps) =>
       // Hero je přes celou šířku → prohlížeč si podle šířky okna a DPR vybere
       // přiměřenou variantu (mobil malou, retina desktop až originál).
       sizes="100vw"
+      // Rozmazaný náhled (pár set bajtů přímo v HTML) překryje pozadí sekce od
+      // první vteřiny, takže než dojde fotka, není vidět holá barva. Předává ho
+      // jen profil — stránky mají hero fotku z CMS, kde náhled po ruce není.
+      {...(blurDataURL ? { placeholder: 'blur' as const, blurDataURL } : {})}
       className="object-cover transition-transform duration-[10000ms] hover:scale-105"
       style={{ objectPosition: parseObjectPosition(styleCss) }}
     />
