@@ -1,11 +1,17 @@
 import React from 'react'
-import { Article as ArticleType } from '@/types/payload'
+import { Article as ArticleType, type Page as PayloadPage } from '@/types/payload'
 import { getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { fetchPageLightByFullSlug, pageHasArticles, fetchArticleComments } from '@/lib/payload'
-import { breadcrumbListJsonLd, buildBreadcrumbs, menuOwnerCategories } from '@/lib/page-hierarchy'
+import {
+  breadcrumbListJsonLd,
+  buildBreadcrumbs,
+  menuOwnerCategories,
+  type Breadcrumb,
+} from '@/lib/page-hierarchy'
+import { breadcrumbsFromSlug } from '@/lib/page-ancestors'
 import { Subnavigation } from '@/components/layout/page/subnavigation'
 import { HeroSection } from '@/components/layout/page/hero-section'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
@@ -44,7 +50,7 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   // Drobečky článku jdou po hierarchii v CMS a končí místem, pod kterým článek
   // visí (proto `includeSelf`) — u článku pod San Franciscem tedy
   // „USA / Kalifornie / San Francisco".
-  const breadcrumbs = buildBreadcrumbs(placePage, { includeSelf: true })
+  const breadcrumbs = await getArticleBreadcrumbs(placePage)
 
   const heroImage = resolveHeroImage(contextPage || rootPage, article)
 
@@ -195,6 +201,24 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
       </div>
     </div>
   )
+}
+
+/**
+ * Drobečky článku končí místem, pod kterým visí (stejně jako u turistického
+ * cíle). Hlavní cesta jde po hierarchii v CMS; když místu chybí uložený řetězec
+ * `breadcrumbs` (starý import bez resave), dopočítáme předky z adresy a místo
+ * přidáme na konec — stejná pojistka jako u stránek, ať drobečky ani
+ * strukturovaná data nezmizí úplně.
+ */
+async function getArticleBreadcrumbs(placePage: PayloadPage | null): Promise<Breadcrumb[]> {
+  if (!placePage) return []
+
+  if (placePage.breadcrumbs?.length) {
+    return buildBreadcrumbs(placePage, { includeSelf: true })
+  }
+
+  const ancestors = await breadcrumbsFromSlug(placePage.fullSlug)
+  return [...ancestors, { title: placePage.title, href: placePage.fullSlug }]
 }
 
 async function resolveContextPages(contextPageSlug: string | null) {

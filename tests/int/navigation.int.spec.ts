@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildPageUrl } from '@/lib/page-url'
 import { buildBreadcrumbs } from '@/lib/page-hierarchy'
 import { PageCategory } from '@/types/payload'
+
+// Pojistka drobečků (odvození z adresy) sahá do datové vrstvy — mockujeme jen
+// ten jeden lehký fetch, žádná databáze se nepotřebuje.
+const { lightFetchMock } = vi.hoisted(() => ({ lightFetchMock: vi.fn() }))
+vi.mock('@/lib/payload', () => ({ fetchPageLightByFullSlug: lightFetchMock }))
+
+const { breadcrumbsFromSlug } = await import('@/lib/page-ancestors')
 
 // Pravidla navigace jsou popsaná v docs/navigace.md. Testy drží dvě věci, které
 // se snadno rozbijí tichou úpravou:
@@ -87,5 +94,44 @@ describe('buildBreadcrumbs: řetězec z hierarchie CMS', () => {
       { title: 'Kalifornie', href: '/usa/kalifornie' },
       { title: 'San Francisco', href: '/usa/san-francisco' },
     ])
+  })
+})
+
+// Pojistka pro stránky (a stejně tak články), kterým chybí uložený řetězec
+// `breadcrumbs` — jinak by drobečky i BreadcrumbList zmizely úplně.
+describe('breadcrumbsFromSlug: pojistka z adresy', () => {
+  beforeEach(() => lightFetchMock.mockReset())
+
+  const page = (title: string, fullSlug: string) => ({ data: { pages: [{ title, fullSlug }] } })
+
+  it('složí předky z prefixů adresy', async () => {
+    lightFetchMock.mockImplementation(async (slug: string) =>
+      slug === 'usa'
+        ? page('USA', '/usa')
+        : slug === 'usa/san-francisco'
+          ? page('San Francisco', '/usa/san-francisco')
+          : { data: { pages: [] } },
+    )
+
+    await expect(breadcrumbsFromSlug('/usa/san-francisco/alcatraz')).resolves.toEqual([
+      { title: 'USA', href: '/usa' },
+      { title: 'San Francisco', href: '/usa/san-francisco' },
+    ])
+  })
+
+  it('předka chybějícího v CMS nahradí zástupným ze slugu (řetězec se neutrhne)', async () => {
+    lightFetchMock.mockImplementation(async (slug: string) =>
+      slug === 'usa' ? page('USA', '/usa') : { data: { pages: [] } },
+    )
+
+    await expect(breadcrumbsFromSlug('/usa/skryte-misto/cil')).resolves.toEqual([
+      { title: 'USA', href: '/usa' },
+      { title: 'Skryte misto', href: '/usa/skryte-misto' },
+    ])
+  })
+
+  it('stránka bez rodiče vrací prázdno', async () => {
+    await expect(breadcrumbsFromSlug('/usa')).resolves.toEqual([])
+    expect(lightFetchMock).not.toHaveBeenCalled()
   })
 })

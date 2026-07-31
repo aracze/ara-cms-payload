@@ -63,7 +63,10 @@ Pravidla:
 3. **Článek** se chová jako turistický cíl: jeho řetězec končí **místem, pod kterým visí**
    (parametr `includeSelf`). Místo bere z kontextu v URL, jinak z `mainPage`.
 4. Když stránce chybí uložený řetězec (starý import, který ještě neprošel uložením),
-   spadne výpočet na původní odvození z adresy, aby drobečky úplně nezmizely.
+   spadne výpočet na odvození z adresy (`breadcrumbsFromSlug`), aby drobečky ani
+   strukturovaná data úplně nezmizely. Platí pro stránky **i články** — u článku se
+   na konec doplní místo, pod kterým visí. Skryté stránky v takovém řetězci chybí
+   (z adresy je dopočítat nelze), proto je to jen pojistka.
 5. `includeInChildUrlPaths` na drobečky **nemá vliv** — skryté stránky v nich zůstávají
    (a jsou klikatelné, protože svou vlastní adresu mají).
 
@@ -176,6 +179,7 @@ Skript doplní **jen prázdná pole**; existující hodnotu přepíše pouze u z
 | ---------------------------------------------- | ------------------------------------------------------------------ |
 | `src/lib/page-url.ts`                          | pravidlo pro skládání adres (`buildPageUrl`)                       |
 | `src/lib/page-hierarchy.ts`                    | drobečky z hierarchie, JSON-LD, `menuOwnerCategories`              |
+| `src/lib/page-ancestors.ts`                    | předci z adresy — menu kontext a pojistka drobečků                 |
 | `src/payload.config.ts`                        | zapojení pluginu nested-docs (`generateURL`)                       |
 | `src/collections/Pages.ts`                     | pole `parent`, `fullSlug`, `includeInChildUrlPaths`, `breadcrumbs` |
 | `src/components/layout/page/page.tsx`          | drobečky a kontext menu pro stránky                                |

@@ -23,6 +23,7 @@ import {
   menuOwnerCategories,
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
+import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import type { ReviewPublic } from '@/types/payload'
 
@@ -402,48 +403,6 @@ function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {
     : null
 }
 
-/**
- * Shared helper to fetch all ancestor pages for a given slug.
- * If an intermediate parent is missing in the CMS, it returns a placeholder.
- */
-async function fetchAncestorChain(
-  fullSlug: string,
-): Promise<
-  (PayloadPage | { title: string; fullSlug: string; category?: never; isPlaceholder: true })[]
-> {
-  const normalizedSlug = fullSlug.replace(/^\/+|\/+$/g, '')
-  if (!normalizedSlug) return []
-
-  const parts = normalizedSlug.split('/')
-  const chain: (
-    PayloadPage | { title: string; fullSlug: string; category?: never; isPlaceholder: true }
-  )[] = []
-
-  // We walk through all segments except the last one (which is the page itself)
-  for (let i = 1; i < parts.length; i++) {
-    const parentSlug = parts.slice(0, i).join('/')
-    // Předky stačí lehce (title/fullSlug/category + děti pro menu), ne celý
-    // detail stránky — šetří opakované těžké dotazy při generování.
-    const { data } = await fetchPageLightByFullSlug(parentSlug)
-    const parentPage = data?.pages?.[0]
-
-    if (parentPage) {
-      chain.push(parentPage)
-    } else {
-      const segment = parts[i - 1]
-      const title = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ')
-      chain.push({
-        title,
-        fullSlug: `/${parentSlug}`,
-        isPlaceholder: true,
-      })
-      console.warn(`[Page] Missing parent page in CMS for slug: ${parentSlug}`)
-    }
-  }
-
-  return chain
-}
-
 async function fetchRootPage(page: PayloadPage): Promise<PayloadPage> {
   if (rootPageCategories.includes(page.category)) {
     return page
@@ -554,9 +513,5 @@ async function getBreadcrumbs(page: PayloadPage): Promise<Breadcrumb[]> {
   // Pojistka pro stránku bez uloženého řetězce (starý import, který ještě
   // neprošel resave pluginu): dopočítáme předky ze slugu jako dřív, ať drobečky
   // úplně nezmizí. Skryté stránky v nich pak chybí — proto jen fallback.
-  const ancestors = await fetchAncestorChain(page.fullSlug)
-  return ancestors.map((a) => ({
-    title: a.title,
-    href: a.fullSlug,
-  }))
+  return breadcrumbsFromSlug(page.fullSlug)
 }
