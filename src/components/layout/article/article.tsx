@@ -193,7 +193,14 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
             do POLOVINY reklamy (340/2) — vzdušnější a lepší čitelnost než plná
             šířka. Na mobilu (bez lg) plná šířka. */}
         <div className="mt-12 lg:mx-auto lg:max-w-[1188px] lg:pl-16 lg:pr-[170px]">
-          <CommentsSection articleId={article.id} threads={threads} count={commentCount} />
+          <CommentsSection
+            articleId={article.id}
+            threads={threads}
+            count={commentCount}
+            // Kam se vrátit po přihlášení z pruhu nad formulářem. Kanonická
+            // adresa článku; kdyby chyběla, alespoň domů.
+            backTo={canonicalHref ?? '/'}
+          />
         </div>
       </div>
     </div>

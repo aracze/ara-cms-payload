@@ -1328,6 +1328,7 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
   }
 
   return {
+    id: Number(user.id),
     username: user.username ?? username,
     firstName: user.firstName ?? null,
     lastName: user.lastName ?? null,

@@ -15,6 +15,8 @@ import { Footer } from '@/components/layout/footer/footer'
 import { NavigationProgress } from '@/components/layout/navigation-progress'
 import { WebVitals } from '@/components/features/web-vitals'
 import { fetchRootPages } from '@/lib/payload'
+import { getCurrentUser } from '@/lib/auth'
+import { getTurnstileSiteKey } from '@/lib/comment-spam'
 
 // 1. NASTAVENÍ PÍSEM (Google Fonts)
 const openSans = Open_Sans({
@@ -46,7 +48,9 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const { data } = await fetchRootPages()
+  // Navigaci a přihlášeného uživatele načítáme SOUBĚŽNĚ — jsou na sobě
+  // nezávislé a hlavička potřebuje obojí.
+  const [{ data }, currentUser] = await Promise.all([fetchRootPages(), getCurrentUser()])
 
   // Ořežeme navigační strom jen na pole, která Header reálně používá. Bez toho by se
   // celý `depth=2` strom (včetně `text`/`meta`/… všech stránek a článků) serializoval
@@ -99,7 +103,15 @@ export default async function RootLayout({
         <div className="flex flex-col min-h-screen">
           {/* Header renderujeme vždy (i když se navigace nenačte — fetchRootPages
               vrací pages: [] při výpadku DB) — logo, hledání a CTA tak zůstanou. */}
-          <Header pages={headerPages} headerLogo={headerLogo} logoSvgHtml={headerLogoSvg} />
+          <Header
+            pages={headerPages}
+            headerLogo={headerLogo}
+            logoSvgHtml={headerLogoSvg}
+            user={currentUser}
+            // Klíč Turnstile pro přihlašovací okno (registrace/obnova hesla
+            // uvnitř okna) — čte se na serveru, klientovi jde jen veřejná část.
+            turnstileSiteKey={getTurnstileSiteKey()}
+          />
           <div className="grow w-full">{children}</div>
           <Footer />
         </div>

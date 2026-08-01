@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { createComment, type CommentFormState } from '@/lib/comment-actions'
 import { Turnstile, type TurnstileHandle } from './turnstile'
 
@@ -18,9 +18,21 @@ type ReplyTarget = { id: number; name: string }
 export function CommentForm({
   articleId,
   turnstileSiteKey,
+  signedAs,
+  loginHint,
+  isSignedIn = false,
 }: {
   articleId: number
   turnstileSiteKey: string | null
+  /**
+   * Pruh „Píšeš jako…" / pozvánka k přihlášení. Vykresluje ho SERVER
+   * (potřebuje přihlášeného uživatele) a sem přijde hotový.
+   */
+  signedAs?: React.ReactNode
+  /** Jednořádková výzva k přihlášení POD políčkem jména (nepřihlášený). */
+  loginHint?: React.ReactNode
+  /** Přihlášený nevyplňuje jméno — bere se ze session na serveru. */
+  isSignedIn?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -133,23 +145,32 @@ export function CommentForm({
           </div>
         )}
 
-        <div className="mb-4 max-w-xs">
-          <label
-            htmlFor="comment-name"
-            className="mb-1.5 block text-sm font-semibold text-gray-500"
-          >
-            Jméno
-          </label>
-          <input
-            id="comment-name"
-            name="authorName"
-            type="text"
-            required
-            maxLength={80}
-            placeholder="Tvé jméno"
-            className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
-          />
-        </div>
+        {signedAs}
+
+        {/* Přihlášenému políčko na jméno nedáváme — podepíše se účtem (server
+            si jméno bere ze session, hodnotě z formuláře by stejně nevěřil). */}
+        {!isSignedIn && (
+          <div className="mb-4">
+            <div className="max-w-xs">
+              <label
+                htmlFor="comment-name"
+                className="mb-1.5 block text-sm font-semibold text-gray-500"
+              >
+                Jméno
+              </label>
+              <input
+                id="comment-name"
+                name="authorName"
+                type="text"
+                required
+                maxLength={80}
+                placeholder="Tvé jméno"
+                className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
+              />
+            </div>
+            {loginHint}
+          </div>
+        )}
 
         <div className="mb-4">
           <label
@@ -192,9 +213,8 @@ export function CommentForm({
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] border-[#215491] px-6 py-2.5 text-[13px] font-bold tracking-wide text-[#215491] transition-colors hover:bg-[#215491] hover:text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-[#215491]"
+            className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#215491] px-7 py-2.5 font-heading text-[13px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a3f6c] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Pencil className="h-[14px] w-[14px]" strokeWidth={2} />
             {isPending ? 'Odesílám…' : replyTo ? 'Odeslat odpověď' : 'Vložit komentář'}
           </button>
           {!turnstileSiteKey && (

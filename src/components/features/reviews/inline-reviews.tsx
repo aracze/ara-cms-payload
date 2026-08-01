@@ -252,7 +252,7 @@ export function InlineReviews({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-2xl bg-[#115094] px-6 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#0d3f75] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#215491] px-7 py-2.5 font-heading text-[13px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a3f6c] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isPending ? 'Odesílám…' : 'Vložit recenzi'}
             </button>

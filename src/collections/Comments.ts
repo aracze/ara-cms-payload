@@ -19,12 +19,23 @@ export const Comments: CollectionConfig = {
   access: {
     // Anonym: skrýt spam + recenze na NEpublikované stránky. Články jsou vždy veřejné
     // (nemají drafty). Řeší se přes polymorfní `relatedTo` (relationTo + value), protože
-    // nelze filtrovat cizí `_status` inline; `not_in` na polymorfní value navíc není podporováno.
+    // nelze filtrovat cizí `_status` inline.
+    //
+    // POZOR na obrácený zápis („povol vše KROMĚ draftů"): negativní operátory na
+    // polymorfní `relatedTo.value` (`not_in`, `not_equals`) nefungují — ověřeno
+    // měřením: zahodí VŠECHNY recenze na stránkách (z 371 komentářů vrátí jen 95
+    // článkových). Povolovat se proto musí pozitivním `in`.
+    //
+    // Toto pravidlo běží při KAŽDÉM anonymním čtení komentářů, takže musí být levné:
+    // dřív si bezpodmínečně vytáhlo seznam všech publikovaných stránek (na tomto
+    // webu 3067 ID, ~136 ms) jen kvůli 4 draftům, na kterých většinou žádný
+    // komentář není. Nově se to řeší dvěma malými dotazy a plný seznam se staví
+    // jen tehdy, když na draftu opravdu něco visí.
     read: async ({ req }): Promise<boolean | Where> => {
       if (req.user) return true
       const notSpam: Where = { status: { not_equals: 'spam' } }
 
-      // Rychlá cesta: bez draft stránek není co skrývat (běžný stav).
+      // 1) Bez draft stránek není co skrývat (běžný stav).
       const drafts = await req.payload.find({
         collection: 'pages',
         where: { _status: { equals: 'draft' } },
@@ -35,22 +46,46 @@ export const Comments: CollectionConfig = {
         req,
         select: {},
       })
-      if (drafts.docs.length === 0) return notSpam
+      const draftIds = drafts.docs.map((p) => p.id)
+      if (draftIds.length === 0) return notSpam
 
-      // Jsou drafty → povolit komentáře na články + recenze jen na publikované stránky.
-      const published = await req.payload.find({
-        collection: 'pages',
+      // 2) Existuje vůbec komentář/recenze na některém z draftů? Stačí první nález.
+      const onDraft = await req.payload.find({
+        collection: 'comments',
         where: {
-          or: [{ _status: { equals: 'published' } }, { _status: { exists: false } }],
+          and: [
+            { 'relatedTo.relationTo': { equals: 'pages' } },
+            { 'relatedTo.value': { in: draftIds } },
+          ],
         },
+        depth: 0,
+        limit: 1,
+        overrideAccess: true,
+        req,
+        select: {},
+      })
+      if (onDraft.docs.length === 0) return notSpam
+
+      // 3) Je co skrývat → povolíme jen stránky, které KOMENTÁŘE MAJÍ a nejsou draft.
+      //    Seznam je tak dlouhý jako počet komentovaných stránek (tady 230), ne jako
+      //    počet všech stránek webu (3067).
+      const commented = await req.payload.find({
+        collection: 'comments',
+        where: { 'relatedTo.relationTo': { equals: 'pages' } },
         depth: 0,
         limit: 0,
         pagination: false,
         overrideAccess: true,
         req,
-        select: {},
+        select: { relatedTo: true },
       })
-      const publishedIds = published.docs.map((p) => p.id)
+      const allowedIds = [
+        ...new Set(
+          commented.docs
+            .map((c) => (c as { relatedTo?: { value?: unknown } }).relatedTo?.value)
+            .filter((v): v is number | string => typeof v === 'number' || typeof v === 'string'),
+        ),
+      ].filter((id) => !draftIds.includes(id as never))
 
       return {
         and: [
@@ -61,7 +96,7 @@ export const Comments: CollectionConfig = {
               {
                 and: [
                   { 'relatedTo.relationTo': { equals: 'pages' } },
-                  { 'relatedTo.value': { in: publishedIds } },
+                  { 'relatedTo.value': { in: allowedIds } },
                 ],
               },
             ],

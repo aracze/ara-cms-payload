@@ -299,6 +299,8 @@ export interface ProfileCommentItem {
 }
 
 export interface UserProfileData {
+  /** ID účtu — potřebné jen k rozpoznání „tohle je můj profil" (tlačítko Upravit). */
+  id: number
   username: string
   firstName: string | null
   lastName: string | null

@@ -17,6 +17,13 @@ const nextConfig = {
     'drizzle-orm',
     'pg',
   ],
+  experimental: {
+    serverActions: {
+      // Avatar smí mít 2 MB (viz kolekce Avatars). Výchozí strop server akcí je
+      // 1 MB, takže by se větší fotka utnula dřív, než by se dostala k validaci.
+      bodySizeLimit: '3mb',
+    },
+  },
   images: {
     // Zmenšování obrázků dělá Cloudinary (viz loader), ne Next server —
     // funguje to tak i se standalone outputem bez další zátěže.

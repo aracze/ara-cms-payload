@@ -14,6 +14,8 @@
     "lint": "cross-env NODE_OPTIONS=--no-deprecation eslint .",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "promote:admin": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/promote-admin.ts",
+    "backfill:verified": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/backfill-verified.ts",
+    "migrate:avatars": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/migrate-avatars.ts",
     "migrate:users": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-users.ts",
     "migrate:pages": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-pages.ts",
     "migrate:articles": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-articles.ts",

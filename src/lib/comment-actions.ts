@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 import { getDb } from './db'
 import { isBotSubmission, isRateLimited, looksLikeSpam, verifyTurnstile } from './comment-spam'
+import { getCurrentUser } from './auth'
 
 /**
  * Veřejné vložení komentáře k článku.
@@ -10,7 +11,9 @@ import { isBotSubmission, isRateLimited, looksLikeSpam, verifyTurnstile } from '
  * Zápis běží přes Payload Local API s `overrideAccess: true` (kolekce má
  * `create: isAdmin`), takže tady MUSÍME sami vynutit bezpečná pole: pevně
  * `type: 'comment'`, `status` řídí jen heuristika, cíl je vždy článek, žádný
- * `author`/`rating`/`legacyCommentId`. Ochranu proti spamu řeší comment-spam.ts.
+ * `rating`/`legacyCommentId`. Ochranu proti spamu řeší comment-spam.ts.
+ * `author` se vyplní JEN u přihlášeného a VÝHRADNĚ ze session na serveru
+ * (nikdy z formuláře) — jinak by šlo podepsat komentář cizím účtem.
  *
  * Revalidaci cache výpisu (article_comments_<id>) obstará afterChange hook
  * kolekce comments; klient po úspěchu zavolá router.refresh().
@@ -29,7 +32,7 @@ export async function createComment(
   const now = Date.now()
 
   const articleId = Number(formData.get('articleId'))
-  const authorName = String(formData.get('authorName') ?? '').trim()
+  const submittedName = String(formData.get('authorName') ?? '').trim()
   const body = String(formData.get('body') ?? '').trim()
   const honeypot = formData.get('website') as string | null
   const renderedAt = Number(formData.get('renderedAt'))
@@ -50,11 +53,19 @@ export async function createComment(
   if (!Number.isInteger(articleId) || articleId <= 0) {
     return { status: 'error', message: 'Neplatný článek.' }
   }
-  if (authorName.length === 0) {
-    return { status: 'error', message: 'Vyplň prosím jméno.' }
-  }
-  if (authorName.length > MAX_NAME_LEN) {
-    return { status: 'error', message: 'Jméno je příliš dlouhé.' }
+  // PŘIHLÁŠENÝ AUTOR: identita se bere VÝHRADNĚ ze session na serveru, nikdy
+  // z formuláře — jinak by šlo podepsat komentář cizím jménem nebo účtem.
+  // U nepřihlášeného zůstává ručně zadané jméno (anonymní komentář).
+  const currentUser = await getCurrentUser()
+  const authorName = currentUser ? currentUser.publicName : submittedName
+
+  if (!currentUser) {
+    if (authorName.length === 0) {
+      return { status: 'error', message: 'Vyplň prosím jméno.' }
+    }
+    if (authorName.length > MAX_NAME_LEN) {
+      return { status: 'error', message: 'Jméno je příliš dlouhé.' }
+    }
   }
   if (body.length === 0) {
     return { status: 'error', message: 'Napiš prosím text komentáře.' }
@@ -136,6 +147,9 @@ export async function createComment(
         type: 'comment',
         body,
         authorName,
+        // Vazba na účet jen u přihlášeného; díky ní se u komentáře zobrazí
+        // avatar a odkaz na profil (virtuální pole `authorPublic`).
+        ...(currentUser ? { author: currentUser.id } : {}),
         relatedTo: { relationTo: 'articles', value: articleId },
         parentComment,
         status,

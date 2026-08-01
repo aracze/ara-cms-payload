@@ -1,6 +1,8 @@
 import React from 'react'
 import { ReviewPublic } from '@/types/payload'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
+import { getCurrentUser } from '@/lib/auth'
+import { LoginHint, SignedAsRow } from '@/components/features/auth/signed-as'
 import { AdSenseScript, ArticleAd } from '@/components/features/article-ad'
 import { ReviewItem } from './review-item'
 import { ReviewRatingBox } from './review-rating-box'
@@ -17,21 +19,31 @@ import { ReviewRatingBox } from './review-rating-box'
  * Zarovnání: stejné centrování jako komentáře u článku (max-w-[1188px] = obsah
  * 808 + mezera 40 + reklama 340); lg:pl-16 posadí levý okraj na text stránky.
  */
-export function ReviewsSection({
+export async function ReviewsSection({
   pageId,
   pageTitle,
   reviews,
+  /** Adresa cíle — po přihlášení se sem uživatel vrátí. */
+  backTo,
 }: {
   pageId: number
   pageTitle: string
   reviews: ReviewPublic[]
+  backTo: string
 }) {
   const siteKey = getTurnstileSiteKey()
+  const currentUser = await getCurrentUser()
 
   return (
     <section id="recenze" className="mx-auto w-full max-w-7xl scroll-mt-24 px-4 pb-12 md:pb-20">
       <div className="lg:mx-auto lg:max-w-[1188px] lg:pl-16">
-        <ReviewRatingBox pageId={pageId} turnstileSiteKey={siteKey} />
+        <ReviewRatingBox
+          pageId={pageId}
+          turnstileSiteKey={siteKey}
+          isSignedIn={Boolean(currentUser)}
+          signedAs={currentUser ? <SignedAsRow user={currentUser} /> : null}
+          loginHint={currentUser ? null : <LoginHint backTo={`${backTo}#recenze`} noun="recenze" />}
+        />
 
         <div className="flex flex-col gap-8 lg:flex-row lg:gap-10">
           <div className="min-w-0 flex-1">

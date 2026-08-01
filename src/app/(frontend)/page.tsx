@@ -1,12 +1,12 @@
 import { fetchRootPages } from '@/lib/payload'
 import { Homepage } from '@/components/layout/homepage/homepage'
 
-// Stránka se cachuje a na pozadí obnovuje po 5 min (ISR). Při publikaci obsahu
-// ji CMS obnoví okamžitě přes /api/cache (revalidateTag). Prefetch i navigace
-// tak dostávají hotovou verzi z cache místo drahého re-renderu při každém
-// požadavku. Podstránky (/[...slug]) se generují on-demand, takže build CMS
-// nepotřebuje; homepage se prerenderuje s odolným fetchem (viz lib/payload).
-export const revalidate = 300
+// Dynamické vykreslování jako zbytek webu (/[...slug]). PROČ ne ISR jako dřív:
+// hlavička od zavedení přihlášení čte cookie, a stránku, která sáhne na cookie,
+// nelze předgenerovat — build na tom padal („couldn't be rendered statically").
+// Data to nezdražuje: fetchRootPages jde přes `cached()`, takže se z databáze
+// nečte znovu, opakuje se jen React render.
+export const dynamic = 'force-dynamic'
 
 export default async function Home() {
   const { data } = await fetchRootPages()

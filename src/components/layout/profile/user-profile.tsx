@@ -1,9 +1,11 @@
-import { Globe } from 'lucide-react'
+import { Globe, Pencil } from 'lucide-react'
+import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { StaticHeroWave } from '@/components/features/static-hero-wave'
 import { GoogleMap } from '@/components/features/google-map'
 import { ProfileCardGrid } from '@/components/layout/profile/profile-card-grid'
+import { ProfileEditForm } from '@/components/layout/profile/profile-edit-form'
 import {
   ProfileArticleCard,
   ProfileCommentCard,
@@ -55,7 +57,17 @@ const PROFILE_COVER_BLUR =
 /** Výška mapy pod statistikami — nižší, než mají mapy u výpisů míst. */
 const MAP_HEIGHT = '360px'
 
-export function UserProfile({ profile }: { profile: UserProfileData }) {
+export function UserProfile({
+  profile,
+  isOwner = false,
+  editing = false,
+}: {
+  profile: UserProfileData
+  /** Dívá se na svůj vlastní profil → uvidí tlačítko „Upravit profil". */
+  isOwner?: boolean
+  /** Režim úprav (adresa `?upravit=1`) — medailonek se vymění za formulář. */
+  editing?: boolean
+}) {
   const displayName =
     [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.username
 
@@ -145,7 +157,7 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
           }}
         />
 
-        {/* Identita v hlavičce: avatar, jméno a přezdívka jako JEDEN blok na ose
+        {/* Identita v hlavičce: avatar, jméno a uživatelské jméno jako JEDEN blok na ose
             stránky (titulky ostatních stránek jsou taky na středu).
             Historie: nejdřív tu byly čtyři úrovně nad sebou — avatar, jméno,
             linka a „@jméno · Cestovní průvodce" — což působilo přeplněně (role
@@ -180,9 +192,9 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
             <h1 className="relative mt-3.5 max-w-full truncate text-center text-[32px] md:text-[40px] font-semibold leading-none text-white tracking-normal">
               {displayName}
             </h1>
-            {/* Přezdívku neopakujeme, když je zároveň zobrazeným jménem (uživatel
+            {/* Uživatelské jméno neopakujeme, když je zároveň zobrazeným jménem (uživatel
                 bez vyplněného jména a příjmení, např. „TravelPortal.cz"). Blok by
-                pak končil jménem natvrdo, takže místo přezdívky přijde tenká
+                pak končil jménem natvrdo, takže místo uživatelského jména přijde tenká
                 linka — stejná, jakou mají titulky ostatních stránek webu. */}
             {displayName !== profile.username ? (
               <p className="relative mt-2.5 text-[15px] font-medium text-white/75">
@@ -201,15 +213,28 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
 
       <main id="obsah" tabIndex={-1} className="focus:outline-none">
         {/* Medailonek — popis „o mně" + vlastní web (jen když jsou vyplněné).
-            Přezdívka tu není: patří k identitě, takže je nahoře u jména. */}
-        {(profile.description || profile.myWebUrl || stats.length > 0) && (
+            Uživatelské jméno tu není: patří k identitě, takže je nahoře u jména. */}
+        {(profile.description || profile.myWebUrl || stats.length > 0 || isOwner) && (
           <section className="mx-auto max-w-[720px] px-4 pt-10 pb-2 text-center">
-            {profile.description && (
+            {/* V režimu úprav je na místě medailonku formulář — mění se to, na co
+                se člověk zrovna dívá, takže nemusí nikam odcházet. */}
+            {editing && (
+              <ProfileEditForm
+                profileHref={`/profil/${encodeURIComponent(profile.username)}`}
+                publicName={profile.username}
+                firstName={profile.firstName}
+                lastName={profile.lastName}
+                description={profile.description}
+                myWebUrl={profile.myWebUrl}
+                avatarUrl={profile.avatarUrl}
+              />
+            )}
+            {!editing && profile.description && (
               <p className="whitespace-pre-line text-[17px] leading-relaxed text-[#4a4a4a]">
                 {profile.description}
               </p>
             )}
-            {profile.myWebUrl && (
+            {!editing && profile.myWebUrl && (
               <p className="mt-4 flex items-center justify-center gap-2 text-[15px]">
                 <Globe aria-hidden="true" className="h-4 w-4 shrink-0 text-[#215491]" />
                 <a
@@ -223,8 +248,22 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
               </p>
             )}
 
+            {/* Tlačítko vidí jen vlastník profilu. Je to skutečný odkaz (ne
+                tlačítko s JavaScriptem), takže úpravy fungují i bez JS. */}
+            {isOwner && !editing && (
+              <p className="mt-6">
+                <Link
+                  href={`/profil/${encodeURIComponent(profile.username)}?upravit=1`}
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-[#c9d4e0] px-6 py-2 font-heading text-[12.5px] font-bold uppercase tracking-wider text-[#5b666e] transition-colors hover:border-[#215491] hover:text-[#215491]"
+                >
+                  <Pencil aria-hidden="true" className="h-[13px] w-[13px]" strokeWidth={2.2} />
+                  Upravit profil
+                </Link>
+              </p>
+            )}
+
             {/* Statistiky = kotvy na sekce. Prostý <a> — cíl je na téže stránce. */}
-            {stats.length > 0 && (
+            {!editing && stats.length > 0 && (
               <nav aria-label="Souhrn příspěvků" className="mt-8">
                 <ul className="flex flex-wrap items-stretch justify-center gap-x-2">
                   {stats.map((s) => (

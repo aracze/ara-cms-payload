@@ -2,6 +2,8 @@ import React from 'react'
 import { MessageCircle, Pencil } from 'lucide-react'
 import { CommentThread } from '@/types/payload'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
+import { getCurrentUser } from '@/lib/auth'
+import { LoginHint, SignedAsRow } from '@/components/features/auth/signed-as'
 import { CommentItem } from './comment-item'
 import { CommentForm } from './comment-form'
 
@@ -10,16 +12,21 @@ import { CommentForm } from './comment-form'
  * Komentáře jsou ve vláknech: kořenový komentář + odsazené odpovědi (jedna
  * úroveň). Data (vlákna + počet) načítá volající přes fetchArticleComments.
  */
-export function CommentsSection({
+export async function CommentsSection({
   articleId,
   threads,
   count,
+  /** Adresa článku — po přihlášení se sem uživatel vrátí. */
+  backTo,
 }: {
   articleId: number
   threads: CommentThread[]
   count: number
+  backTo: string
 }) {
   const siteKey = getTurnstileSiteKey()
+  // Přihlášeného zjišťuje SERVER; formulář dostane hotový pruh „Píšeš jako…".
+  const currentUser = await getCurrentUser()
 
   return (
     <section id="komentare" className="scroll-mt-24">
@@ -64,7 +71,13 @@ export function CommentsSection({
         </p>
       )}
 
-      <CommentForm articleId={articleId} turnstileSiteKey={siteKey} />
+      <CommentForm
+        articleId={articleId}
+        turnstileSiteKey={siteKey}
+        isSignedIn={Boolean(currentUser)}
+        signedAs={currentUser ? <SignedAsRow user={currentUser} /> : null}
+        loginHint={currentUser ? null : <LoginHint backTo={`${backTo}#komentare`} />}
+      />
     </section>
   )
 }
