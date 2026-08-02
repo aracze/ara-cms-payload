@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { isProduction } from './utils'
+import { SESSION_SECONDS, TOKEN_COOKIE } from './session-constants'
 
 /**
  * JEDNO místo, které popisuje přihlašovací cookie.
@@ -11,11 +12,7 @@ import { isProduction } from './utils'
  * nefungovalo; kdyby vypršela dřív, odhlašovalo by ho to bez důvodu.
  */
 
-/** Cookie, ze které Payload čte token. Bez `cookiePrefix` v configu je to `payload`. */
-export const TOKEN_COOKIE = 'payload-token'
-
-/** Platnost přihlášení v sekundách — musí odpovídat `tokenExpiration` v Users. */
-export const SESSION_SECONDS = 60 * 60 * 24 * 7
+export { SESSION_SECONDS, TOKEN_COOKIE }
 
 /** Uloží token do cookie prohlížeče (po přihlášení i po změně hesla). */
 export async function setSessionCookie(token: string): Promise<void> {

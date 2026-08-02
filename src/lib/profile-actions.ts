@@ -118,7 +118,10 @@ export async function updateProfileAction(
     })
     const raw = (current as { avatar?: number | { id?: number } | null }).avatar
     previousAvatarId = typeof raw === 'number' ? raw : (raw?.id ?? null)
-  } catch {
+  } catch (err) {
+    // Nekritické: bez předchozího ID se jen neuklidí stará fotka. Ale zalogovat
+    // to chceme — když tohle selhává pravidelně, je něco jinde špatně.
+    console.error('[profil] nepodařilo se zjistit předchozí fotku:', err)
     previousAvatarId = null
   }
 

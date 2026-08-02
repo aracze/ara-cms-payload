@@ -84,6 +84,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     const displayName = [firstName, lastName].filter(Boolean).join(' ') || username || 'Uživatel'
 
     return {
+      // `Number`: Payload typuje id jako `number | string` (kvůli databázím
+      // s textovými id), Postgres ale vrací číslo. Sjednocení na číslo drží
+      // porovnání `me.id === profile.id` spolehlivé.
       id: Number(doc.id),
       username,
       firstName,

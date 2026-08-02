@@ -24,11 +24,14 @@ function Field({
   label,
   children,
   hint,
+  hintLive = false,
 }: {
   id: string
   label: string
   children: React.ReactNode
   hint?: string
+  /** Nápověda se mění za běhu (počítadlo znaků) → oznámit i odečítačům. */
+  hintLive?: boolean
 }) {
   return (
     <div>
@@ -36,7 +39,14 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && <p className="mt-1.5 text-[12.5px] leading-snug text-[#9aa4ad]">{hint}</p>}
+      {hint && (
+        <p
+          className="mt-1.5 text-[12.5px] leading-snug text-[#9aa4ad]"
+          aria-live={hintLive ? 'polite' : undefined}
+        >
+          {hint}
+        </p>
+      )}
     </div>
   )
 }
@@ -172,6 +182,7 @@ export function ProfileEditForm({
             id={descriptionId}
             label="O mně"
             hint={`Krátký medailonek nad tvým obsahem. Zbývá ${MAX_DESCRIPTION - descLength} znaků.`}
+            hintLive
           >
             <textarea
               id={descriptionId}

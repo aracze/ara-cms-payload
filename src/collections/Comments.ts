@@ -35,76 +35,93 @@ export const Comments: CollectionConfig = {
       if (req.user) return true
       const notSpam: Where = { status: { not_equals: 'spam' } }
 
-      // 1) Bez draft stránek není co skrývat (běžný stav).
-      const drafts = await req.payload.find({
-        collection: 'pages',
-        where: { _status: { equals: 'draft' } },
-        depth: 0,
-        limit: 0,
-        pagination: false,
-        overrideAccess: true,
-        req,
-        select: {},
-      })
-      const draftIds = drafts.docs.map((p) => p.id)
-      if (draftIds.length === 0) return notSpam
+      // Výsledek platí pro celý požadavek — pravidlo se během jednoho vykreslení
+      // stránky vyhodnocuje víckrát (výpis komentářů, počty, recenze) a bez
+      // téhle paměti by se drahé dotazy níž opakovaly.
+      const cache = (req.context ??= {}) as { anonCommentFilter?: Where }
+      if (cache.anonCommentFilter) return cache.anonCommentFilter
 
-      // 2) Existuje vůbec komentář/recenze na některém z draftů? Stačí první nález.
-      const onDraft = await req.payload.find({
-        collection: 'comments',
-        where: {
-          and: [
-            // Spam veřejně stejně nesvítí, takže kvůli němu nemá cenu spouštět
-            // drahou větev níž ani přidávat stránku mezi povolené.
-            notSpam,
-            { 'relatedTo.relationTo': { equals: 'pages' } },
-            { 'relatedTo.value': { in: draftIds } },
-          ],
-        },
-        depth: 0,
-        limit: 1,
-        overrideAccess: true,
-        req,
-        select: {},
-      })
-      if (onDraft.docs.length === 0) return notSpam
+      try {
+        // 1) Bez draft stránek není co skrývat (běžný stav).
+        const drafts = await req.payload.find({
+          collection: 'pages',
+          where: { _status: { equals: 'draft' } },
+          depth: 0,
+          limit: 0,
+          pagination: false,
+          overrideAccess: true,
+          req,
+          select: {},
+        })
+        const draftIds = drafts.docs.map((p) => p.id)
+        if (draftIds.length === 0) return (cache.anonCommentFilter = notSpam)
 
-      // 3) Je co skrývat → povolíme jen stránky, které KOMENTÁŘE MAJÍ a nejsou draft.
-      //    Seznam je tak dlouhý jako počet komentovaných stránek (tady 230), ne jako
-      //    počet všech stránek webu (3067).
-      const commented = await req.payload.find({
-        collection: 'comments',
-        where: { and: [notSpam, { 'relatedTo.relationTo': { equals: 'pages' } }] },
-        depth: 0,
-        limit: 0,
-        pagination: false,
-        overrideAccess: true,
-        req,
-        select: { relatedTo: true },
-      })
-      const allowedIds = [
-        ...new Set(
-          commented.docs
-            .map((c) => (c as { relatedTo?: { value?: unknown } }).relatedTo?.value)
-            .filter((v): v is number | string => typeof v === 'number' || typeof v === 'string'),
-        ),
-      ].filter((id) => !draftIds.includes(id as never))
-
-      return {
-        and: [
-          notSpam,
-          {
-            or: [
-              { 'relatedTo.relationTo': { equals: 'articles' } },
-              {
-                and: [
-                  { 'relatedTo.relationTo': { equals: 'pages' } },
-                  { 'relatedTo.value': { in: allowedIds } },
-                ],
-              },
+        // 2) Existuje vůbec komentář/recenze na některém z draftů? Stačí první nález.
+        const onDraft = await req.payload.find({
+          collection: 'comments',
+          where: {
+            and: [
+              // Spam veřejně stejně nesvítí, takže kvůli němu nemá cenu spouštět
+              // drahou větev níž ani přidávat stránku mezi povolené.
+              notSpam,
+              { 'relatedTo.relationTo': { equals: 'pages' } },
+              { 'relatedTo.value': { in: draftIds } },
             ],
           },
-        ],
+          depth: 0,
+          limit: 1,
+          overrideAccess: true,
+          req,
+          select: {},
+        })
+        if (onDraft.docs.length === 0) return (cache.anonCommentFilter = notSpam)
+
+        // 3) Je co skrývat → povolíme jen stránky, které KOMENTÁŘE MAJÍ a nejsou draft.
+        //    Seznam je tak dlouhý jako počet komentovaných stránek (tady 230), ne jako
+        //    počet všech stránek webu (3067).
+        const commented = await req.payload.find({
+          collection: 'comments',
+          where: { and: [notSpam, { 'relatedTo.relationTo': { equals: 'pages' } }] },
+          depth: 0,
+          limit: 0,
+          pagination: false,
+          overrideAccess: true,
+          req,
+          select: { relatedTo: true },
+        })
+        const allowedIds = [
+          ...new Set(
+            commented.docs
+              .map((c) => (c as { relatedTo?: { value?: unknown } }).relatedTo?.value)
+              .filter((v): v is number | string => typeof v === 'number' || typeof v === 'string'),
+          ),
+        ].filter((id) => !draftIds.includes(id as never))
+
+        const filtr: Where = {
+          and: [
+            notSpam,
+            {
+              or: [
+                { 'relatedTo.relationTo': { equals: 'articles' } },
+                {
+                  and: [
+                    { 'relatedTo.relationTo': { equals: 'pages' } },
+                    { 'relatedTo.value': { in: allowedIds } },
+                  ],
+                },
+              ],
+            },
+          ],
+        }
+        cache.anonCommentFilter = filtr
+        return filtr
+      } catch (err) {
+        // FAIL CLOSED: kdyby některý z dotazů selhal, nesmí to skončit pádem
+        // ani povolením všeho — anonym prostě neuvidí nic.
+        req.payload.logger.error(
+          `Pravidlo čtení komentářů selhalo, anonymní čtení zamítnuto: ${err instanceof Error ? err.message : err}`,
+        )
+        return false
       }
     },
     create: isAdmin,

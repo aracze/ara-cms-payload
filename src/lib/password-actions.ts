@@ -1,11 +1,11 @@
 'use server'
 
-import { cookies, headers } from 'next/headers'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getDb } from './db'
 import { isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
 import { checkPassword, isEmailShapeValid } from './username'
-import { isProduction } from './utils'
+import { setSessionCookie } from './session-cookie'
 
 /**
  * Zapomenuté heslo: odeslání odkazu a nastavení nového hesla.
@@ -14,9 +14,6 @@ import { isProduction } from './utils'
  * Odpověď je vždy stejná („když účet existuje, poslali jsme odkaz"), jinak by
  * kdokoli mohl zjišťovat, kdo je na webu registrovaný.
  */
-
-const TOKEN_COOKIE = 'payload-token'
-const SESSION_SECONDS = 60 * 60 * 24 * 7
 
 export type ForgotState =
   { status: 'idle' } | { status: 'sent' } | { status: 'error'; message: string }
@@ -96,16 +93,7 @@ export async function resetPasswordAction(
 
     // Po nastavení hesla uživatele rovnou přihlásíme — nemá smysl ho posílat
     // ještě jednou přes přihlašovací formulář.
-    if (result?.token) {
-      const jar = await cookies()
-      jar.set(TOKEN_COOKIE, result.token, {
-        httpOnly: true,
-        secure: isProduction(),
-        sameSite: 'lax',
-        path: '/',
-        maxAge: SESSION_SECONDS,
-      })
-    }
+    if (result?.token) await setSessionCookie(result.token)
   } catch (err) {
     const message = err instanceof Error ? err.message : ''
     console.error('[heslo] nastavení nového hesla selhalo:', message)

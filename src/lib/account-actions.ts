@@ -170,13 +170,19 @@ export async function deleteAccountAction(
 
     // 2) Profilová fotka — soubor i záznam pryč. Běží pod právy vlastníka
     //    (kolekce Avatars pouští `delete` na vlastní záznamy).
-    await payload.delete({
+    // Hromadné mazání NEVYHAZUJE výjimku, když se jednotlivý záznam smazat
+    // nepodaří — vrátí ho v `errors`. Bez téhle kontroly by transakce potvrdila
+    // smazání účtu, i kdyby fotka zůstala viset.
+    const smazaneAvatary = await payload.delete({
       collection: 'avatars',
       where: { owner: { equals: me.id } },
       user,
       req,
       overrideAccess: false,
     })
+    if (smazaneAvatary.errors.length > 0) {
+      throw new Error(`Fotku se nepodařilo smazat: ${JSON.stringify(smazaneAvatary.errors)}`)
+    }
 
     // 3) Samotný účet. `overrideAccess: true` je tu nutné (mazat uživatele smí
     //    jinak jen admin) a bezpečné: totožnost je ověřená ze session A heslem

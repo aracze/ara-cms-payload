@@ -1,5 +1,6 @@
 import type { Access, CollectionConfig, FieldAccess } from 'payload'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
+import { SESSION_SECONDS } from '../lib/session-constants'
 import { revalidateUserAfterChange, revalidateUserAfterDelete } from '../hooks/revalidation'
 
 const isAdmin: Access = ({ req: { user } }) => {
@@ -71,7 +72,9 @@ export const Users: CollectionConfig = {
     // Platnost přihlášení = 7 dní; MUSÍ odpovídat `maxAge` cookie
     // v `src/lib/auth-actions.ts`, jinak by cookie přežila platnost tokenu
     // (uživatel by vypadal přihlášený, ale server by ho odmítal).
-    tokenExpiration: 60 * 60 * 24 * 7,
+    // Ze sdílené konstanty, ať platnost tokenu a platnost cookie nemůžou
+    // utéct od sebe (viz src/lib/session-constants.ts).
+    tokenExpiration: SESSION_SECONDS,
     // Registrace z webu vyžaduje potvrzení e-mailu (brání překlepům v adrese
     // i zakládání účtů na cizí e-maily).
     //
