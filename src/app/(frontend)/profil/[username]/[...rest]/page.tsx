@@ -30,6 +30,10 @@ function encodeUsernameSegment(raw: string): string {
 
 export default async function LegacyProfileSubpage({ params }: Props) {
   const { username, rest } = await params
-  const anchor = SECTION_ANCHORS[rest?.[0] ?? ''] ?? ''
+  // `Object.hasOwn` schválně: obyčejný objekt vrací i zděděné vlastnosti, takže
+  // /profil/<jméno>/constructor by prošlo jako platná sekce a do adresy by se
+  // vypsal zdrojový kód funkce (ověřeno, redirect vedl na nesmysl).
+  const section = rest?.[0] ?? ''
+  const anchor = Object.hasOwn(SECTION_ANCHORS, section) ? SECTION_ANCHORS[section] : ''
   permanentRedirect(`/profil/${encodeUsernameSegment(username)}${anchor}`)
 }
