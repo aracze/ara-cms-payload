@@ -69,7 +69,8 @@ for (const r of radky) {
       continue
     }
 
-    const odpoved = await fetch(r.url)
+    // Timeout: bez něj by se skript na nedostupném souboru zasekl natrvalo.
+    const odpoved = await fetch(r.url, { signal: AbortSignal.timeout(30_000) })
     if (!odpoved.ok) {
       console.error(`✗ ${r.username ?? r.user_id}: stažení selhalo (HTTP ${odpoved.status})`)
       chyby++
@@ -86,12 +87,21 @@ for (const r of radky) {
       overrideAccess: true,
     })
 
-    await payload.update({
-      collection: 'users',
-      id: r.user_id,
-      data: { avatar: avatar.id },
-      overrideAccess: true,
-    })
+    try {
+      await payload.update({
+        collection: 'users',
+        id: r.user_id,
+        data: { avatar: avatar.id },
+        overrideAccess: true,
+      })
+    } catch (err) {
+      // Nahráno, ale nenapojeno → uklidíme, ať v nové kolekci nezůstane sirotek
+      // a opakované spuštění skriptu začalo z čistého stavu.
+      await payload
+        .delete({ collection: 'avatars', id: avatar.id, overrideAccess: true })
+        .catch(() => {})
+      throw err
+    }
 
     prevedeno++
     console.log(`✓ ${r.username ?? r.user_id} → avatar #${avatar.id}`)

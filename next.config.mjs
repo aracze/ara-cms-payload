@@ -21,6 +21,9 @@ const nextConfig = {
     serverActions: {
       // Avatar smí mít 2 MB (viz kolekce Avatars). Výchozí strop server akcí je
       // 1 MB, takže by se větší fotka utnula dřív, než by se dostala k validaci.
+      // POZOR: platí pro VŠECHNY server akce, ne jen pro nahrávání fotky —
+      // Next to jinak nastavit neumí. Vlastní meze (délky textů, velikost
+      // souboru) proto musí hlídat každá akce sama, viz src/lib/profile-limits.ts.
       bodySizeLimit: '3mb',
     },
   },

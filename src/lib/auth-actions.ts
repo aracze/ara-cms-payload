@@ -1,9 +1,8 @@
 'use server'
 
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getDb } from './db'
-import { isProduction } from './utils'
+import { clearSessionCookie, setSessionCookie } from './session-cookie'
 
 /**
  * Přihlášení a odhlášení na veřejném webu.
@@ -17,12 +16,6 @@ import { isProduction } from './utils'
  * Formulář musí fungovat i BEZ JavaScriptu, proto akce nevrací jen data, ale
  * při úspěchu sama přesměruje (viz `redirectTo`).
  */
-
-/** Jak dlouho platí přihlášení (v sekundách) — musí odpovídat `tokenExpiration`. */
-const SESSION_SECONDS = 60 * 60 * 24 * 7
-
-/** Cookie, ze které Payload čte token. Bez `cookiePrefix` v configu je to `payload`. */
-const TOKEN_COOKIE = 'payload-token'
 
 export type LoginState = { status: 'idle' } | { status: 'error'; message: string }
 
@@ -57,14 +50,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
       return { status: 'error', message: 'Přihlášení se nepodařilo. Zkuste to prosím znovu.' }
     }
 
-    const jar = await cookies()
-    jar.set(TOKEN_COOKIE, result.token, {
-      httpOnly: true, // skript v prohlížeči se k tokenu nedostane
-      secure: isProduction(), // v produkci jen přes HTTPS
-      sameSite: 'lax', // cookie neputuje s požadavky z cizích stránek
-      path: '/',
-      maxAge: SESSION_SECONDS,
-    })
+    await setSessionCookie(result.token)
   } catch (err) {
     // ZÁMĚRNĚ jedna společná hláška pro „neexistující e-mail" i „špatné heslo":
     // rozdílné odpovědi by prozradily, které e-maily jsou v databázi.
@@ -76,7 +62,9 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
         message: 'Účet je po několika neúspěšných pokusech dočasně zamčený. Zkuste to za chvíli.',
       }
     }
-    console.error('[auth] přihlášení selhalo pro', email.slice(0, 3) + '***')
+    // Do logu jde DŮVOD, ne kus e-mailu: začátek adresy nepomůže při hledání
+    // příčiny, ale zbytečně ukládá osobní údaj do provozních záznamů.
+    console.error('[auth] přihlášení selhalo:', err instanceof Error ? err.message : err)
     return { status: 'error', message: 'Nesprávný e-mail nebo heslo.' }
   }
 
@@ -94,7 +82,6 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
  * ke které se skript v prohlížeči nedostane.
  */
 export async function logoutAction(): Promise<void> {
-  const jar = await cookies()
-  jar.delete(TOKEN_COOKIE)
+  await clearSessionCookie()
   redirect('/')
 }

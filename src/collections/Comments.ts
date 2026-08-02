@@ -54,6 +54,9 @@ export const Comments: CollectionConfig = {
         collection: 'comments',
         where: {
           and: [
+            // Spam veřejně stejně nesvítí, takže kvůli němu nemá cenu spouštět
+            // drahou větev níž ani přidávat stránku mezi povolené.
+            notSpam,
             { 'relatedTo.relationTo': { equals: 'pages' } },
             { 'relatedTo.value': { in: draftIds } },
           ],
@@ -71,7 +74,7 @@ export const Comments: CollectionConfig = {
       //    počet všech stránek webu (3067).
       const commented = await req.payload.find({
         collection: 'comments',
-        where: { 'relatedTo.relationTo': { equals: 'pages' } },
+        where: { and: [notSpam, { 'relatedTo.relationTo': { equals: 'pages' } }] },
         depth: 0,
         limit: 0,
         pagination: false,

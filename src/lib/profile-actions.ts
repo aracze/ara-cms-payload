@@ -4,6 +4,7 @@ import { headers as nextHeaders } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getDb } from './db'
 import { getCurrentUser } from './auth'
+import { AVATAR_MIME, MAX_AVATAR_BYTES, MAX_DESCRIPTION, MAX_NAME, MAX_URL } from './profile-limits'
 
 /**
  * Uložení vlastního profilu (fotka, jméno, medailonek, web).
@@ -17,12 +18,6 @@ import { getCurrentUser } from './auth'
  *     nemůže přidat práva ani kdyby si do formuláře dopsal vlastní políčko.
  *  3. Do `data` posíláme JMENOVITĚ vypsaná pole, ne rozbalený formulář.
  */
-
-const MAX_NAME = 80
-const MAX_DESCRIPTION = 1000
-const MAX_URL = 200
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024
-const AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp']
 
 export type ProfileFormState = {
   status: 'idle' | 'error'
@@ -95,7 +90,7 @@ export async function updateProfileAction(
   if (file) {
     // Stejné meze hlídá i kolekce Avatars — tady jsou proto, aby člověk dostal
     // srozumitelnou hlášku místo obecné chyby serveru.
-    if (!AVATAR_MIME.includes(file.type)) {
+    if (!(AVATAR_MIME as readonly string[]).includes(file.type)) {
       return { status: 'error', field: 'avatar', message: 'Fotka musí být JPEG, PNG nebo WebP.' }
     }
     if (file.size > MAX_AVATAR_BYTES) {
@@ -142,19 +137,37 @@ export async function updateProfileAction(
       newAvatarId = null
     }
 
-    await payload.update({
-      collection: 'users',
-      id: me.id,
-      data: {
-        firstName: firstName || null,
-        lastName: lastName || null,
-        description: description || null,
-        myWebUrl: myWebUrl || null,
-        ...(newAvatarId !== undefined ? { avatar: newAvatarId } : {}),
-      },
-      user,
-      overrideAccess: false,
-    })
+    try {
+      await payload.update({
+        collection: 'users',
+        id: me.id,
+        data: {
+          firstName: firstName || null,
+          lastName: lastName || null,
+          description: description || null,
+          myWebUrl: myWebUrl || null,
+          ...(newAvatarId !== undefined ? { avatar: newAvatarId } : {}),
+        },
+        user,
+        overrideAccess: false,
+      })
+    } catch (err) {
+      // Fotka se nahrála, ale profil se neuložil — uklidíme ji, ať v úložišti
+      // neleží soubor, na který už se nikdo neodkáže.
+      if (typeof newAvatarId === 'number') {
+        try {
+          await payload.delete({
+            collection: 'avatars',
+            id: newAvatarId,
+            user,
+            overrideAccess: false,
+          })
+        } catch (cleanupErr) {
+          console.error('[profil] úklid nepoužité fotky selhal:', cleanupErr)
+        }
+      }
+      throw err
+    }
 
     // Vyměněnou fotku uklidíme, ať v úložišti neleží mrtvé soubory. Selhání
     // úklidu není důvod hlásit uživateli chybu — profil je uložený.

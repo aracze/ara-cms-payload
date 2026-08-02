@@ -1,6 +1,7 @@
 'use server'
 
-import { cookies as nextCookies, headers as nextHeaders } from 'next/headers'
+import { headers as nextHeaders } from 'next/headers'
+import { clearSessionCookie, setSessionCookie } from './session-cookie'
 import { redirect } from 'next/navigation'
 import { getDb } from './db'
 import { getCurrentUser } from './auth'
@@ -17,7 +18,6 @@ import { checkPassword } from './username'
  * nesmí stačit sednout k němu a udělat nevratnou změnu.
  */
 
-const TOKEN_COOKIE = 'payload-token'
 const ANONYM = 'Smazaný uživatel'
 
 export type AccountFormState = {
@@ -101,16 +101,7 @@ export async function changePasswordAction(
   // sebe nepřestane platit. Vystavíme nový, ať sezení odpovídá novému heslu.
   try {
     const fresh = await payload.login({ collection: 'users', data: { email, password: next } })
-    if (fresh?.token) {
-      const jar = await nextCookies()
-      jar.set(TOKEN_COOKIE, fresh.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7,
-      })
-    }
+    if (fresh?.token) await setSessionCookie(fresh.token)
   } catch (err) {
     console.error('[účet] obnovení sezení po změně hesla selhalo:', err)
   }
@@ -157,6 +148,14 @@ export async function deleteAccountAction(
     return { status: 'error', message: 'Přihlášení vypršelo. Přihlas se prosím znovu.' }
   }
 
+  // Tři kroky níž musí dopadnout BUĎ VŠECHNY, NEBO ŽÁDNÝ. Kdyby to spadlo
+  // uprostřed, zůstaly by příspěvky odpojené od účtu, který dál existuje —
+  // a nikdo by je už nespároval zpátky. Proto transakce.
+  const transactionID = await payload.db.beginTransaction()
+  const req = (transactionID ? { transactionID } : {}) as Parameters<
+    typeof payload.update
+  >[0]['req']
+
   try {
     // 1) Příspěvky ZŮSTÁVAJÍ, jen se odpojí od účtu — komentář se pak chová
     //    přesně jako od nepřihlášeného. Kdyby se mazaly, zmizely by z diskusí
@@ -165,6 +164,7 @@ export async function deleteAccountAction(
       collection: 'comments',
       where: { author: { equals: me.id } },
       data: { authorName: removeName ? ANONYM : me.publicName, author: null },
+      req,
       overrideAccess: true,
     })
 
@@ -174,19 +174,22 @@ export async function deleteAccountAction(
       collection: 'avatars',
       where: { owner: { equals: me.id } },
       user,
+      req,
       overrideAccess: false,
     })
 
     // 3) Samotný účet. `overrideAccess: true` je tu nutné (mazat uživatele smí
     //    jinak jen admin) a bezpečné: totožnost je ověřená ze session A heslem
     //    o pár řádků výš, a maže se výhradně `me.id` — nic z formuláře.
-    await payload.delete({ collection: 'users', id: me.id, overrideAccess: true })
+    await payload.delete({ collection: 'users', id: me.id, req, overrideAccess: true })
+
+    if (transactionID) await payload.db.commitTransaction(transactionID)
   } catch (err) {
+    if (transactionID) await payload.db.rollbackTransaction(transactionID)
     console.error('[účet] smazání selhalo:', err)
     return { status: 'error', message: 'Účet se nepodařilo smazat. Zkus to prosím znovu.' }
   }
 
-  const jar = await nextCookies()
-  jar.delete(TOKEN_COOKIE)
+  await clearSessionCookie()
   redirect('/ucet-smazan')
 }

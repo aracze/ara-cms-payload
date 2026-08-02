@@ -78,6 +78,14 @@ export async function resetPasswordAction(
   const problem = checkPassword(password)
   if (problem) return { status: 'error', message: problem }
 
+  // Limit i tady, ne jen u žádosti o obnovu: bez něj by šlo tuhle akci
+  // bombardovat a zkoušet uhodnout platný token hrubou silou.
+  const h = await headers()
+  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || ''
+  if (isRateLimited(ip, Date.now())) {
+    return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
+  }
+
   try {
     const payload = await getDb()
     const result = await payload.resetPassword({

@@ -1,4 +1,5 @@
 import type { Access, CollectionConfig, FieldAccess } from 'payload'
+import { AVATAR_MIME, MAX_AVATAR_BYTES } from '../lib/profile-limits'
 
 /**
  * Profilové fotky uživatelů — ZÁMĚRNĚ mimo kolekci Media.
@@ -14,8 +15,17 @@ import type { Access, CollectionConfig, FieldAccess } from 'payload'
  * každém nasazení zahazuje.
  */
 
-const MAX_BYTES = 2 * 1024 * 1024
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp']
+// Meze sdílené s formulářem profilu — viz src/lib/profile-limits.ts.
+const MAX_BYTES = MAX_AVATAR_BYTES
+const ALLOWED_MIME: readonly string[] = AVATAR_MIME
+/**
+ * Kolik avatarů smí jeden účet mít.
+ *
+ * Uživatel potřebuje právě jeden — starý se při výměně z profilu maže. Strop je
+ * proti přímému volání API, kterým by šlo nahrát neomezeně souborů; tři místo
+ * jednoho proto, aby při souběhu (výměna fotky) nikdo nenarazil na hranici.
+ */
+const MAX_PER_USER = 3
 
 function isAdminUser(user: unknown): boolean {
   const roles = (user as { roles?: string[] } | null)?.roles
@@ -57,7 +67,7 @@ export const Avatars: CollectionConfig = {
     // Soubory drží Cloudinary, ne disk kontejneru (ten nasazení nepřežije).
     disableLocalStorage: true,
     // Whitelist v prohlížeči; skutečnou kontrolu dělá hook níž (klientu nevěřit).
-    mimeTypes: ALLOWED_MIME,
+    mimeTypes: [...ALLOWED_MIME],
     // Ořez na čtverec děláme ZA uživatele — starý web po lidech chtěl, ať si
     // čtvercovou fotku připraví sami, jinak se avatar deformoval.
     resizeOptions: { width: 512, height: 512, position: 'centre', fit: 'cover' },
@@ -90,6 +100,24 @@ export const Avatars: CollectionConfig = {
         const userId = args.req?.user?.id ?? 'x'
         file.name = `avatar-${userId}-${Date.now()}.${ext}`
         return args
+      },
+    ],
+    beforeValidate: [
+      async ({ req, operation }) => {
+        if (operation !== 'create' || !req.user) return
+        const { totalDocs } = await req.payload.find({
+          collection: 'avatars',
+          where: { owner: { equals: req.user.id } },
+          limit: 0,
+          depth: 0,
+          // `req` kvůli transakci; overrideAccess proto, že jde o interní
+          // kontrolu limitu, ne o čtení dat pro uživatele.
+          req,
+          overrideAccess: true,
+        })
+        if (totalDocs >= MAX_PER_USER) {
+          throw new Error('Máš nahraných příliš mnoho fotek. Zkus to prosím za chvíli.')
+        }
       },
     ],
     beforeChange: [

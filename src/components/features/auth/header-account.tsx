@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
@@ -47,6 +47,62 @@ export function HeaderAccount({
 }
 
 /** Zavření po kliknutí mimo + klávesou Esc; vrácení fokusu na spouštěč. */
+/**
+ * Chování modálního okna, které se od „vyskakovacího panelu" čeká:
+ *  - fokus zůstává UVNITŘ okna (Tab z posledního prvku skočí na první),
+ *  - stránka pod oknem se nedá rolovat,
+ *  - po zavření se fokus vrátí na ikonu, ze které se okno otevřelo.
+ *
+ * Bez prvních dvou bodů se dá z okna „vypadnout" klávesnicí do stránky za ním
+ * a číst obsah, který je vizuálně zakrytý překryvem.
+ */
+function useModalBehavior(
+  open: boolean,
+  panelRef: React.RefObject<HTMLDivElement | null>,
+  view: unknown,
+) {
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!open || !panel) return
+
+    const puvodniOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const zaostritelne = () =>
+      Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.offsetParent !== null)
+
+    // Fokus dovnitř jen tehdy, když si ho formulář nevzal sám (`autoFocus`).
+    if (!panel.contains(document.activeElement)) zaostritelne()[0]?.focus()
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      const list = zaostritelne()
+      if (list.length === 0) return
+      const prvni = list[0]
+      const posledni = list[list.length - 1]
+      if (e.shiftKey && document.activeElement === prvni) {
+        e.preventDefault()
+        posledni.focus()
+      } else if (!e.shiftKey && document.activeElement === posledni) {
+        e.preventDefault()
+        prvni.focus()
+      }
+    }
+
+    panel.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = puvodniOverflow
+      panel.removeEventListener('keydown', onKeyDown)
+    }
+    // `view` je v závislostech schválně: přepnutím na registraci/obnovu hesla
+    // se vymění obsah okna, takže seznam zaostřitelných prvků je jiný.
+  }, [open, view, panelRef])
+}
+
 function useDismiss(
   open: boolean,
   close: () => void,
@@ -103,12 +159,15 @@ function LoginTrigger({
   // mezi stránkami. Stránky /registrace a /zapomenute-heslo zůstávají jako
   // plnohodnotná záložní cesta (bez JavaScriptu, z odkazu v e-mailu…).
   const [view, setView] = useState<View>('login')
-  const close = () => {
+  // `useCallback`: `close` chodí do efektů s posluchači; bez stabilní reference
+  // by se odebíraly a přidávaly při každém překreslení.
+  const close = useCallback(() => {
     setOpen(false)
     setView('login')
-  }
+  }, [])
   const triggerRef = useRef<HTMLAnchorElement>(null)
   const panelRef = useDismiss(open, close, triggerRef)
+  useModalBehavior(open, panelRef, view)
   const titleId = useId()
 
   // Okno umí otevřít i odkaz „přihlas se" u formuláře komentáře/recenze —
@@ -263,7 +322,6 @@ function AccountMenu({ user }: { user: CurrentUser }) {
       {open && (
         <div
           ref={panelRef}
-          role="menu"
           className="absolute right-0 top-[calc(100%+10px)] z-[300] w-[248px] overflow-hidden rounded-xl bg-white shadow-[0_12px_32px_rgba(15,30,50,0.20)] ring-1 ring-black/5 animate-in fade-in slide-in-from-top-1 duration-150 motion-reduce:animate-none"
         >
           <div className="flex items-center gap-3 border-b border-[#eef1f4] px-4 py-3.5">
@@ -282,7 +340,6 @@ function AccountMenu({ user }: { user: CurrentUser }) {
           {user.profileHref && (
             <Link
               href={user.profileHref}
-              role="menuitem"
               onClick={() => setOpen(false)}
               className="flex items-center gap-3 px-4 py-3 text-[14.5px] text-[#2c3643] transition-colors hover:bg-[#f5f8fb]"
             >
@@ -293,7 +350,6 @@ function AccountMenu({ user }: { user: CurrentUser }) {
 
           <Link
             href="/nastaveni"
-            role="menuitem"
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 px-4 py-3 text-[14.5px] text-[#2c3643] transition-colors hover:bg-[#f5f8fb]"
           >
@@ -306,7 +362,6 @@ function AccountMenu({ user }: { user: CurrentUser }) {
           <form action={logoutAction} className="border-t border-[#eef1f4]">
             <button
               type="submit"
-              role="menuitem"
               className="flex w-full items-center gap-3 px-4 py-3 text-left text-[14.5px] text-[#2c3643] transition-colors hover:bg-[#f5f8fb]"
             >
               <LogOut className="h-4 w-4 text-[#215491]" aria-hidden="true" />

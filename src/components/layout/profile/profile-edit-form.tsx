@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { updateProfileAction, type ProfileFormState } from '@/lib/profile-actions'
+import { AVATAR_ACCEPT, MAX_DESCRIPTION, MAX_NAME, MAX_URL } from '@/lib/profile-limits'
 
 /**
  * Úprava vlastního profilu PŘÍMO na profilu.
@@ -17,8 +18,6 @@ import { updateProfileAction, type ProfileFormState } from '@/lib/profile-action
  * ukládání sice vypadá moderně, ale člověk pak neví, jestli se změna uložila,
  * hůř se z něj vzpamatovává při chybě a špatně se ovládá z klávesnice.
  */
-
-const MAX_DESCRIPTION = 1000
 
 function Field({
   id,
@@ -110,7 +109,7 @@ export function ProfileEditForm({
               id={avatarId}
               type="file"
               name="avatar"
-              accept="image/jpeg,image/png,image/webp"
+              accept={AVATAR_ACCEPT}
               className="peer sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0]
@@ -149,7 +148,7 @@ export function ProfileEditForm({
               id={firstNameId}
               name="firstName"
               type="text"
-              maxLength={80}
+              maxLength={MAX_NAME}
               defaultValue={firstName ?? ''}
               autoComplete="given-name"
               className={inputClass}
@@ -160,7 +159,7 @@ export function ProfileEditForm({
               id={lastNameId}
               name="lastName"
               type="text"
-              maxLength={80}
+              maxLength={MAX_NAME}
               defaultValue={lastName ?? ''}
               autoComplete="family-name"
               className={inputClass}
@@ -197,7 +196,7 @@ export function ProfileEditForm({
               name="myWebUrl"
               type="text"
               inputMode="url"
-              maxLength={200}
+              maxLength={MAX_URL}
               defaultValue={myWebUrl ?? ''}
               placeholder="www.mujweb.cz"
               className={inputClass}

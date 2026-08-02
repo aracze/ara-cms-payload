@@ -1,9 +1,7 @@
 import { cache } from 'react'
 import { cookies as nextCookies, headers as nextHeaders } from 'next/headers'
 import { getDb } from './db'
-
-/** Cookie, ve které Payload nosí token (bez `cookiePrefix` v configu = `payload`). */
-const TOKEN_COOKIE = 'payload-token'
+import { TOKEN_COOKIE } from './session-cookie'
 
 /**
  * Přihlášený uživatel pro VEŘEJNÝ web.

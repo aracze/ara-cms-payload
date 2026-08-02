@@ -29,6 +29,35 @@ const isAdminOrSelfFieldAccess: FieldAccess = ({ req: { user }, id }) => {
   return user.id === id
 }
 
+/**
+ * Adresa webu pro odkazy v e-mailech.
+ *
+ * ŽÁDNÝ tichý fallback na localhost: kdyby proměnná v produkci chyběla,
+ * odkazy na potvrzení účtu i na nové heslo by vedly na localhost a nikdo by
+ * si toho nevšiml, dokud by se lidé nezačali ozývat. Radši spadne rovnou.
+ * V dev režimu localhost dává smysl, tam ho tedy necháváme.
+ */
+function emailBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL?.trim()
+  if (raw) return raw.replace(/\/$/, '')
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Chybí NEXT_PUBLIC_PAYLOAD_BASE_URL — bez ní by odkazy v e-mailech vedly na localhost.',
+    )
+  }
+  return 'http://localhost:3000'
+}
+
+/** Text od uživatele do HTML e-mailu jen ošetřený — jméno si volí sám. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
@@ -57,11 +86,8 @@ export const Users: CollectionConfig = {
       generateEmailSubject: () => 'Nastavení nového hesla na Ara.cz',
       generateEmailHTML: (args) => {
         const token = (args as { token?: string } | undefined)?.token ?? ''
-        const base = (process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL || 'http://localhost:3000').replace(
-          /\/$/,
-          '',
-        )
-        const url = `${base}/nove-heslo?token=${token}`
+        const base = emailBaseUrl()
+        const url = `${base}/nove-heslo?token=${encodeURIComponent(token)}`
         return `
           <p>Ahoj,</p>
           <p>někdo (snad ty) požádal o nové heslo k účtu na Ara.cz. Nastavíš si ho tímhle odkazem:</p>
@@ -75,12 +101,9 @@ export const Users: CollectionConfig = {
       generateEmailSubject: () => 'Potvrď svůj účet na Ara.cz',
       // Odkaz míří na VEŘEJNÝ web, ne do administrace (výchozí chování Payloadu).
       generateEmailHTML: ({ token, user }) => {
-        const base = (process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL || 'http://localhost:3000').replace(
-          /\/$/,
-          '',
-        )
-        const url = `${base}/registrace/potvrzeni?token=${token}`
-        const name = (user as { username?: string })?.username ?? ''
+        const base = emailBaseUrl()
+        const url = `${base}/registrace/potvrzeni?token=${encodeURIComponent(token)}`
+        const name = escapeHtml((user as { username?: string })?.username ?? '')
         return `
           <p>Ahoj${name ? ' ' + name : ''},</p>
           <p>vítej na Ara.cz! Potvrď prosím svůj e-mail kliknutím na odkaz:</p>
