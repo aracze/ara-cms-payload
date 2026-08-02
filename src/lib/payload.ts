@@ -1064,7 +1064,8 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
         title: true,
         slug: true,
         documentId: true,
-        text: true,
+        // `text` tu ZÁMĚRNĚ není: karta článku na profilu ho nezobrazuje, ale
+        // načítal by celé rich texty až 500 článků a ukládal je do cache.
         featuredImage: true,
         mainPage: true,
         publishedAt: true,

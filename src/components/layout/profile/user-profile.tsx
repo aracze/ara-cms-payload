@@ -101,7 +101,8 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
 
   // Střed mapy = STŘED OBÁLKY všech bodů (ne jejich průměr — jediná hustá
   // oblast by průměr přetáhla k sobě a body na druhé straně světa by vypadly
-  // z výřezu). Zoom jen zhruba podle rozpětí; komponenta mapy neumí fitBounds.
+  // z výřezu). Výřez si mapa u VÍCE bodů dorámuje sama (`fitToMarkers`), tohle
+  // je jen výchozí stav pro první vykreslení.
   const lats = profile.mapPins.map((p) => p.lat)
   const lngs = profile.mapPins.map((p) => p.lng)
   const mapCenter = profile.mapPins.length
@@ -113,7 +114,20 @@ export function UserProfile({ profile }: { profile: UserProfileData }) {
   const span = profile.mapPins.length
     ? Math.max(Math.max(...lats) - Math.min(...lats), Math.max(...lngs) - Math.min(...lngs))
     : 360
-  const mapZoom = span > 120 ? 1 : span > 60 ? 2 : span > 25 ? 3 : span > 10 ? 4 : 5
+  // Jediný bod má rozpětí 0 a `fitToMarkers` se na něj nevztahuje (rámuje až od
+  // dvou bodů), takže by mapa zůstala natrvalo oddálená na měřítko státu.
+  const mapZoom =
+    profile.mapPins.length === 1
+      ? 10
+      : span > 120
+        ? 1
+        : span > 60
+          ? 2
+          : span > 25
+            ? 3
+            : span > 10
+              ? 4
+              : 5
 
   return (
     <>
