@@ -15,6 +15,7 @@
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "promote:admin": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/promote-admin.ts",
     "backfill:verified": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/backfill-verified.ts",
+    "cleanup:avatars": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/cleanup-avatars.ts",
     "migrate:user-name": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/migrate-user-name.ts",
     "migrate:avatars": "cross-env NODE_OPTIONS=--no-deprecation node --env-file=.env --import=tsx/esm scripts/migrate-avatars.ts",
     "migrate:users": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/migrate-users.ts",

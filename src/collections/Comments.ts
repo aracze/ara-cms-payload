@@ -44,8 +44,11 @@ export const Comments: CollectionConfig = {
       // Výsledek platí pro celý požadavek — pravidlo se během jednoho vykreslení
       // stránky vyhodnocuje víckrát (výpis komentářů, počty, recenze) a bez
       // téhle paměti by se drahé dotazy níž opakovaly.
-      const cache = (req.context ??= {}) as { anonCommentFilter?: Where }
-      if (cache.anonCommentFilter) return cache.anonCommentFilter
+      const cache = (req.context ??= {}) as { anonCommentFilter?: Where | false }
+      // `!== undefined`, ne pravdivostní test: do paměti se ukládá i zamítnutí
+      // (`false`). Bez toho by se po chybě dotazu zbytek požadavku pokoušel
+      // znovu a znovu a plnil log stejnou hláškou.
+      if (cache.anonCommentFilter !== undefined) return cache.anonCommentFilter
 
       try {
         // 1) Bez draft stránek není co skrývat (běžný stav).
@@ -127,6 +130,7 @@ export const Comments: CollectionConfig = {
         req.payload.logger.error(
           `Pravidlo čtení komentářů selhalo, anonymní čtení zamítnuto: ${err instanceof Error ? err.message : err}`,
         )
+        cache.anonCommentFilter = false
         return false
       }
     },

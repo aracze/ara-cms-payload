@@ -82,7 +82,7 @@ export async function changePasswordAction(
     // Zápis pod právy přihlášeného (`Users.update = isAdminOrSelf`), ne s obejitím
     // — kdyby se někdy pravidla změnila, platí i tady.
     const { user } = await payload.auth({ headers: await nextHeaders() })
-    if (!user || user.id !== me.id) {
+    if (!user || user.collection !== 'users' || user.id !== me.id) {
       return { status: 'error', message: 'Přihlášení vypršelo. Přihlas se prosím znovu.' }
     }
     await payload.update({
@@ -144,7 +144,7 @@ export async function deleteAccountAction(
 
   // Ověřená identita pro operace, které zvládnou běžet pod právy uživatele.
   const { user } = await payload.auth({ headers: await nextHeaders() })
-  if (!user || user.id !== me.id) {
+  if (!user || user.collection !== 'users' || user.id !== me.id) {
     return { status: 'error', message: 'Přihlášení vypršelo. Přihlas se prosím znovu.' }
   }
 

@@ -225,7 +225,7 @@ export function UserProfile({
               </h1>
             )}
             {/* Uživatelské jméno neopakujeme, když je zároveň zobrazeným jménem (uživatel
-                bez vyplněného jména a příjmení, např. „TravelPortal.cz"). Blok by
+                s prázdným polem `name`, např. „TravelPortal.cz"). Blok by
                 pak končil jménem natvrdo, takže místo uživatelského jména přijde tenká
                 linka — stejná, jakou mají titulky ostatních stránek webu. */}
             {editing ? (

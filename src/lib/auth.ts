@@ -24,7 +24,7 @@ export type CurrentUser = {
   /**
    * Podpis pod VEŘEJNÝM obsahem (komentáře, recenze) — uživatelské jméno.
    *
-   * Schválně NE jméno a příjmení: všech 229 podepsaných komentářů z původního
+   * Schválně NE celé jméno (`name`): všech 229 podepsaných komentářů z původního
    * webu je uložených s uživatelským jménem („jankonas"), takže podpis celým
    * jménem by u nových příspěvků vypadal jinak než u starých pod nimi.
    * Celé jméno patří do záhlaví profilu, kde ho člověk uvádí vědomě.
@@ -64,7 +64,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
     const payload = await getDb()
     const { user } = await payload.auth({ headers: await nextHeaders() })
-    if (!user) return null
+    // Kontrola kolekce, ne jen existence: kdyby někdy přibyla další kolekce
+    // s přihlašováním, její ID by se tady dohledalo jako CIZÍ účet v `users`.
+    if (!user || user.collection !== 'users') return null
 
     // Avatar chodí z auth jako id (bez populace) — dohledáme URL jedním čtením
     // a jen povolená pole. overrideAccess: true je tu v pořádku: čteme profil

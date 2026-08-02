@@ -98,7 +98,9 @@ export async function updateProfileAction(
   // Ověřená identita pro Local API. `getCurrentUser` vrací jen veřejný výřez,
   // ale pro `overrideAccess: false` potřebuje Payload celý dokument uživatele.
   const { user } = await payload.auth({ headers: await nextHeaders() })
-  if (!user || user.id !== me.id) {
+  // I kontrola kolekce — samotná shoda ID by při další přihlašovací kolekci
+  // mohla ukázat na cizí účet (viz getCurrentUser).
+  if (!user || user.collection !== 'users' || user.id !== me.id) {
     return { status: 'error', message: 'Přihlášení vypršelo. Přihlas se prosím znovu.' }
   }
 
@@ -176,6 +178,10 @@ export async function updateProfileAction(
     //
     // Proto se po uložení zeptáme, co na účtu SKUTEČNĚ je, a mažeme podle toho:
     // vyhráli jsme → pryč se starou, prohráli jsme → pryč s naší nepoužitou.
+    //
+    // Úplně to nedovře až souběh TŘÍ uložení (jedno odebírá fotku, druhé
+    // nahrává) — tam může jeden soubor zůstat bez vazby. Uvnitř požadavku to
+    // vyřešit nejde; na to je doběh `pnpm cleanup:avatars`.
     if (newAvatarId !== undefined) {
       let aktualniAvatarId: number | null = null
       try {

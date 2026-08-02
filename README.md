@@ -360,9 +360,11 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     ⚠️ Na rozdíl od `media` **nemají zálohu na R2**.
   - Server akce mají výchozí strop těla 1 MB — kvůli dvoumegovým fotkám je v `next.config.mjs`
     zvednutý `serverActions.bodySizeLimit` na 3 MB.
-  - ⚠️ **Nasazení — POŘADÍ KROKŮ**: (1) `pnpm migrate:user-name` (jméno + příjmení → `name`),
-    (2) teprve pak zahodit sloupce `first_name` / `last_name`, (3) převod avatarů (níž),
-    (4) `pnpm backfill:verified`. Opačné pořadí u prvních dvou kroků = ztráta jmen.
+  - ⚠️ **Nasazení — POŘADÍ KROKŮ**: (1) `pnpm backfill:verified` HNED po přenesení schématu
+    a JEŠTĚ NEŽ se pustí provoz — se zapnutým `auth.verify` se bez příznaku `_verified`
+    nepřihlásí nikdo včetně adminů; (2) `pnpm migrate:user-name` (jméno + příjmení → `name`);
+    (3) teprve pak zahodit sloupce `first_name` / `last_name` — opačné pořadí = ztráta jmen;
+    (4) převod avatarů (níž); (5) volitelně `pnpm cleanup:avatars` na osiřelé fotky.
   - ⚠️ **Nasazení**: převod stávajících avatarů z `media` dělá `pnpm migrate:avatars <mapa.json>`.
     Postup: (1) před přepnutím schématu vyexportovat mapu `users ⋈ media`, (2) vynulovat
     `users.avatar_id` (jinak selže výměna cizího klíče), (3) přepnout schéma, (4) spustit skript.
