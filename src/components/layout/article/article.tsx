@@ -53,9 +53,7 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
 
   // Author (safe public subset from the backend virtual field)
   const author = article.createdByPublic ?? null
-  const authorName = author
-    ? [author.firstName, author.lastName].filter(Boolean).join(' ') || author.username || null
-    : null
+  const authorName = author ? author.name || author.username || null : null
   const profileHref = author?.username ? `/profil/${author.username}` : null
   const rawAvatar = author?.avatar?.url
   const authorBio = author?.description || null

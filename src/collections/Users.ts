@@ -164,15 +164,18 @@ export const Users: CollectionConfig = {
       },
     },
     {
-      name: 'firstName',
-      type: 'text',
-      access: {
-        read: isAdminOrSelfFieldAccess,
-        update: isAdminOrSelfFieldAccess,
-      },
-    },
-    {
-      name: 'lastName',
+      // JEDNO pole na celé jméno, ne dvojice jméno + příjmení.
+      //
+      // Důvod je věcný: nikde v aplikaci se ty dvě části nepoužívají zvlášť —
+      // všech pět míst, kde se jméno zobrazuje, je zase slepí dohromady.
+      // A jména se na dvě kolonky spolehlivě nedělí: dvě příjmení, jen jedno
+      // jméno, tituly, jinde ve světě příjmení první. Jedno pole nikoho netlačí
+      // do tvaru, který jeho jméno nemá.
+      //
+      // Zobrazuje se v záhlaví profilu. Příspěvky podepisuje uživatelské jméno
+      // (viz `publicName` v src/lib/auth.ts), ne tohle.
+      name: 'name',
+      label: 'Jméno',
       type: 'text',
       access: {
         read: isAdminOrSelfFieldAccess,

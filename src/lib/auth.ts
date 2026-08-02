@@ -17,9 +17,9 @@ import { TOKEN_COOKIE } from './session-cookie'
 export type CurrentUser = {
   id: number
   username: string | null
-  firstName: string | null
-  lastName: string | null
-  /** Jméno k zobrazení ve vlastním účtu: jméno a příjmení, jinak uživatelské jméno. */
+  /** Celé jméno, jak si ho člověk vyplnil (nebo null). */
+  name: string | null
+  /** Jméno k zobrazení ve vlastním účtu: celé jméno, jinak uživatelské jméno. */
   displayName: string
   /**
    * Podpis pod VEŘEJNÝM obsahem (komentáře, recenze) — uživatelské jméno.
@@ -38,8 +38,7 @@ export type CurrentUser = {
 type RawAuthUser = {
   id: number
   username?: string | null
-  firstName?: string | null
-  lastName?: string | null
+  name?: string | null
   avatar?: { url?: string | null } | number | null
 }
 
@@ -74,14 +73,13 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       collection: 'users',
       id: user.id,
       depth: 1,
-      select: { username: true, firstName: true, lastName: true, avatar: true },
+      select: { username: true, name: true, avatar: true },
       overrideAccess: true,
     })) as unknown as RawAuthUser
 
-    const firstName = doc.firstName ?? null
-    const lastName = doc.lastName ?? null
+    const name = doc.name?.trim() || null
     const username = doc.username ?? null
-    const displayName = [firstName, lastName].filter(Boolean).join(' ') || username || 'Uživatel'
+    const displayName = name || username || 'Uživatel'
 
     return {
       // `Number`: Payload typuje id jako `number | string` (kvůli databázím
@@ -89,8 +87,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       // porovnání `me.id === profile.id` spolehlivé.
       id: Number(doc.id),
       username,
-      firstName,
-      lastName,
+      name,
       displayName,
       publicName: username || displayName,
       avatarUrl: doc.avatar && typeof doc.avatar === 'object' ? (doc.avatar.url ?? null) : null,

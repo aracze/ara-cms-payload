@@ -153,8 +153,7 @@ export interface User {
   id: number;
   legacyUserId?: number | null;
   username?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
+  name?: string | null;
   description?: string | null;
   myWebUrl?: string | null;
   avatar?: (number | null) | Avatar;
@@ -650,8 +649,7 @@ export interface PayloadMigration {
 export interface UsersSelect<T extends boolean = true> {
   legacyUserId?: T;
   username?: T;
-  firstName?: T;
-  lastName?: T;
+  name?: T;
   description?: T;
   myWebUrl?: T;
   avatar?: T;

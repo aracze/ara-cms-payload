@@ -22,7 +22,7 @@ import { AVATAR_MIME, MAX_AVATAR_BYTES, MAX_DESCRIPTION, MAX_NAME, MAX_URL } fro
 export type ProfileFormState = {
   status: 'idle' | 'error'
   message?: string
-  field?: 'firstName' | 'lastName' | 'description' | 'myWebUrl' | 'avatar'
+  field?: 'name' | 'description' | 'myWebUrl' | 'avatar'
 }
 
 function text(formData: FormData, key: string): string {
@@ -63,19 +63,15 @@ export async function updateProfileAction(
     return { status: 'error', message: 'Nejsi přihlášený. Přihlas se prosím znovu.' }
   }
 
-  const firstName = text(formData, 'firstName')
-  const lastName = text(formData, 'lastName')
+  const name = text(formData, 'name')
   const description = text(formData, 'description')
   const myWebUrl = text(formData, 'myWebUrl')
   const removeAvatar = formData.get('removeAvatar') === '1'
   const upload = formData.get('avatar')
   const file = upload instanceof File && upload.size > 0 ? upload : null
 
-  if (firstName.length > MAX_NAME) {
-    return { status: 'error', field: 'firstName', message: 'Jméno je příliš dlouhé.' }
-  }
-  if (lastName.length > MAX_NAME) {
-    return { status: 'error', field: 'lastName', message: 'Příjmení je příliš dlouhé.' }
+  if (name.length > MAX_NAME) {
+    return { status: 'error', field: 'name', message: 'Jméno je příliš dlouhé.' }
   }
   if (description.length > MAX_DESCRIPTION) {
     return {
@@ -145,8 +141,7 @@ export async function updateProfileAction(
         collection: 'users',
         id: me.id,
         data: {
-          firstName: firstName || null,
-          lastName: lastName || null,
+          name: name || null,
           description: description || null,
           myWebUrl: myWebUrl || null,
           ...(newAvatarId !== undefined ? { avatar: newAvatarId } : {}),

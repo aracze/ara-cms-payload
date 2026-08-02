@@ -238,8 +238,16 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     uložených s uživatelským jménem, takže podpis celým jménem by u nových příspěvků vypadal
     jinak než u starých pod nimi. Celé jméno patří do záhlaví profilu. „Píšeš jako…" nad
     formulářem ukazuje PŘESNĚ ten podpis, který se pod příspěvkem objeví.
+  - **Jméno je JEDNO pole** (`name`), ne dvojice jméno + příjmení. Nikde v aplikaci se ty dvě
+    části nepoužívaly zvlášť (všech pět míst je zase slepilo dohromady) a jména se na dvě
+    kolonky spolehlivě nedělí — dvě příjmení, mononyma, tituly, jinde ve světě příjmení první.
+    Převod starých dat dělá `pnpm migrate:user-name` (25 účtů); pole `firstName`/`lastName`
+    zůstávají dočasně skrytá a jen ke čtení, než se sloupce zahodí i v produkci.
   - **Úprava profilu probíhá na profilu** (`?upravit=1`), ne na samostatné stránce nastavení:
-    člověk mění to, na co se dívá. Tlačítko je skutečný odkaz, takže to funguje i bez
+    člověk mění to, na co se dívá. Profil se přitom NEMĚNÍ na formulář — zůstává profilem
+    a jen jeho části jdou přepsat na svém místě (fotka v hlavičce má překryv s fotoaparátem,
+    jméno je pole v nadpisu, medailonek a web mají čárkovaný rámeček). Celou stránku obtáčí
+    jeden `<form>` (`ProfileEditFrame`) a ukládá se z lišty přišpendlené dole. Tlačítko je skutečný odkaz, takže to funguje i bez
     JavaScriptu; ukládá se výslovně tlačítkem (automatické ukládání po opuštění políčka nedává
     jistotu, že se změna uložila, a hůř se z něj vzpamatovává při chybě). Zápis dělá
     `updateProfileAction` (`src/lib/profile-actions.ts`): identita VÝHRADNĚ ze session (z
@@ -352,6 +360,9 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     ⚠️ Na rozdíl od `media` **nemají zálohu na R2**.
   - Server akce mají výchozí strop těla 1 MB — kvůli dvoumegovým fotkám je v `next.config.mjs`
     zvednutý `serverActions.bodySizeLimit` na 3 MB.
+  - ⚠️ **Nasazení — POŘADÍ KROKŮ**: (1) `pnpm migrate:user-name` (jméno + příjmení → `name`),
+    (2) teprve pak zahodit sloupce `first_name` / `last_name`, (3) převod avatarů (níž),
+    (4) `pnpm backfill:verified`. Opačné pořadí u prvních dvou kroků = ztráta jmen.
   - ⚠️ **Nasazení**: převod stávajících avatarů z `media` dělá `pnpm migrate:avatars <mapa.json>`.
     Postup: (1) před přepnutím schématu vyexportovat mapu `users ⋈ media`, (2) vynulovat
     `users.avatar_id` (jinak selže výměna cizího klíče), (3) přepnout schéma, (4) spustit skript.

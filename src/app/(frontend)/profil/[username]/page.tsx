@@ -50,8 +50,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const me = await getCurrentUser()
   if (!hasPublicContent(profile) && me?.id !== profile.id) notFound()
 
-  const displayName =
-    [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.username
+  const displayName = profile.name || profile.username
 
   return {
     title: displayName,
