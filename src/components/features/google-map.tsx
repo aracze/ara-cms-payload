@@ -18,6 +18,12 @@ interface GoogleMapProps {
   zoom: number
   /** Výška mapy (CSS hodnota). Bez zadání vysoká mapa vedle výpisu cílů. */
   height?: string
+  /**
+   * Dorámovat výřez na všechny piny (fitBounds) — `centerLat`/`centerLng`/`zoom`
+   * pak slouží jen jako výchozí stav. Zapíná to profil autora, kde jsou body po
+   * celém světě; stránky míst si střed a zoom volí samy, proto je to volitelné.
+   */
+  fitToMarkers?: boolean
 }
 
 const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
@@ -26,6 +32,8 @@ const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
 // google.maps.Marker (viz initMap) — piny se vždy zobrazí.
 const GOOGLE_MAPS_MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || ''
 const MARKER_SIZE = 44
+/** Strop přiblížení při `fitToMarkers` (jinak by pár blízkých bodů zoomovalo na ulice). */
+const MAX_FIT_ZOOM = 12
 
 // Kruhová „avatarová" ikona markeru z Cloudinary (r_max = kruh, bo_3px = bílý rámeček).
 // Pro ne-Cloudinary URL vrací originál (kruh/rámeček pak doplní CSS u obsahu markeru).
@@ -198,6 +206,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
   centerLng,
   zoom,
   height,
+  fitToMarkers = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
@@ -384,7 +393,25 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
 
       markersRef.current.push(marker)
     }
-  }, [markers, centerLat, centerLng, zoom])
+
+    // Výřez podle bodů: `centerLat`/`centerLng`/`zoom` se pak berou jen jako
+    // výchozí hodnoty pro první vykreslení a mapa se hned dorámuje na všechny
+    // piny. Používá to profil autora, kde jsou body rozeseté po světě a odhad
+    // zoomu ze rozpětí souřadnic nechával polovinu mapy prázdnou.
+    if (fitToMarkers && markers.length > 1) {
+      const bounds = new googleApi.maps.LatLngBounds()
+      for (const m of markers) bounds.extend({ lat: m.lat, lng: m.lng })
+      // Odsazení, ať piny (44 px, ukotvené dolním středem) nelepí na okraje.
+      map.fitBounds(bounds, { top: 56, right: 40, bottom: 24, left: 40 })
+      // Strop přiblížení: u bodů blízko sebe by fitBounds zoomoval až na ulice.
+      // `addListenerOnce` na 'idle' = až po dopočítání výřezu; posluchač se
+      // odstraní sám a mapa se při odmountu ruší celá.
+      googleApi.maps.event.addListenerOnce(map, 'idle', () => {
+        const current = map.getZoom?.()
+        if (typeof current === 'number' && current > MAX_FIT_ZOOM) map.setZoom(MAX_FIT_ZOOM)
+      })
+    }
+  }, [markers, centerLat, centerLng, zoom, fitToMarkers])
 
   // Google Maps SDK (stovky kB) natáhneme až když se kontejner mapy přiblíží
   // viewportu. Na stránkách, kde je mapa pod přehybem, se tak SDK ani skript

@@ -163,3 +163,30 @@ export const revalidateCommentAfterDelete: CollectionAfterDeleteHook = async ({ 
   await safeRevalidate(['comments', ...commentTargetTags(doc as CommentLikeDoc)])
   return doc
 }
+
+type UserLikeDoc = { username?: string | null }
+
+/** Tag veřejného profilu uživatele (/profil/<username>). */
+const userProfileTags = (doc: UserLikeDoc | undefined | null): string[] =>
+  typeof doc?.username === 'string' && doc.username ? ['user_profile_' + doc.username] : []
+
+// Změna uživatele (popis, avatar, jméno…) invaliduje jeho veřejný profil.
+// `previousDoc` pokrývá přejmenování username (starý profil zmizí z cache).
+// Pozn.: hook se spouští i při auth operacích (loginAttempts…) — invalidace
+// je levná, přesnější filtrování by za tu složitost nestálo.
+export const revalidateUserAfterChange: CollectionAfterChangeHook = async ({
+  doc,
+  previousDoc,
+}) => {
+  await safeRevalidate([
+    'users',
+    ...userProfileTags(doc as UserLikeDoc),
+    ...userProfileTags(previousDoc as UserLikeDoc),
+  ])
+  return doc
+}
+
+export const revalidateUserAfterDelete: CollectionAfterDeleteHook = async ({ doc }) => {
+  await safeRevalidate(['users', ...userProfileTags(doc as UserLikeDoc)])
+  return doc
+}

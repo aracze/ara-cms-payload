@@ -1,5 +1,6 @@
 import type { Access, CollectionConfig, FieldAccess } from 'payload'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
+import { revalidateUserAfterChange, revalidateUserAfterDelete } from '../hooks/revalidation'
 
 const isAdmin: Access = ({ req: { user } }) => {
   return Boolean(user?.roles?.includes('admin'))
@@ -40,6 +41,12 @@ export const Users: CollectionConfig = {
     update: isAdminOrSelf,
     delete: isAdmin,
     create: isAdmin,
+  },
+  hooks: {
+    // Okamžitá invalidace veřejného profilu (/profil/<username>) při změně
+    // uživatele v adminu — viz src/hooks/revalidation.ts.
+    afterChange: [revalidateUserAfterChange],
+    afterDelete: [revalidateUserAfterDelete],
   },
   fields: [
     // Email added by default

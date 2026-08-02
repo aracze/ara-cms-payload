@@ -208,6 +208,72 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
   - Výchozím identifikátorem je e-mail.
   - Kolekce je připravena na rozšíření o role (např. admin, editor) a další uživatelské údaje.
   - V administraci lze spravovat hesla a přístupové údaje.
+  - **Veřejný profil** (`/profil/<username>`, stejná adresa jako legacy web): hero s vlnkou
+    jako každá jiná stránka — výchozí **klidná mlhavá fotka** (konstanta `PROFILE_COVER_URL`
+    v `src/components/layout/profile/user-profile.tsx`; výměna = přepsání jedné Cloudinary
+    adresy) s dvojím jemným ztmavením (do středu kvůli jménu + shora pod hlavičku webu, jinak
+    bílé menu leželo na světlé obloze). Než se fotka načte, překryje pozadí **rozmazaný náhled
+    téže fotky** (`PROFILE_COVER_BLUR`, 20 × 13 px, ~340 B přímo v HTML, přes `placeholder="blur"`
+    v `StaticHeroImage`) — proto při načítání neproblikne holá barva; po výměně fotky je nutné
+    náhled přegenerovat (příkaz je v komentáři u konstanty). Pod ním zůstává `bg-[#3b444f]`
+    jako u všech ostatních hlaviček.
+  - Identitu v hlavičce drží **jeden blok na ose stránky**: avatar (84 px), pod ním jméno
+    a `@username`. Když uživatel nemá vyplněné jméno a příjmení, je jméno = přezdívka
+    (např. „TravelPortal.cz") a místo `@username` se vykreslí **tenká linka** jako u titulků
+    ostatních stránek, aby blok nekončil natvrdo.
+    Blok scelují těsná odsazení a **plynulý tmavý „kužel"** — radiální gradient
+    výrazně širší než obsah, který mizí do neurčita, takže nemá hranu čitelnou jako rámeček
+    nebo tlačítko, a zároveň drží kontrast i při výměně fotky za světlejší. Naměřeno: jméno
+    10,19 : 1, `@username` 10,80 : 1, menu webu 7,14 : 1 — WCAG AA. Kužel MUSÍ být oříznutý
+    (`overflow-hidden` na bloku), jinak prosvítá pod vlnkou do bílé části jako šedá šmouha.
+    Blok sedí na **optickém** středu, ne matematickém (`pb-2`): vlnka ukrajuje spodních ~70 px
+    hlavičky, takže přesně vystředěný blok působí posazený nízko. Naměřeno: avatar začíná
+    24 px pod textem menu webu (box hlavičky končí na 65 px, text menu na 46 px).
+  - Cesta k tomuto řešení (ať se neopakují slepé uličky): nejdřív ve fotce stály čtyři úrovně
+    nad sebou (avatar, jméno, linka, „@jméno · Cestovní průvodce") → přeplněné, role navíc
+    stejná na všech profilech. Pak avatar sjel na vlnku a ve fotce zůstalo jen jméno → čisté,
+    ale avatar odtržený od jména nedržel pohromadě. Průhledná „pilulka" kolem obojího se čte
+    jako tlačítko. Následuje medailonek (popis „o mně" + odkaz na vlastní web) a **vše na jedné
+    stránce**: statistiky fungují jako kotvy na sekce.
+  - Pod statistikami je **mapa přes celou šířku okna** (360 px) se všemi místy a cíli autora,
+    která mají v CMS souřadnice (`mapPins` z `fetchUserProfile` — bere je ze STEJNÝCH dat jako
+    karty, žádný dotaz navíc, včetně náhledové fotky, aby mapa kreslila kulaté piny s fotkou
+    a bublinu s náhledem jako na stránkách míst). Výřez si mapa dorámuje na všechny piny sama
+    přes `fitToMarkers` (volitelný prop `GoogleMap`, strop přiblížení `MAX_FIT_ZOOM = 12`;
+    stránky míst si střed a zoom dál volí samy) — `centerLat`/`centerLng`/`zoom` z profilu jsou
+    jen výchozí stav pro první vykreslení (střed obálky bodů, ne průměr, který by hustá oblast
+    přetáhla k sobě).
+    ZÁMĚRNĚ jedna mapa pro celý profil, ne mapa u každé sekce jako u výpisů míst: body autora
+    jsou po celém světě, takže mapa vedle mřížky by byla malá a nečitelná, ubrala by kartám
+    sloupec a znamenala dvě instance Google Maps. Články na mapě nejsou — nemají vlastní
+    souřadnice, jen souřadnice svého místa, takže by piny jen zdvojily. Pozn.: komponenta mapy
+    neumí seskupování (clustering), takže u autorů se stovkami bodů je mapa hustá.
+  - Pořadí sekcí: **Místa → Turistické cíle → Články → Recenze → Komentáře** (od nejobecnějšího
+    přínosu k nejdrobnějšímu); statistiky nahoře mají stejný sled, takže kotvy vedou „dopředu".
+  - Všech pět sekcí má **jeden vizuální jazyk**: vycentrovaný nadpis s červenou linkou
+    a podtitulkem + mřížka karet 280 px, sekce se střídavě podkládají šedou. U nadpisu ZÁMĚRNĚ
+    není počet (souhrn nad mapou ho už uvádí a působil tam jako přebytek) — kolik položek
+    zbývá, říká až tlačítko pod mřížkou: „Zobrazit 26 dalších míst" (po 8; skloňování řeší
+    `pluralCs` v `src/lib/utils.ts`, tvary se předávají přes `moreNoun`). **Místa, cíle i články** používají tutéž fotokartu (`PhotoCard` v `profile-cards.tsx`)
+    jako výpis míst na stránkách míst — fotka na celou kartu, odznak typu (špendlík / list
+    papíru), ztmavení zdola, bílý název a pod ním **cesta v hierarchii** („Asie / Myanmar"; u
+    článku cesta jeho rodičovské stránky). Karty bez fotky a karty recenzí/komentářů jsou bílé
+    s plným modrým odznakem, názvem cíle, hvězdičkami u recenzí a podpisem „Recenzováno /
+    Komentováno: datum". Text na kartě plynule **vybledá** (`CardText`) — pevný počet řádků
+    (`line-clamp`) při dvouřádkovém názvu přetékal a ořezával text v půli řádku.
+  - Mřížka má **nejvýš 4 dlaždice** (`1 → 2 od sm → 3 od lg → 4 od xl`). Naměřené šířky karty:
+    358 px (390), 324 px (768), 293 px (1024), 278 px (od 1280) — vždy krajina až čtverec, na
+    který jsou nastavené i Cloudinary ořezy (`PlaceCardImage` kreslí desktop 1:1). Pět sloupců
+    by dalo 218 px (poměr 0,78:1 = portrét) a jen ~27 znaků na řádek v textové kartě místo 36;
+    ke 4 sloupcům se proto přechází až od 1280 px, protože při 1024 px by měly jen ~214 px.
+    Výpis míst na webu má 3 sloupce jen ve variantě S MAPOU (zabírá 44 % šířky) — profil mapu
+    nemá, takže 4 odpovídá pravidlu webu pro mřížku na celou šířku.
+  - Data skládá `fetchUserProfile` (`src/lib/payload.ts`) VÝHRADNĚ z bezpečných polí (nikdy
+    e-mail/role; obsah jen publikovaný přes `overrideAccess: false`), dlouhá těla recenzí
+    a komentářů krátí na 400 znaků; cache invaliduje hook na Users (`user_profile_<username>`).
+    Stránka je `noindex, follow` (jako legacy), profil bez veřejného obsahu vrací 404 a staré
+    podadresy (`/profil/<username>/clanky`, `/mista`, `/recenze`…) se trvale přesměrovávají
+    na kotvy profilu (`src/app/(frontend)/profil/[username]/[...rest]`).
 
 - **Media (Správa souborů a obrázků)**:
   - Centrální úložiště pro všechny nahrané soubory.

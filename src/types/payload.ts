@@ -238,6 +238,82 @@ export type _PageCategoryMatchesSchema = _AssertTrue<
   `${PageCategory}` extends GeneratedPage['category'] ? true : false
 >
 
+// ─── Veřejný profil uživatele (/profil/<username>) ──────────────────────────
+// Vše skládá datová vrstva (fetchUserProfile) jen z BEZPEČNÝCH polí — nikdy
+// e-mail, role ani interní vazby. Stejný princip jako createdByPublic.
+
+/**
+ * Karta článku na profilu. Stejný tvar jako karta místa (fotka + název + cesta
+ * v hierarchii) — profil má jeden vizuální jazyk, takže perex nepotřebuje.
+ */
+export interface ProfileArticleItem {
+  key: string
+  title: string
+  href: string
+  imageUrl: string | null
+  /** Kde článek žije — cesta rodičovské stránky („Asie / Myanmar"). */
+  path: string | null
+}
+
+/** Bod na mapě profilu (místo nebo turistický cíl se souřadnicemi). */
+export interface ProfileMapPin {
+  id: number
+  title: string
+  fullSlug: string
+  lat: number
+  lng: number
+  /**
+   * Náhledová fotka. S ní kreslí mapa kulatý „avatarový" pin a v bublině
+   * fotku místa; bez ní obecný červený pin a v bublině „Bez náhledu".
+   */
+  imageUrl: string | null
+}
+
+/** Karta místa / turistického cíle na profilu. */
+export interface ProfilePlaceItem {
+  id: number
+  title: string
+  fullSlug: string
+  imageUrl: string | null
+  /** Cesta předků pro popisek pod názvem („USA / San Francisco"), jinak null. */
+  path: string | null
+}
+
+/** Recenze na profilu — orientovaná na CÍL (autor je vlastník profilu). */
+export interface ProfileReviewItem {
+  id: number
+  targetTitle: string
+  targetHref: string
+  rating: number
+  body: string
+  reviewedAt: string | null
+}
+
+/** Komentář na profilu — orientovaný na cíl (článek/stránku), pod který patří. */
+export interface ProfileCommentItem {
+  id: number
+  targetTitle: string
+  targetHref: string
+  body: string
+  commentedAt: string | null
+}
+
+export interface UserProfileData {
+  username: string
+  firstName: string | null
+  lastName: string | null
+  description: string | null
+  myWebUrl: string | null
+  avatarUrl: string | null
+  articles: ProfileArticleItem[]
+  touristPoints: ProfilePlaceItem[]
+  places: ProfilePlaceItem[]
+  reviews: ProfileReviewItem[]
+  comments: ProfileCommentItem[]
+  /** Body na mapu „kde všude jsem byl" — místa i cíle, které mají souřadnice. */
+  mapPins: ProfileMapPin[]
+}
+
 export interface FooterNavItem {
   label: string
   href: string
