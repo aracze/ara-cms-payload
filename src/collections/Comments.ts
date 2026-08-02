@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { isAdmin } from '../access/isAdmin'
 import { populateCommentLabel } from '../hooks/populateCommentLabel'
 import { populateCommentAuthorPublic } from '../hooks/populateCommentAuthorPublic'
@@ -32,7 +33,12 @@ export const Comments: CollectionConfig = {
     // komentář není. Nově se to řeší dvěma malými dotazy a plný seznam se staví
     // jen tehdy, když na draftu opravdu něco visí.
     read: async ({ req }): Promise<boolean | Where> => {
-      if (req.user) return true
+      // Vidět úplně VŠECHNO (spam i komentáře na rozpracovaných stránkách) smí
+      // jen redakce. Dokud se přihlašovali jen redaktoři, stačilo `if (req.user)`;
+      // od chvíle, kdy se přihlašují i čtenáři, by jim ta zkratka spam a drafty
+      // odhalila. Běžný přihlášený uživatel tedy prochází stejným filtrem jako
+      // nepřihlášený (drahé dotazy níž se počítají jednou za požadavek).
+      if (isAdminOrEditor({ req })) return true
       const notSpam: Where = { status: { not_equals: 'spam' } }
 
       // Výsledek platí pro celý požadavek — pravidlo se během jednoho vykreslení

@@ -172,18 +172,50 @@ export async function updateProfileAction(
       throw err
     }
 
-    // Vyměněnou fotku uklidíme, ať v úložišti neleží mrtvé soubory. Selhání
-    // úklidu není důvod hlásit uživateli chybu — profil je uložený.
-    if (newAvatarId !== undefined && previousAvatarId) {
+    // ÚKLID PO VÝMĚNĚ FOTKY — s ohledem na souběh.
+    //
+    // Když člověk odešle formulář dvakrát rychle po sobě (dvě karty, netrpělivé
+    // dvojkliknutí), obě uložení si přečtou TÉŽ starou fotku, obě nahrají novou
+    // a obě přepíšou účet. Vyhraje ta pozdější. Kdybychom slepě mazali „starou"
+    // fotku, poražený by smazal cizí starou a svoji novou by nechal viset.
+    //
+    // Proto se po uložení zeptáme, co na účtu SKUTEČNĚ je, a mažeme podle toho:
+    // vyhráli jsme → pryč se starou, prohráli jsme → pryč s naší nepoužitou.
+    if (newAvatarId !== undefined) {
+      let aktualniAvatarId: number | null = null
       try {
-        await payload.delete({
-          collection: 'avatars',
-          id: previousAvatarId,
-          user,
-          overrideAccess: false,
+        const po = await payload.findByID({
+          collection: 'users',
+          id: me.id,
+          depth: 0,
+          select: { avatar: true },
+          overrideAccess: true,
         })
+        const raw = (po as { avatar?: number | { id?: number } | null }).avatar
+        aktualniAvatarId = typeof raw === 'number' ? raw : (raw?.id ?? null)
       } catch (err) {
-        console.error('[profil] starý avatar se nepodařilo smazat:', err)
+        console.error('[profil] kontrola aktuální fotky selhala:', err)
+      }
+
+      const kSmazani =
+        aktualniAvatarId === newAvatarId
+          ? previousAvatarId // uložilo se naše → stará je k ničemu
+          : typeof newAvatarId === 'number'
+            ? newAvatarId // přepsal nás někdo jiný → naše je k ničemu
+            : null
+
+      // Selhání úklidu není důvod hlásit uživateli chybu — profil je uložený.
+      if (kSmazani) {
+        try {
+          await payload.delete({
+            collection: 'avatars',
+            id: kSmazani,
+            user,
+            overrideAccess: false,
+          })
+        } catch (err) {
+          console.error('[profil] nepoužitou fotku se nepodařilo smazat:', err)
+        }
       }
     }
   } catch (err) {
