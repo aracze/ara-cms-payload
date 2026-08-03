@@ -4,7 +4,9 @@ import { StaticHeroOverlay } from '@/components/features/static-hero-overlay'
 import { StaticHeroTitle } from './static-hero-title'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { WhatsNewSection } from './whats-new-section'
-import { fetchLatestActivity } from '@/lib/payload'
+import { InspirationSection } from './inspiration-section'
+import { InspirationPlacesSection } from './inspiration-places-section'
+import { fetchLatestActivity, fetchHomepageInspiration } from '@/lib/payload'
 
 // Konfigurovatelné přes env (fallback zachovává původní chování), ať URL není
 // natvrdo v kódu.
@@ -13,7 +15,11 @@ const HOMEPAGE_HERO_IMAGE =
   'https://res.cloudinary.com/ara/image/upload/homepage.jpg'
 
 export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
-  const activity = await fetchLatestActivity()
+  // Obě sekce nezávisle — pomalejší z nich nesmí blokovat začátek té druhé.
+  const [activity, inspiration] = await Promise.all([
+    fetchLatestActivity(),
+    fetchHomepageInspiration(),
+  ])
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -35,14 +41,25 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
       <main
         id="obsah"
         tabIndex={-1}
-        className="max-w-7xl mx-auto px-4 md:px-12 py-16 text-center focus:outline-none"
+        // w-full je NUTNÉ: main je flex item (rodič flex-col) a mx-auto vypíná
+        // stretch — bez explicitní šířky se main sizuje podle min-content
+        // obsahu (např. truncate řádky v „Co je nového") a na mobilu přetéká.
+        className="w-full max-w-7xl mx-auto px-4 md:px-12 py-16 text-center focus:outline-none"
       >
         <h2 className="text-3xl font-bold text-gray-800 mb-6 uppercase tracking-wider">
           {homepage?.title}
         </h2>
 
         <div className="mt-10">
+          <InspirationSection data={inspiration} />
+        </div>
+
+        <div className="mt-14">
           <WhatsNewSection items={activity} />
+        </div>
+
+        <div className="mt-16">
+          <InspirationPlacesSection places={inspiration?.places ?? []} />
         </div>
       </main>
     </div>

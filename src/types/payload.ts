@@ -319,6 +319,41 @@ export interface ActivityItem {
   rating: number | null
 }
 
+// ─── Homepage: sekce „Inspirace a rady na cestu" (schválená varianta B) ─────
+// Vše skládá datová vrstva (fetchHomepageInspiration) — komponenta jen kreslí.
+
+/** Řádek bočního seznamu rad / dlaždice místa v sekci „Inspirace na cestu". */
+export interface InspirationLink {
+  /** Stabilní klíč pro React (kolekce+id). */
+  key: string
+  title: string
+  href: string
+  imageUrl: string | null
+  /** Poloha místa (přímý rodič z drobečků, např. „Česká republika"); u rad null. */
+  sub?: string | null
+}
+
+/** Data homepage sekce „Inspirace a rady na cestu". */
+export interface HomepageInspiration {
+  /** Nejnovější článek s fotkou (velká karta); null, když žádný nemá platnou URL. */
+  feature: {
+    title: string
+    href: string
+    imageUrl: string | null
+    excerpt: string | null
+    /** Název hlavní stránky článku (destinace/rubrika) do řádku nad titulkem. */
+    placeName: string | null
+  } | null
+  /** Nejnovější rady na cestu (boční seznam, bez článku z velké karty). */
+  tips: InspirationLink[]
+  /** Celkový počet rad — text odkazu „Všech N rad". */
+  tipsTotal: number
+  /** Odkaz na rubriku Rady na cestu. */
+  tipsHref: string
+  /** Denní výběr míst pro dlaždicovou sekci „Inspirace na cestu". */
+  places: InspirationLink[]
+}
+
 export interface UserProfileData {
   /** ID účtu — potřebné jen k rozpoznání „tohle je můj profil" (tlačítko Upravit). */
   id: number
