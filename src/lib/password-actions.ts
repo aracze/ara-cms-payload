@@ -3,7 +3,13 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { getDb } from './db'
-import { isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
+import {
+  clientIp,
+  isBotSubmission,
+  isRateLimited,
+  rateLimitKey,
+  verifyTurnstile,
+} from './comment-spam'
 import { checkPassword, isEmailShapeValid } from './username'
 import { setSessionCookie } from './session-cookie'
 
@@ -31,10 +37,11 @@ export async function forgotPasswordAction(
   const turnstileToken = formData.get('cf-turnstile-response') as string | null
 
   const h = await headers()
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || ''
+  const ip = clientIp(h)
 
   if (isBotSubmission(honeypot, renderedAt, now)) return { status: 'sent' }
-  if (isRateLimited(ip, now)) {
+  // Klíč podle e-mailu, když IP nejde zjistit — ochrana konkrétního účtu.
+  if (isRateLimited(rateLimitKey(ip, email), now)) {
     return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
   }
   if (!(await verifyTurnstile(turnstileToken, ip))) {
@@ -78,7 +85,9 @@ export async function resetPasswordAction(
   // Limit i tady, ne jen u žádosti o obnovu: bez něj by šlo tuhle akci
   // bombardovat a zkoušet uhodnout platný token hrubou silou.
   const h = await headers()
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || ''
+  const ip = clientIp(h)
+  // Tady e-mail nemáme (chodí jen token), takže klíčem zůstává IP; bez ní se
+  // spoléhá na to, že token je jednorázový a krátkodobý.
   if (isRateLimited(ip, Date.now())) {
     return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
   }

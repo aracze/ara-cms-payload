@@ -1,4 +1,5 @@
 import type { Access, CollectionConfig, FieldAccess } from 'payload'
+import { APIError } from 'payload'
 import { AVATAR_MIME, MAX_AVATAR_BYTES } from '../lib/profile-limits'
 
 /**
@@ -105,18 +106,19 @@ export const Avatars: CollectionConfig = {
     beforeValidate: [
       async ({ req, operation }) => {
         if (operation !== 'create' || !req.user) return
-        const { totalDocs } = await req.payload.find({
+        // `count`, ne `find` s limitem 0: netahá dokumenty, jen číslo.
+        const { totalDocs } = await req.payload.count({
           collection: 'avatars',
           where: { owner: { equals: req.user.id } },
-          limit: 0,
-          depth: 0,
           // `req` kvůli transakci; overrideAccess proto, že jde o interní
           // kontrolu limitu, ne o čtení dat pro uživatele.
           req,
           overrideAccess: true,
         })
         if (totalDocs >= MAX_PER_USER) {
-          throw new Error('Máš nahraných příliš mnoho fotek. Zkus to prosím za chvíli.')
+          // `APIError` s kódem 400 — obyčejná výjimka by z API vypadla jako
+          // chyba serveru (500), i když je to chyba na straně volajícího.
+          throw new APIError('Máš nahraných příliš mnoho fotek. Zkus to prosím za chvíli.', 400)
         }
       },
     ],

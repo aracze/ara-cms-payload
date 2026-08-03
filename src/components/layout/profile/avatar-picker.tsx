@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Camera } from 'lucide-react'
 import { UserAvatar } from '@/components/user-avatar'
 import { AVATAR_ACCEPT } from '@/lib/profile-limits'
+import { useOznamZmenu } from '@/components/layout/profile/profile-edit-frame'
 
 /**
  * Fotka v hlavičce profilu v režimu úprav.
@@ -20,6 +21,9 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
   const fileRef = useRef<HTMLInputElement>(null)
   const [nahled, setNahled] = useState<string | null>(null)
   const [odebrat, setOdebrat] = useState(false)
+  // Odebrání je tlačítko, ne psaní do pole — formulář by o něm sám nevěděl
+  // a lišta by tvrdila, že nic neuloženého nemáš.
+  const oznamZmenu = useOznamZmenu()
 
   // Náhled drží soubor v paměti prohlížeče, dokud se adresa neuvolní.
   useEffect(() => {
@@ -72,6 +76,7 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
                 setNahled(null)
                 setOdebrat(true)
                 if (fileRef.current) fileRef.current.value = ''
+                oznamZmenu()
               }}
               className="hover:underline"
             >

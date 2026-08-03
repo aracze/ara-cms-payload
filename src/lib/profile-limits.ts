@@ -19,3 +19,12 @@ export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 export const AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const
 /** Hodnota pro `accept` u výběru souboru — odvozená, ať se nemůže rozejít. */
 export const AVATAR_ACCEPT = AVATAR_MIME.join(',')
+
+/**
+ * Úvodní fotka stránek kolem účtu (přihlášení, registrace, nastavení).
+ *
+ * Tady, ne v komponentě: adresu mění redakce při výměně fotky a nemá kvůli
+ * tomu chodit do kódu vzhledu. Profil má vlastní (i s rozmazaným náhledem).
+ */
+export const AUTH_COVER_URL =
+  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg'

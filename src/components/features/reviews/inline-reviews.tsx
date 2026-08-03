@@ -1,10 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { ReviewPublic } from '@/types/payload'
 import { reviewsCountLabel } from '@/lib/utils'
-import { createReview, getPageReviews, type ReviewFormState } from '@/lib/review-actions'
+import {
+  createReview,
+  getPageReviews,
+  type ReviewAuthorHint,
+  type ReviewFormState,
+} from '@/lib/review-actions'
+import { UserAvatar } from '@/components/user-avatar'
+import { LoginHint } from '@/components/features/auth/signed-as'
 import { Turnstile, type TurnstileHandle } from '@/components/features/comments/turnstile'
 import { ReviewItem } from './review-item'
 import { StarInput } from './star-input'
@@ -41,7 +48,14 @@ export function InlineReviews({
   rateRequest?: InlineReviewRateRequest | null
 }) {
   const router = useRouter()
+  // Kam se vrátit po přihlášení z nápovědy pod jménem. Bereme z adresy —
+  // inline recenze žijí uvnitř stránky cíle, kterou komponenta sama nezná.
+  const pathname = usePathname()
   const [reviews, setReviews] = useState<ReviewPublic[] | null>(null)
+  // Kdo je přihlášený — chodí spolu s recenzemi. Dosud se načítalo a zahazovalo,
+  // takže inline formulář chtěl jméno i po přihlášeném (a server ho stejně
+  // ignoruje, protože identitu bere ze session).
+  const [signedAs, setSignedAs] = useState<ReviewAuthorHint>(null)
   const [loadError, setLoadError] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -57,7 +71,14 @@ export function InlineReviews({
 
   const loadReviews = (pageIdToLoad: number) =>
     getPageReviews(pageIdToLoad).then(
-      (res) => ('reviews' in res ? setReviews(res.reviews) : setLoadError(true)),
+      (res) => {
+        if ('reviews' in res) {
+          setReviews(res.reviews)
+          setSignedAs(res.signedAs)
+        } else {
+          setLoadError(true)
+        }
+      },
       () => setLoadError(true),
     )
 
@@ -67,8 +88,10 @@ export function InlineReviews({
     getPageReviews(pageId).then(
       (res) => {
         if (cancelled) return
-        if ('reviews' in res) setReviews(res.reviews)
-        else setLoadError(true)
+        if ('reviews' in res) {
+          setReviews(res.reviews)
+          setSignedAs(res.signedAs)
+        } else setLoadError(true)
       },
       () => {
         if (!cancelled) setLoadError(true)
@@ -189,6 +212,35 @@ export function InlineReviews({
             </label>
           </div>
 
+          {/* Stejné pořadí jako u velkého formuláře: kdo píše → co píše. */}
+          {signedAs ? (
+            <div className="mb-4 flex items-center gap-3">
+              <UserAvatar name={signedAs.displayName} avatarUrl={signedAs.avatarUrl} size={34} />
+              <p className="text-[14px] text-[#2c3643]">
+                Píšeš jako <b>{signedAs.displayName}</b>
+              </p>
+            </div>
+          ) : (
+            <div className="mb-4 max-w-xs">
+              <label
+                htmlFor={`inline-review-name-${pageId}`}
+                className="mb-1.5 block text-sm font-semibold text-gray-500"
+              >
+                Jméno
+              </label>
+              <input
+                id={`inline-review-name-${pageId}`}
+                name="authorName"
+                type="text"
+                required
+                maxLength={80}
+                placeholder="Tvé jméno"
+                className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
+              />
+              <LoginHint backTo={`${pathname}#recenze`} noun="recenze" />
+            </div>
+          )}
+
           <div className="mb-3">
             <span className="mb-1.5 block text-sm font-semibold text-gray-500">Tvé hodnocení</span>
             <StarInput value={rating} onSelect={setRating} />
@@ -210,24 +262,6 @@ export function InlineReviews({
               rows={5}
               placeholder="Poděl se o své zkušenosti a zážitky a buď inspirací pro ostatní cestovatele. Odkazy či jiné html prvky nelze vkládat pro snížení spamu bez přidané hodnoty."
               className="min-h-[100px] w-full resize-y rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] leading-relaxed text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
-            />
-          </div>
-
-          <div className="mb-4 max-w-xs">
-            <label
-              htmlFor={`inline-review-name-${pageId}`}
-              className="mb-1.5 block text-sm font-semibold text-gray-500"
-            >
-              Jméno
-            </label>
-            <input
-              id={`inline-review-name-${pageId}`}
-              name="authorName"
-              type="text"
-              required
-              maxLength={80}
-              placeholder="Tvé jméno"
-              className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
             />
           </div>
 

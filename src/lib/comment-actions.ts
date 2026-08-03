@@ -2,7 +2,13 @@
 
 import { headers } from 'next/headers'
 import { getDb } from './db'
-import { isBotSubmission, isRateLimited, looksLikeSpam, verifyTurnstile } from './comment-spam'
+import {
+  clientIp,
+  isBotSubmission,
+  isRateLimited,
+  looksLikeSpam,
+  verifyTurnstile,
+} from './comment-spam'
 import { getCurrentUser } from './auth'
 
 /**
@@ -42,7 +48,7 @@ export async function createComment(
 
   // Klientská IP (za reverzní proxy). Best-effort — slouží jen rate-limitu.
   const h = await headers()
-  const ip = (h.get('x-forwarded-for')?.split(',')[0] ?? h.get('x-real-ip') ?? '').trim()
+  const ip = clientIp(h)
 
   // 1) Honeypot / příliš rychlé odeslání → tichý „úspěch" (robot nic nepozná).
   if (isBotSubmission(honeypot, renderedAt, now)) {

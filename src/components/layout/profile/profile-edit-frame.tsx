@@ -25,6 +25,8 @@ type StavUprav = {
   zmeneno: boolean
   pending: boolean
   profileHref: string
+  /** Ohlásí změnu, kterou prohlížeč sám nezachytí (tlačítko, ne psaní do pole). */
+  oznamZmenu: () => void
 }
 
 const KontextUprav = createContext<StavUprav | null>(null)
@@ -53,7 +55,9 @@ export function ProfileEditFrame({
   }, [zmeneno, pending])
 
   return (
-    <KontextUprav.Provider value={{ zmeneno, pending, profileHref }}>
+    <KontextUprav.Provider
+      value={{ zmeneno, pending, profileHref, oznamZmenu: () => setZmeneno(true) }}
+    >
       <form action={formAction} onInput={() => setZmeneno(true)} onChange={() => setZmeneno(true)}>
         {state.status === 'error' && (
           <div className="sticky top-0 z-[120] bg-[#fdeceb]">
@@ -105,4 +109,9 @@ export function ProfileSaveRow() {
       </div>
     </div>
   )
+}
+
+/** Ohlášení změny zvenčí (např. tlačítko „Odebrat" u fotky). */
+export function useOznamZmenu(): () => void {
+  return useContext(KontextUprav)?.oznamZmenu ?? (() => {})
 }

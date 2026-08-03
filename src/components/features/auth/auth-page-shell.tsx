@@ -3,6 +3,7 @@ import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { StaticHeroWave } from '@/components/features/static-hero-wave'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { AUTH_COVER_URL } from '@/lib/profile-limits'
 
 /**
  * Společný rám stránek kolem účtu (přihlášení, registrace, obnova hesla).
@@ -16,8 +17,6 @@ import { ArrowLeft } from 'lucide-react'
  * Proto stejný rytmus jako všechny ostatní stránky webu: krátká fotka s vlnkou
  * (drží čitelnost hlavičky a titulek) a pod ní vycentrovaná karta s obsahem.
  */
-
-const COVER = 'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg'
 
 export function AuthPageShell({
   title,
@@ -39,7 +38,7 @@ export function AuthPageShell({
           dost vysoké na to, aby se titulek nelepil na menu webu. */}
       <section className="relative h-[260px] w-full bg-[#3b444f]">
         <div className="absolute inset-0 overflow-hidden">
-          <StaticHeroImage imageUrl={COVER} styleCss="object-position: 50% 42%" />
+          <StaticHeroImage imageUrl={AUTH_COVER_URL} styleCss="object-position: 50% 42%" />
         </div>
         <div
           className="absolute inset-0 z-[100]"

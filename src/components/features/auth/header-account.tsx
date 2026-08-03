@@ -73,7 +73,9 @@ function useModalBehavior(
         panel.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ),
-      ).filter((el) => el.offsetParent !== null)
+      ).filter((el) => el.getClientRects().length > 0)
+    // `getClientRects`, ne `offsetParent`: u prvků s `position: fixed` vrací
+    // offsetParent null i když jsou vidět, takže by z pasti vypadly.
 
     // Fokus dovnitř jen tehdy, když si ho formulář nevzal sám (`autoFocus`).
     if (!panel.contains(document.activeElement)) zaostritelne()[0]?.focus()
@@ -84,6 +86,12 @@ function useModalBehavior(
       if (list.length === 0) return
       const prvni = list[0]
       const posledni = list[list.length - 1]
+      // Fokus se zatoulal mimo okno → vrátit ho na první prvek.
+      if (!panel.contains(document.activeElement)) {
+        e.preventDefault()
+        prvni.focus()
+        return
+      }
       if (e.shiftKey && document.activeElement === prvni) {
         e.preventDefault()
         posledni.focus()
@@ -93,10 +101,13 @@ function useModalBehavior(
       }
     }
 
-    panel.addEventListener('keydown', onKeyDown)
+    // Posluchač na DOKUMENTU, ne na panelu: kdyby fokus skončil mimo okno
+    // (třeba na <body> po zavření nabídky), panel by Tab už neviděl a past by
+    // přestala fungovat.
+    document.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = puvodniOverflow
-      panel.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keydown', onKeyDown)
     }
     // `view` je v závislostech schválně: přepnutím na registraci/obnovu hesla
     // se vymění obsah okna, takže seznam zaostřitelných prvků je jiný.

@@ -109,7 +109,10 @@ export const MainContent = ({
   // Autora bereme VÝHRADNĚ z veřejného virtuálního pole `createdByPublic` —
   // interní `createdBy` (surová relace na uživatele) se na frontend nevystavuje.
   const author = createdByPublic ?? null
-  const authorName = author?.username || author?.name || null
+  // Pořadí stejné jako u autora článku: nejdřív celé jméno, pak uživatelské.
+  // U AUTORSTVÍ obsahu (článek, místo, cíl) dává smysl skutečné jméno; podpis
+  // pod komentáři a recenzemi zůstává uživatelským jménem (viz publicName).
+  const authorName = author?.name || author?.username || null
   // Surová URL avataru — absolutní i fallback (papoušek) řeší UserAvatar
   // v CollapsiblePageTextWithContributor. Null = bez fotky → papoušek.
   const avatarUrl = author?.avatar?.url ?? null

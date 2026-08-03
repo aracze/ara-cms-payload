@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers'
 import { getDb } from './db'
-import { isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
+import { clientIp, isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
 import {
   checkPassword,
   checkUsernameShape,
@@ -51,7 +51,7 @@ export async function registerAction(
 
   // Klientská IP (za reverzní proxy) — jen pro rate limit, best-effort.
   const h = await headers()
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0].trim() || h.get('x-real-ip') || ''
+  const ip = clientIp(h)
 
   // ── ochrana proti robotům ────────────────────────────────────────────────
   if (isBotSubmission(honeypot, renderedAt, now)) {
