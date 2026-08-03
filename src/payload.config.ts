@@ -37,6 +37,7 @@ import { PromoBlock } from './blocks/Promo'
 import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
+import { publicBaseUrlOptional } from './lib/public-url'
 import { dbDumpEndpoint } from './endpoints/dbDump'
 import { dbImportEndpoint } from './endpoints/dbImport'
 
@@ -44,6 +45,12 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
+  // Veřejná adresa webu. Bez ní Payload při každém požadavku hlásí, že původ
+  // není v seznamu povolených (CORS/CSRF), a odvozuje ho z prázdného řetězce —
+  // v logu produkce to bylo u každého volání API. Adresa vychází ze stejného
+  // místa jako odkazy v e-mailech (src/lib/public-url.ts), jen ve variantě,
+  // která při chybějící proměnné nespadne: tohle se vyhodnocuje i při buildu.
+  serverURL: publicBaseUrlOptional(),
   admin: {
     user: Users.slug,
     importMap: {
@@ -208,10 +215,18 @@ export default buildConfig({
               api_secret: process.env.CLOUDINARY_API_SECRET as string,
             },
             collections: {
+              // `true` schválně: u boolean varianty plugin při smazání dokumentu
+              // NEMAŽE soubor na Cloudinary. U redakčních fotek je to žádoucí —
+              // omylem smazaný záznam nesmí znamenat ztrátu originálu.
               media: true,
-              // Avatary jdou na Cloudinary stejnou cestou jako média — lokální
-              // disk kontejneru nasazení nepřežije.
-              avatars: true,
+              // Avatary mají vlastní pravidla:
+              //  - `folder`: nové profilovky padají tam, kde už jsou migrované
+              //    (dřív šly do koryta Cloudinary s náhodným názvem),
+              //  - `deleteFromCloudinary`: profilovku si lidé mění a stará je
+              //    k ničemu; bez mazání by se soubory hromadily navždy.
+              // PODMÍNKA: žádný avatar nesmí sdílet soubor s jinou kolekcí —
+              // jinak by výměna fotky smazala cizí soubor. Viz README.
+              avatars: { folder: 'avatars', deleteFromCloudinary: true },
             },
           }),
         ]
