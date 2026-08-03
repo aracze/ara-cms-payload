@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js'
+import Fuse, { type FuseResult, type IFuseOptions } from 'fuse.js'
 import { unstable_cache } from 'next/cache'
 import { getDb } from './db'
 import { isProduction, richTextToPlainText } from './utils'
@@ -60,12 +60,47 @@ const loadSearchData = isProduction()
     })
   : loadSearchDataUncached
 
-export async function getFuse(): Promise<Fuse<SearchItem>> {
+// Čeští návštěvníci běžně píší bez diakritiky — porovnáváme index i dotaz
+// bez háčků a čárek, aby „rim" našlo „Řím" (a „řím" i „Rim Trail").
+function removeDiacritics(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '')
+}
+
+const FUSE_OPTIONS: IFuseOptions<SearchItem> = {
+  // Shoda v názvu má vyšší váhu než shoda v textu — „Praha" musí být nad
+  // stránkami, které Prahu jen zmiňují.
+  keys: [
+    { name: 'title', weight: 2 },
+    { name: 'text', weight: 1 },
+  ],
+  // Výchozí threshold 0.6 pouští příliš volné shody („praha" → „Doprava").
+  threshold: 0.4,
+  // Shoda se hodnotí kdekoli v textu, ne jen poblíž začátku pole.
+  ignoreLocation: true,
+  getFn: (obj, path) => {
+    const value = Fuse.config.getFn(obj, path)
+    return Array.isArray(value)
+      ? value.map(removeDiacritics)
+      : removeDiacritics((value as string) ?? '')
+  },
+}
+
+async function getFuse(): Promise<Fuse<SearchItem>> {
   let data: SearchItem[] = []
   try {
     data = await loadSearchData()
   } catch {
     // DB nedostupná — prázdné vyhledávání, nic se necachuje
   }
-  return new Fuse<SearchItem>(data, { keys: ['title', 'text'] })
+  return new Fuse<SearchItem>(data, FUSE_OPTIONS)
+}
+
+// Jediný vstup vyhledávání. UI zobrazuje max 10 položek, víc nemá smysl
+// posílat — dřív šly klientovi VŠECHNY shody vč. textů (u krátkých dotazů
+// i megabajty na každé napsané písmeno).
+export async function searchPages(query: string, limit = 10): Promise<FuseResult<SearchItem>[]> {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+  const fuse = await getFuse()
+  return fuse.search(removeDiacritics(trimmed), { limit })
 }
