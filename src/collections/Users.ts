@@ -1,6 +1,7 @@
 import type { Access, CollectionConfig, FieldAccess } from 'payload'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { SESSION_SECONDS } from '../lib/session-constants'
+import { publicBaseUrl } from '../lib/public-url'
 import { revalidateUserAfterChange, revalidateUserAfterDelete } from '../hooks/revalidation'
 
 const isAdmin: Access = ({ req: { user } }) => {
@@ -28,25 +29,6 @@ const isAdminOrSelfFieldAccess: FieldAccess = ({ req: { user }, id }) => {
   if (!user) return false
   if (user.roles?.includes('admin')) return true
   return user.id === id
-}
-
-/**
- * Adresa webu pro odkazy v e-mailech.
- *
- * ŽÁDNÝ tichý fallback na localhost: kdyby proměnná v produkci chyběla,
- * odkazy na potvrzení účtu i na nové heslo by vedly na localhost a nikdo by
- * si toho nevšiml, dokud by se lidé nezačali ozývat. Radši spadne rovnou.
- * V dev režimu localhost dává smysl, tam ho tedy necháváme.
- */
-function emailBaseUrl(): string {
-  const raw = process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL?.trim()
-  if (raw) return raw.replace(/\/$/, '')
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'Chybí NEXT_PUBLIC_PAYLOAD_BASE_URL — bez ní by odkazy v e-mailech vedly na localhost.',
-    )
-  }
-  return 'http://localhost:3000'
 }
 
 /** Text od uživatele do HTML e-mailu jen ošetřený — jméno si volí sám. */
@@ -89,7 +71,7 @@ export const Users: CollectionConfig = {
       generateEmailSubject: () => 'Nastavení nového hesla na Ara.cz',
       generateEmailHTML: (args) => {
         const token = (args as { token?: string } | undefined)?.token ?? ''
-        const base = emailBaseUrl()
+        const base = publicBaseUrl()
         const url = `${base}/nove-heslo?token=${encodeURIComponent(token)}`
         return `
           <p>Ahoj,</p>
@@ -104,7 +86,7 @@ export const Users: CollectionConfig = {
       generateEmailSubject: () => 'Potvrď svůj účet na Ara.cz',
       // Odkaz míří na VEŘEJNÝ web, ne do administrace (výchozí chování Payloadu).
       generateEmailHTML: ({ token, user }) => {
-        const base = emailBaseUrl()
+        const base = publicBaseUrl()
         const url = `${base}/registrace/potvrzeni?token=${encodeURIComponent(token)}`
         const name = escapeHtml((user as { username?: string })?.username ?? '')
         return `

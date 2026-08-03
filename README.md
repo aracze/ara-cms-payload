@@ -121,15 +121,15 @@ To build and run the production-optimized Docker image:
 Copy `.env.example` to `.env` and fill in the values. Besides the database and
 storage credentials, the following variables drive user-visible features:
 
-| Variable                                                                                               | Required    | Used for                                                                            |
-| ------------------------------------------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                                                      | For maps    | Google Maps on place pages (public — ships to the browser).                         |
-| `OPENWEATHER_API_KEY`                                                                                  | For weather | Server-side key for the `/api/weather` endpoint (never exposed to the browser).     |
-| `NEXT_PUBLIC_SITE_URL`                                                                                 | Recommended | Public site URL for the sitemap and canonical links (default `https://www.ara.cz`). |
-| `NEXT_PUBLIC_PAYLOAD_BASE_URL`                                                                         | Recommended | Base URL used to build absolute image URLs (logos, avatars, social sharing).        |
-| `NEXT_PUBLIC_ADSENSE_CLIENT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT_2` | Optional    | Google AdSense units in article listings.                                           |
-| `TURNSTILE_SITE_KEY`                                                                                   | Optional    | Cloudflare Turnstile site key for the article comment form (anti-spam).             |
-| `TURNSTILE_SECRET_KEY`                                                                                 | Optional    | Cloudflare Turnstile secret key (server-side token verification).                   |
+| Variable                                                                                               | Required                   | Used for                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                                                      | For maps                   | Google Maps on place pages (public — ships to the browser).                                                                                                                                                                                                                                                  |
+| `OPENWEATHER_API_KEY`                                                                                  | For weather                | Server-side key for the `/api/weather` endpoint (never exposed to the browser).                                                                                                                                                                                                                              |
+| `NEXT_PUBLIC_SITE_URL`                                                                                 | Recommended                | Public site URL for the sitemap and canonical links (default `https://www.ara.cz`).                                                                                                                                                                                                                          |
+| `NEXT_PUBLIC_PAYLOAD_BASE_URL`                                                                         | **Required in production** | Veřejná adresa webu: absolutní adresy obrázků, `serverURL` (kontrola původu požadavků) a odkazy v e-mailech. V produkci bez ní aplikace spadne — viz `publicBaseUrl()` v `src/lib/public-url.ts`; tichý fallback na localhost by znamenal, že odkazy v dopisech vedou na localhost a nikdo si toho nevšimne. |
+| `NEXT_PUBLIC_ADSENSE_CLIENT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT_2` | Optional                   | Google AdSense units in article listings.                                                                                                                                                                                                                                                                    |
+| `TURNSTILE_SITE_KEY`                                                                                   | Optional                   | Cloudflare Turnstile site key for the article comment form (anti-spam).                                                                                                                                                                                                                                      |
+| `TURNSTILE_SECRET_KEY`                                                                                 | Optional                   | Cloudflare Turnstile secret key (server-side token verification).                                                                                                                                                                                                                                            |
 
 > `NEXT_PUBLIC_*` variables are inlined into the client bundle at build time and
 > are therefore public. Keep secrets (e.g. `OPENWEATHER_API_KEY`, `PAYLOAD_SECRET`)
@@ -381,9 +381,17 @@ avatars: true }`) se mazací handler hned vrátí. Kdyby se zápis změnil na ob
     mazání dokumentu odstraňovat i soubor — a smazáním 25 starých avatarů z `media` by zmizelo
     všech 24 profilových fotek, protože sdílejí stejné soubory. Pak je nutné avatary nejdřív
     nahrát jako vlastní kopie (`pnpm migrate:avatars`).
-  - Druhá strana téže medaile: dokud plugin nemaže, **zůstávají na Cloudinary osiřelé soubory**
-    po vyměněných a odebraných profilových fotkách. `pnpm cleanup:avatars` uklidí záznamy
-    v databázi, ale soubory na Cloudinary ne — na ty je potřeba úklid na jeho straně.
+  - **Od 3. 8. 2026 mají avatary `folder: 'avatars'` a `deleteFromCloudinary: true`.** Vyměněná
+    profilovka se tedy smaže i z Cloudinary (dřív se soubory hromadily navždy) a nové fotky
+    padají do stejné složky, kde už migrované jsou.
+  - ⚠️ **PODMÍNKA, na které to stojí: žádný avatar nesmí sdílet soubor s jinou kolekcí.**
+    Migrované avatary sdílené s `media` proto byly z knihovny médií odstraněny (záznamy, ne
+    soubory — u `media` je konfigurace `boolean`, takže mazání dokumentu soubor nechává být).
+    Kdyby někdy vznikl sdílený soubor znovu, výměna profilovky by smazala soubor, který patří
+    i druhé kolekci. Kontrola: `select count(*) from avatars a join media m on
+m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
+  - `pnpm cleanup:avatars` maže osiřelé ZÁZNAMY přes Payload, takže se s nimi teď smaže
+    i soubor. Než ho spustíš, ověř tou kontrolou výš, že nic není sdílené.
 
 - **Comments (Komentáře a recenze)**:
   - Komentáře k článkům a recenze k místům/turistickým cílům (stránkám) — rozlišené polem `type` (`comment` / `review`); recenze má navíc hvězdičkové hodnocení. Cíl je polymorfní vazba `relatedTo` (článek / stránka).
