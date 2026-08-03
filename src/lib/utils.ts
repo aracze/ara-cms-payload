@@ -14,6 +14,20 @@ export function isProduction() {
   return process.env.NODE_ENV === 'production'
 }
 
+/**
+ * Kontinenty = kořenové stránky navigace. V kontextových popiscích (drobečky
+ * ve výpisech novinek, našeptávači, na kartách profilu) se vynechávají —
+ * informaci nese země, kontinent jen zabírá místo. Drobečková navigace přímo
+ * na stránkách zůstává úplná.
+ */
+const CONTINENTS = new Set(['Evropa', 'Amerika', 'Asie', 'Afrika', 'Austrálie'])
+
+/** Odstraní úvodní kontinent z popisu cesty — jen skutečný kontinent, jiné
+ * kořeny („Rady na cestu") zůstávají. */
+export function stripLeadingContinent(labels: string[]): string[] {
+  return labels.length > 0 && CONTINENTS.has(labels[0]) ? labels.slice(1) : labels
+}
+
 /** České skloňování počtu recenzí: 1 recenze, 2–4 recenze, 5+ recenzí. */
 export function reviewsCountLabel(count: number): string {
   if (count >= 1 && count <= 4) return 'recenze'

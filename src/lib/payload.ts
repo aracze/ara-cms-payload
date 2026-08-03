@@ -21,7 +21,12 @@ import {
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import { getDb } from './db'
-import { getArticleImageUrl, isProduction, richTextToPlainText } from './utils'
+import {
+  getArticleImageUrl,
+  isProduction,
+  richTextToPlainText,
+  stripLeadingContinent,
+} from './utils'
 
 /**
  * Datová vrstva webu nad Payload LOCAL API.
@@ -1017,9 +1022,11 @@ function breadcrumbPath(
 ): string | null {
   if (!Array.isArray(breadcrumbs)) return null
   const items = dropLast ? breadcrumbs.slice(0, -1) : breadcrumbs
-  const labels = items
-    .map((b) => b?.label)
-    .filter((l): l is string => typeof l === 'string' && l.length > 0)
+  // Kontextový popisek nese informaci od ZEMĚ — kontinent se vynechává
+  // (viz stripLeadingContinent; plná cesta zůstává jen v navigaci na stránce).
+  const labels = stripLeadingContinent(
+    items.map((b) => b?.label).filter((l): l is string => typeof l === 'string' && l.length > 0),
+  )
   return labels.length ? labels.join(' / ') : null
 }
 

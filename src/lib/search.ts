@@ -1,7 +1,7 @@
 import Fuse, { type FuseResult, type IFuseOptions } from 'fuse.js'
 import { unstable_cache } from 'next/cache'
 import { getDb } from './db'
-import { isProduction, richTextToPlainText } from './utils'
+import { isProduction, richTextToPlainText, stripLeadingContinent } from './utils'
 import type { SearchItem } from '@/types/search'
 
 /**
@@ -55,11 +55,13 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
         featuredImage?: { image?: number | string | null } | null
       }
       // Drobečky obsahují i stránku samotnou — pro cestu bereme jen předky.
-      const path = (doc.breadcrumbs ?? [])
-        .slice(0, -1)
-        .map((b) => b?.label)
-        .filter(Boolean)
-        .join(' › ')
+      // Kontinent se vynechává (informaci nese země, viz stripLeadingContinent).
+      const path = stripLeadingContinent(
+        (doc.breadcrumbs ?? [])
+          .slice(0, -1)
+          .map((b) => b?.label)
+          .filter((l): l is string => typeof l === 'string' && l.length > 0),
+      ).join(' › ')
       const imageId = doc.featuredImage?.image
       if (typeof imageId === 'number' || typeof imageId === 'string') {
         imageIdByItemIndex.set(items.length, imageId)
