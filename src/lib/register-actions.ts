@@ -58,6 +58,10 @@ export async function registerAction(
     // Robotovi odpovíme jako při úspěchu, ať nemá zpětnou vazbu k ladění.
     return { status: 'success', email }
   }
+  // Tady je pořadí obrácené než u obnovy hesla — a je to v pořádku: klíčem je
+  // IP odesílatele, takže si přeplněním koše uškodí jen sám sobě. U obnovy
+  // hesla se klíčuje e-mailem, který si zadá kdokoliv, proto tam musí být
+  // ověření robota dřív.
   if (isRateLimited(ip, now)) {
     return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
   }

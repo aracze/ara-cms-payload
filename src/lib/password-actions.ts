@@ -40,12 +40,18 @@ export async function forgotPasswordAction(
   const ip = clientIp(h)
 
   if (isBotSubmission(honeypot, renderedAt, now)) return { status: 'sent' }
-  // Klíč podle e-mailu, když IP nejde zjistit — ochrana konkrétního účtu.
-  if (isRateLimited(rateLimitKey(ip, email), now)) {
-    return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
-  }
+  // POŘADÍ JE ZÁMĚRNÉ: nejdřív Turnstile, teprve pak počítadlo pokusů.
+  //
+  // Když IP nejde zjistit, klíčuje se limit podle e-mailu — a ten si zadává
+  // odesílatel. Kdyby se počítadlo zvyšovalo dřív, stačilo by pětkrát odeslat
+  // formulář s cizí adresou (klidně bez platného tokenu) a oběti by se na
+  // deset minut zablokovala obnova hesla. Ověření robota to zastaví dřív, než
+  // se koš vůbec načne.
   if (!(await verifyTurnstile(turnstileToken, ip))) {
     return { status: 'error', message: 'Nepodařilo se ověřit, že nejsi robot. Zkus to znovu.' }
+  }
+  if (isRateLimited(rateLimitKey(ip, email), now)) {
+    return { status: 'error', message: 'Moc pokusů za sebou. Zkus to prosím za chvíli.' }
   }
   if (!email || !isEmailShapeValid(email)) {
     return { status: 'error', message: 'Zadej platný e-mail.' }
