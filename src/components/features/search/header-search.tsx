@@ -64,7 +64,9 @@ export function HeaderSearch() {
           <div className="fixed inset-0 z-[300] animate-in fade-in duration-200">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClear} />
             <div className="relative bg-white shadow-2xl animate-in slide-in-from-top-4 duration-300">
-              <div className="max-w-7xl mx-auto px-4 md:px-12 py-4 flex items-center gap-4">
+              {/* h-[65px] = přesná výška hlavičky — panel ji při otevření nahradí
+                  bez poskočení (hlavička má h-[65px] v header.tsx). */}
+              <div className="max-w-7xl mx-auto px-4 md:px-12 h-[65px] flex items-center gap-4">
                 <SearchGraphic className="w-6 h-6 text-gray-400 shrink-0" strokeWidth={2.5} />
                 <input
                   ref={inputRef}
@@ -94,13 +96,15 @@ export function HeaderSearch() {
                 </button>
               </div>
               {(query.length > 0 || results.length > 0) && (
-                <div className="max-w-7xl mx-auto px-4 md:px-12 pb-8">
-                  <ResultList results={results} handleLinkClicked={handleClear} />
-                  <SearchStatus
-                    query={query}
-                    isLoading={isLoading}
-                    hasResults={results.length > 0}
-                  />
+                <div className="border-t border-gray-100">
+                  <div className="max-w-7xl mx-auto px-4 md:px-12 pb-8">
+                    <ResultList results={results} handleLinkClicked={handleClear} />
+                    <SearchStatus
+                      query={query}
+                      isLoading={isLoading}
+                      hasResults={results.length > 0}
+                    />
+                  </div>
                 </div>
               )}
             </div>

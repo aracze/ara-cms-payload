@@ -1,7 +1,13 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import type { FuseResult } from 'fuse.js'
 import type { SearchItem } from '@/types/search'
 import { MapPin } from 'lucide-react'
+
+// Štítek ukazujeme jen u informačních stránek (praktické informace, doprava…).
+// Místa, cíle a města jsou z pohledu návštěvníka totéž — rozlišení kategorií
+// je jen interní věc webu a štítek by ve výpisu působil chaoticky.
+const PLACE_CATEGORIES = new Set(['Místo k navštívení', 'Turistický cíl', 'Místa'])
 
 export function ResultList({
   results,
@@ -14,33 +20,60 @@ export function ResultList({
 
   return (
     <div className="flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
+      {/* Popisek odděluje zónu výsledků od pole s dotazem (bez něj se slévaly). */}
+      <div className="px-2 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+        Výsledky
+      </div>
       {results.slice(0, 10).map((result: FuseResult<SearchItem>, index: number) => {
-        // Simple attempt to highlight query in title if we want, but keeping it simple for now
+        const item = result.item
+        const showCategory = item.category && !PLACE_CATEGORIES.has(item.category)
         return (
           <Link
             // fullSlug mají jen stránky; ostatní položky (služby) padnou na
             // homepage místo neplatného odkazu.
-            href={result.item.fullSlug || result.item.slug || '/'}
-            key={result.item.documentId || `result-${index}`}
+            href={item.fullSlug || item.slug || '/'}
+            key={item.documentId || `result-${index}`}
             onClick={() => handleLinkClicked()}
-            className="group flex items-center py-2 px-1 hover:bg-gray-50 rounded-lg transition-colors"
+            className="group flex items-center gap-3 py-2 px-2 hover:bg-gray-50 rounded-lg transition-colors"
           >
-            <div className="w-10 flex justify-center shrink-0">
-              <MapPin
-                className="w-5 h-5 text-[#1a3f6c]"
-                fill="#1a3f6c"
-                fillOpacity={0.1}
-                strokeWidth={2.5}
+            {item.image ? (
+              <Image
+                src={item.image}
+                alt=""
+                width={48}
+                height={48}
+                className="w-12 h-12 rounded-lg object-cover shrink-0"
               />
-            </div>
-            <div className="ml-2 flex items-baseline gap-2">
-              <span className="font-bold text-gray-900 group-hover:text-[#215491] transition-colors text-base">
-                {result.item.title}
-              </span>
-              {result.item.text && (
-                <span className="text-sm text-gray-400 line-clamp-1 hidden md:inline">
-                  {result.item.text.replace(/[#*]/g, '').slice(0, 100)}
+            ) : (
+              <div
+                aria-hidden="true"
+                className="w-12 h-12 rounded-lg bg-[#1a3f6c]/5 flex items-center justify-center shrink-0"
+              >
+                <MapPin
+                  className="w-5 h-5 text-[#1a3f6c]"
+                  fill="#1a3f6c"
+                  fillOpacity={0.1}
+                  strokeWidth={2.5}
+                />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-900 group-hover:text-[#215491] transition-colors text-base truncate">
+                  {item.title}
                 </span>
+                {showCategory && (
+                  <span className="hidden md:inline-block shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#215491]/10 text-[#215491]">
+                    {item.category}
+                  </span>
+                )}
+              </div>
+              {(item.path || item.text) && (
+                <p className="text-sm text-gray-400 truncate mt-0.5">
+                  {item.path && <span className="text-gray-500 font-medium">{item.path}</span>}
+                  {item.path && item.text && <span className="hidden md:inline"> — </span>}
+                  {item.text && <span className="hidden md:inline">{item.text}</span>}
+                </p>
               )}
             </div>
           </Link>

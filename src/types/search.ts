@@ -6,6 +6,12 @@ export interface SearchItem {
   title: string
   text?: string
   documentId?: string
+  /** Cesta předků („Chorvatsko › Rijeka") z drobečků — kde výsledek leží. */
+  path?: string
+  /** URL úvodní fotky (originál — miniaturu z ní dělá next/image loader). */
+  image?: string
+  /** Kategorie stránky (např. „Praktické informace") pro štítek ve výpisu. */
+  category?: string
 }
 
 export interface ShowcaseData {

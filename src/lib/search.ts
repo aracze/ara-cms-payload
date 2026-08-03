@@ -18,6 +18,9 @@ import type { SearchItem } from '@/types/search'
 async function loadSearchDataUncached(): Promise<SearchItem[]> {
   const payload = await getDb()
   const items: SearchItem[] = []
+  // Fotky se dotahují hromadně až nakonec (jeden dotaz na media pro všechny
+  // stránky) — populace přes depth by znamenala dotaz za KAŽDou stránku.
+  const imageIdByItemIndex = new Map<number, number | string>()
   // Stránkujeme přes CELOU kolekci — s pevným limitem 200 by se do indexu
   // dostalo jen prvních 200 stránek a zbytek by nešel vyhledat.
   let page = 1
@@ -28,7 +31,15 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
       limit: 200,
       page,
       depth: 0,
-      select: { title: true, text: true, slug: true, fullSlug: true },
+      select: {
+        title: true,
+        text: true,
+        slug: true,
+        fullSlug: true,
+        category: true,
+        breadcrumbs: true,
+        featuredImage: true,
+      },
       // Bez joinů — jejich vyhodnocení stojí stovky ms za KAŽDÝ dokument
       // (viz komentář u MENU_SELECT v lib/payload.ts).
       joins: false,
@@ -39,17 +50,67 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
         text?: unknown
         slug?: string
         fullSlug?: string
+        category?: string
+        breadcrumbs?: { label?: string | null }[] | null
+        featuredImage?: { image?: number | string | null } | null
+      }
+      // Drobečky obsahují i stránku samotnou — pro cestu bereme jen předky.
+      const path = (doc.breadcrumbs ?? [])
+        .slice(0, -1)
+        .map((b) => b?.label)
+        .filter(Boolean)
+        .join(' › ')
+      const imageId = doc.featuredImage?.image
+      if (typeof imageId === 'number' || typeof imageId === 'string') {
+        imageIdByItemIndex.set(items.length, imageId)
       }
       items.push({
         title: doc.title ?? '',
         text: richTextToPlainText(doc.text).slice(0, 2000),
         slug: doc.slug ?? '',
         fullSlug: doc.fullSlug ?? '',
+        path: path || undefined,
+        category: doc.category || undefined,
       } satisfies SearchItem)
     }
     if (!res.hasNextPage) break
     page++
   }
+
+  if (imageIdByItemIndex.size > 0) {
+    const ids = [...new Set(imageIdByItemIndex.values())]
+    const media = await payload.find({
+      overrideAccess: false,
+      collection: 'media',
+      where: { id: { in: ids } },
+      // `url` je dopočítávané pole — bez zdrojových cloudinary* polí a filename
+      // by vyšlo null (ověřeno), proto se vybírají taky.
+      select: {
+        url: true,
+        cloudinaryUrl: true,
+        cloudinaryPublicId: true,
+        cloudinaryVersion: true,
+        cloudinaryFormat: true,
+        cloudinaryResourceType: true,
+        filename: true,
+      },
+      depth: 0,
+      pagination: false,
+      limit: 0,
+    })
+    // Klíče přes String() — ID může přijít jako číslo (Postgres) i řetězec.
+    const urlById = new Map(
+      (media.docs || []).map((m) => {
+        const doc = m as { url?: string | null; cloudinaryUrl?: string | null }
+        return [String(m.id), doc.url || doc.cloudinaryUrl]
+      }),
+    )
+    for (const [itemIndex, imageId] of imageIdByItemIndex) {
+      const url = urlById.get(String(imageId))
+      if (url) items[itemIndex].image = url
+    }
+  }
+
   return items
 }
 
