@@ -3,6 +3,8 @@ import { Homepage as HomepageType } from '@/types/payload'
 import { StaticHeroOverlay } from '@/components/features/static-hero-overlay'
 import { StaticHeroTitle } from './static-hero-title'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
+import { WhatsNewSection } from './whats-new-section'
+import { fetchLatestActivity } from '@/lib/payload'
 
 // Konfigurovatelné přes env (fallback zachovává původní chování), ať URL není
 // natvrdo v kódu.
@@ -10,7 +12,9 @@ const HOMEPAGE_HERO_IMAGE =
   process.env.NEXT_PUBLIC_HOMEPAGE_HERO_IMAGE ||
   'https://res.cloudinary.com/ara/image/upload/homepage.jpg'
 
-export const Homepage = ({ homepage }: { homepage?: HomepageType | null }) => {
+export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
+  const activity = await fetchLatestActivity()
+
   return (
     <div className="flex flex-col min-h-screen">
       <section className="relative w-full h-[315px] bg-[#3b444f]">
@@ -36,6 +40,10 @@ export const Homepage = ({ homepage }: { homepage?: HomepageType | null }) => {
         <h2 className="text-3xl font-bold text-gray-800 mb-6 uppercase tracking-wider">
           {homepage?.title}
         </h2>
+
+        <div className="mt-10">
+          <WhatsNewSection items={activity} />
+        </div>
       </main>
     </div>
   )

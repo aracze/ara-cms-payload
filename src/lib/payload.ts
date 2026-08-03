@@ -16,11 +16,12 @@ import {
   ProfileReviewItem,
   ProfileCommentItem,
   ProfileMapPin,
+  ActivityItem,
 } from '@/types/payload'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import { getDb } from './db'
-import { getArticleImageUrl, isProduction } from './utils'
+import { getArticleImageUrl, isProduction, richTextToPlainText } from './utils'
 
 /**
  * Datová vrstva webu nad Payload LOCAL API.
@@ -1646,5 +1647,286 @@ export const fetchSitemapEntries = async () => {
   } catch (err) {
     console.error('[sitemap] load failed:', err)
     return { pages: [], articles: [] }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Homepage: sekce „Co je nového" — nová místa + recenze + komentáře v jednom
+// proudu (nahrazuje záložky starého webu). Klient filtruje/stránkuje lokálně,
+// proto se tahá víc položek na druh, než se hned zobrazí.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACTIVITY_PER_KIND = 12
+
+type RawActivityPage = {
+  id: number
+  title: string
+  fullSlug: string
+  text?: unknown
+  createdAt?: string | null
+  breadcrumbs?: { label?: string | null }[] | null
+  featuredImage?: { image?: unknown } | null
+  createdByPublic?: {
+    username?: string | null
+    name?: string | null
+    avatar?: { url?: string | null } | null
+  } | null
+}
+
+type RawActivityComment = {
+  id: number
+  type?: string
+  rating?: number | null
+  body: string
+  commentedAt?: string | null
+  createdAt?: string | null
+  authorName?: string | null
+  relatedTo?: { relationTo?: string; value?: number | { id: number } | null } | null
+  authorPublic?: { username?: string | null; avatar?: { url?: string | null } | null } | null
+}
+
+/** Zhuštění na jeden řádek výpisu (legacy texty obsahují i vložený balast). */
+function activityExcerpt(text: string, max = 160): string | null {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  if (!compact) return null
+  return compact.length > max ? compact.slice(0, max).trimEnd() + '…' : compact
+}
+
+async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
+  const payload = await getDb()
+
+  const [placesRes, reviewsRes, commentsRes] = await Promise.all([
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { _status: { equals: 'published' } },
+          {
+            category: {
+              in: [
+                PageCategory.Misto_k_navstiveni,
+                PageCategory.Turisticky_cil,
+                PageCategory.Mista,
+              ],
+            },
+          },
+        ],
+      },
+      // createdAt = původní datum vzniku místa (u migrovaných doplněno ze staré
+      // DB skriptem backfill-page-created-dates).
+      sort: '-createdAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+      joins: false,
+      select: {
+        title: true,
+        fullSlug: true,
+        text: true,
+        createdAt: true,
+        breadcrumbs: BREADCRUMBS_SELECT,
+        featuredImage: true,
+        // createdByPublic (virtuální) čte data.createdBy — bez něj v selectu
+        // vrací null a autor by ve výpisu chyběl.
+        createdBy: true,
+        createdByPublic: true,
+      },
+    }),
+    // overrideAccess: false → anonymní pravidlo kolekce skryje spam i recenze
+    // na nepublikovaných stránkách. commentedAt je vyplněné VŽDY (migrace
+    // i nové vklady), takže DB sort je bezpečný.
+    payload.find({
+      collection: 'comments',
+      overrideAccess: false,
+      where: { type: { equals: 'review' } },
+      sort: '-commentedAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+    }),
+    payload.find({
+      collection: 'comments',
+      overrideAccess: false,
+      where: { type: { equals: 'comment' } },
+      sort: '-commentedAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+    }),
+  ])
+
+  // Cíle recenzí/komentářů hromadně (stejný vzor jako profil) — populace přes
+  // depth by stála dotaz za každou položku.
+  const rawComments = [...reviewsRes.docs, ...commentsRes.docs] as unknown as RawActivityComment[]
+  const pageTargetIds = new Set<number>()
+  const articleTargetIds = new Set<number>()
+  for (const c of rawComments) {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) continue
+    if (c.relatedTo?.relationTo === 'pages') pageTargetIds.add(id)
+    else if (c.relatedTo?.relationTo === 'articles') articleTargetIds.add(id)
+  }
+
+  type TargetPage = {
+    id: number
+    title: string
+    fullSlug: string
+    breadcrumbs?: { label?: string | null }[] | null
+  }
+  type TargetArticle = {
+    id: number
+    title: string
+    slug?: string | null
+    mainPage?: number | { id: number } | null
+  }
+  const [targetPagesRes, targetArticlesRes] = await Promise.all([
+    pageTargetIds.size
+      ? payload.find({
+          collection: 'pages',
+          overrideAccess: false,
+          where: { id: { in: [...pageTargetIds] } },
+          depth: 0,
+          joins: false,
+          limit: pageTargetIds.size,
+          pagination: false,
+          select: { title: true, fullSlug: true, breadcrumbs: BREADCRUMBS_SELECT },
+        })
+      : { docs: [] },
+    articleTargetIds.size
+      ? payload.find({
+          collection: 'articles',
+          overrideAccess: false,
+          where: { id: { in: [...articleTargetIds] } },
+          depth: 0,
+          joins: false,
+          limit: articleTargetIds.size,
+          pagination: false,
+          select: { title: true, slug: true, mainPage: true },
+        })
+      : { docs: [] },
+  ])
+  const targetPageById = new Map(
+    (targetPagesRes.docs as unknown as TargetPage[]).map((p) => [p.id, p]),
+  )
+  const targetArticleById = new Map(
+    (targetArticlesRes.docs as unknown as TargetArticle[]).map((a) => [a.id, a]),
+  )
+
+  // Adresa článku = fullSlug hlavní stránky + slug článku (viz articleHref
+  // v profilu) — hlavní stránky dohledáme jedním dotazem.
+  const mainPageIds = new Set<number>()
+  for (const a of targetArticleById.values()) {
+    const id = relationIdOf(a.mainPage ?? null)
+    if (id != null) mainPageIds.add(id)
+  }
+  const mainPagesRes = mainPageIds.size
+    ? await payload.find({
+        collection: 'pages',
+        overrideAccess: false,
+        where: { id: { in: [...mainPageIds] } },
+        depth: 0,
+        joins: false,
+        limit: mainPageIds.size,
+        pagination: false,
+        select: { fullSlug: true, breadcrumbs: BREADCRUMBS_SELECT },
+      })
+    : { docs: [] }
+  const mainPageById = new Map((mainPagesRes.docs as unknown as TargetPage[]).map((p) => [p.id, p]))
+
+  const targetOf = (
+    c: RawActivityComment,
+  ): { title: string; href: string; context: string | null } | null => {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) return null
+    if (c.relatedTo?.relationTo === 'pages') {
+      const p = targetPageById.get(id)
+      // Poslední drobeček je místo samo (= titulek řádku), proto se vynechává.
+      return p
+        ? {
+            title: p.title,
+            href: p.fullSlug,
+            context: breadcrumbPath(p.breadcrumbs, { dropLast: true }),
+          }
+        : null
+    }
+    if (c.relatedTo?.relationTo === 'articles') {
+      const a = targetArticleById.get(id)
+      if (!a?.slug) return null
+      const mainId = relationIdOf(a.mainPage ?? null)
+      const main = mainId != null ? mainPageById.get(mainId) : undefined
+      if (!main) return null
+      return {
+        title: a.title,
+        href: `${main.fullSlug.replace(/\/$/, '')}/${a.slug}`,
+        // U článku celá cesta jeho místa („Evropa / Anglie") — titulek řádku je
+        // název článku, takže se nic neduplikuje.
+        context: breadcrumbPath(main.breadcrumbs, { dropLast: false }),
+      }
+    }
+    return null
+  }
+
+  const enrichedPlaces = await enrichFeaturedImages(placesRes.docs as unknown as RawActivityPage[])
+  const placeItems: ActivityItem[] = enrichedPlaces.map((p) => {
+    const img = p.featuredImage?.image
+    const author = p.createdByPublic
+    return {
+      kind: 'place',
+      key: `place-${p.id}`,
+      title: p.title,
+      href: p.fullSlug,
+      date: p.createdAt ?? null,
+      authorName: author?.name?.trim() || author?.username || null,
+      authorUsername: author?.username ?? null,
+      avatarUrl: author?.avatar?.url ?? null,
+      text: activityExcerpt(richTextToPlainText(p.text)),
+      context: breadcrumbPath(p.breadcrumbs, { dropLast: true }),
+      image: img && typeof img === 'object' ? ((img as { url?: string | null }).url ?? null) : null,
+      rating: null,
+    }
+  })
+
+  const commentItems: ActivityItem[] = rawComments.flatMap((c) => {
+    const target = targetOf(c)
+    // Bez dohledatelného cíle (nepublikovaná stránka apod.) položku vynecháme —
+    // odkaz na 404 je horší než chybějící řádek.
+    if (!target) return []
+    return [
+      {
+        kind: c.type === 'review' ? ('review' as const) : ('comment' as const),
+        key: `comment-${c.id}`,
+        title: target.title,
+        href: target.href,
+        date: c.commentedAt ?? c.createdAt ?? null,
+        authorName: c.authorName?.trim() || c.authorPublic?.username || null,
+        authorUsername: c.authorPublic?.username ?? null,
+        avatarUrl: c.authorPublic?.avatar?.url ?? null,
+        text: activityExcerpt(c.body),
+        context: target.context,
+        image: null,
+        rating: c.type === 'review' ? (c.rating ?? null) : null,
+      },
+    ]
+  })
+
+  // Jeden proud, nejnovější nahoře; klíč jako rozhodčí pro stabilní pořadí.
+  return [...placeItems, ...commentItems].sort((a, b) => {
+    const diff = new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+    return diff !== 0 ? diff : a.key.localeCompare(b.key)
+  })
+}
+
+const fetchLatestActivityCached = cached(fetchLatestActivityUncached, 'latest-activity', () => [
+  'latest-activity',
+  'pages',
+  'articles',
+  'comments',
+])
+
+export const fetchLatestActivity = async (): Promise<ActivityItem[]> => {
+  try {
+    return await fetchLatestActivityCached()
+  } catch (err) {
+    // Homepage nesmí spadnout kvůli sekci novinek — bez dat se prostě nevykreslí.
+    console.error('[whats-new] load failed:', err)
+    return []
   }
 }

@@ -295,6 +295,30 @@ export interface ProfileCommentItem {
   commentedAt: string | null
 }
 
+/** Položka homepage sekce „Co je nového" — nové místo, recenze, nebo komentář. */
+export interface ActivityItem {
+  kind: 'place' | 'review' | 'comment'
+  /** Stabilní klíč pro React (kolekce+id — id se mezi kolekcemi můžou potkat). */
+  key: string
+  /** Název cílové stránky/článku. */
+  title: string
+  href: string
+  /** ISO datum události (vytvoření místa / vložení recenze či komentáře). */
+  date: string | null
+  authorName: string | null
+  /** Přezdívka registrovaného autora → proklik na /profil/<username>. */
+  authorUsername: string | null
+  avatarUrl: string | null
+  /** Úryvek textu místa, resp. citace recenze/komentáře. */
+  text: string | null
+  /** Drobečková cesta — u místa jeho poloha, u recenze/komentáře poloha cíle. */
+  context: string | null
+  /** Fotka místa (jen kind=place). */
+  image: string | null
+  /** Hvězdičky (jen kind=review). */
+  rating: number | null
+}
+
 export interface UserProfileData {
   /** ID účtu — potřebné jen k rozpoznání „tohle je můj profil" (tlačítko Upravit). */
   id: number
