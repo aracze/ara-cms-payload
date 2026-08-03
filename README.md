@@ -365,11 +365,25 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     nepřihlásí nikdo včetně adminů; (2) `pnpm migrate:user-name` (jméno + příjmení → `name`);
     (3) teprve pak zahodit sloupce `first_name` / `last_name` — opačné pořadí = ztráta jmen;
     (4) převod avatarů (níž); (5) volitelně `pnpm cleanup:avatars` na osiřelé fotky.
-  - ⚠️ **Nasazení**: převod stávajících avatarů z `media` dělá `pnpm migrate:avatars <mapa.json>`.
-    Postup: (1) před přepnutím schématu vyexportovat mapu `users ⋈ media`, (2) vynulovat
-    `users.avatar_id` (jinak selže výměna cizího klíče), (3) přepnout schéma, (4) spustit skript.
-    Na produkci je nutné to zopakovat s produkčním `.env`, jinak by fotky zůstaly na DEV
-    Cloudinary účtu. Originály v `media` se NEMAŽOU (záloha).
+  - ⚠️ **Nasazení**: převod stávajících avatarů z `media` dělá `pnpm migrate:avatars <mapa.json>`
+    (stáhne a nahraje znovu). Postup: (1) před přepnutím schématu vyexportovat mapu
+    `users ⋈ media`, (2) vynulovat `users.avatar_id` (jinak selže výměna cizího klíče),
+    (3) přepnout schéma, (4) spustit skript. Na dev to takhle proběhlo.
+  - **NA PRODUKCI (3. 8. 2026) TO PROBĚHLO JINAK.** Místo znovunahrávání se `avatars`
+    napojily na TYTÉŽ soubory na Cloudinary, které už měla `media` (zkopírovaný
+    `cloudinary_public_id` a `url`). Ušetřilo to 24 uploadů a fotky zůstaly na produkčním
+    účtu. Ověřeno: `select count(*) from avatars a join media m on
+m.cloudinary_public_id = a.cloudinary_public_id` → 24 z 24 sdílí soubor.
+  - ⚠️ **Pozor při změně konfigurace úložiště.** Dnes je mazání záznamů v `media` bezpečné:
+    plugin `payload-storage-cloudinary` maže soubor na Cloudinary JEN tehdy, když je kolekce
+    nastavená objektem s volbami — u `boolean` (náš případ, `collections: { media: true,
+avatars: true }`) se mazací handler hned vrátí. Kdyby se zápis změnil na objekt, začalo by
+    mazání dokumentu odstraňovat i soubor — a smazáním 25 starých avatarů z `media` by zmizelo
+    všech 24 profilových fotek, protože sdílejí stejné soubory. Pak je nutné avatary nejdřív
+    nahrát jako vlastní kopie (`pnpm migrate:avatars`).
+  - Druhá strana téže medaile: dokud plugin nemaže, **zůstávají na Cloudinary osiřelé soubory**
+    po vyměněných a odebraných profilových fotkách. `pnpm cleanup:avatars` uklidí záznamy
+    v databázi, ale soubory na Cloudinary ne — na ty je potřeba úklid na jeho straně.
 
 - **Comments (Komentáře a recenze)**:
   - Komentáře k článkům a recenze k místům/turistickým cílům (stránkám) — rozlišené polem `type` (`comment` / `review`); recenze má navíc hvězdičkové hodnocení. Cíl je polymorfní vazba `relatedTo` (článek / stránka).

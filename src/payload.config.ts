@@ -44,6 +44,11 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
+  // Veřejná adresa webu. Bez ní Payload při každém požadavku hlásí, že původ
+  // není v seznamu povolených (CORS/CSRF), a odvozuje ho z prázdného řetězce —
+  // v logu produkce to bylo u každého volání API. Adresa je stejná proměnná,
+  // jakou používají odkazy v e-mailech (viz kolekce Users).
+  serverURL: process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL || 'http://localhost:3000',
   admin: {
     user: Users.slug,
     importMap: {
