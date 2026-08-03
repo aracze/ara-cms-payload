@@ -19,10 +19,12 @@ export const StaticHeroTitle = ({ title }: { title: string }) => {
 
       <div className="relative w-full max-w-2xl flex flex-col items-center">
         {/* Měkké ztmavení jen kolem pole a odkazů — celoplošný overlay dusil
-            fotku; kontrast je potřeba pouze tady. */}
+            fotku; kontrast je potřeba pouze tady. Na mobilu menší přesah do
+            stran: -inset-x-12 vyčníval za okraj a stránka šla vodorovně
+            posouvat (hero nesmí mít overflow-hidden kvůli našeptávači). */}
         <div
           aria-hidden="true"
-          className="absolute -inset-x-12 -inset-y-9 pointer-events-none bg-[radial-gradient(ellipse_at_center,rgba(8,22,42,0.38),transparent_70%)]"
+          className="absolute -inset-x-4 sm:-inset-x-12 -inset-y-9 pointer-events-none bg-[radial-gradient(ellipse_at_center,rgba(8,22,42,0.38),transparent_70%)]"
         />
 
         <div className="relative w-full">
