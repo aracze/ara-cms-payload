@@ -46,6 +46,7 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
     })
     for (const p of res.docs || []) {
       const doc = p as unknown as {
+        id: number | string
         title?: string
         text?: unknown
         slug?: string
@@ -67,6 +68,8 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
         imageIdByItemIndex.set(items.length, imageId)
       }
       items.push({
+        // Stabilní klíč pro React ve výpisu (jinak by se padalo na index).
+        documentId: String(doc.id),
         title: doc.title ?? '',
         text: richTextToPlainText(doc.text).slice(0, 2000),
         slug: doc.slug ?? '',

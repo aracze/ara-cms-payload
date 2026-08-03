@@ -49,6 +49,7 @@ export function HomepageSearch() {
         />
         {query.length > 0 && (
           <button
+            type="button"
             onClick={handleClear}
             className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
             aria-label="Vymazat hledání"

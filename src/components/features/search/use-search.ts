@@ -36,6 +36,9 @@ export function useSearch() {
         setLoadedQuery(query)
       } else {
         setResults([])
+        // Bez resetu by opakované napsání TÉHOŽ dotazu (smazat a znovu) prošlo
+        // testem query === loadedQuery a místo „Hledám…" blesklo „Žádné výsledky".
+        setLoadedQuery('')
       }
     }
 
