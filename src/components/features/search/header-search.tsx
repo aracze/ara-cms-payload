@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
+import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
 
 export function HeaderSearch() {
-  const { query, setQuery, results, clearSearch } = useSearch()
+  const { query, setQuery, results, clearSearch, isLoading } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -95,6 +96,11 @@ export function HeaderSearch() {
               {(query.length > 0 || results.length > 0) && (
                 <div className="max-w-7xl mx-auto px-4 md:px-12 pb-8">
                   <ResultList results={results} handleLinkClicked={handleClear} />
+                  <SearchStatus
+                    query={query}
+                    isLoading={isLoading}
+                    hasResults={results.length > 0}
+                  />
                 </div>
               )}
             </div>

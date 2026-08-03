@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
+import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
 
 export function HomepageSearch() {
-  const { query, setQuery, results, clearSearch } = useSearch()
+  const { query, setQuery, results, clearSearch, isLoading } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -69,11 +70,7 @@ export function HomepageSearch() {
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="max-h-[400px] overflow-y-auto p-4">
             <ResultList results={results} handleLinkClicked={() => setIsExpanded(false)} />
-            {results.length === 0 && query.length > 0 && (
-              <div className="p-4 text-center text-gray-400 text-sm">
-                Žádné výsledky pro &quot;{query}&quot;
-              </div>
-            )}
+            <SearchStatus query={query} isLoading={isLoading} hasResults={results.length > 0} />
           </div>
         </div>
       )}
