@@ -5,6 +5,10 @@ export const testUser = {
   email: 'dev@payloadcms.com',
   password: 'test',
   roles: ['admin'],
+  // Od zapnutí `auth.verify` v kolekci Users odmítá Payload přihlásit účet bez
+  // tohohle příznaku — testovací uživatel by se do administrace nedostal.
+  // Odpovídá tomu, co dělá `pnpm backfill:verified` u existujících účtů.
+  _verified: true,
 }
 
 /**

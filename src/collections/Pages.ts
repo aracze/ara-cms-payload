@@ -443,8 +443,7 @@ export const Pages: CollectionConfig = {
                   // ne celého uživatele (heslo/hash, role, e-mail sem nepatří).
                   select: {
                     username: true,
-                    firstName: true,
-                    lastName: true,
+                    name: true,
                     avatar: true,
                   },
                   overrideAccess: true,
@@ -454,8 +453,7 @@ export const Pages: CollectionConfig = {
                 .then((user: any) => ({
                   id: user.id,
                   username: user.username ?? null,
-                  firstName: user.firstName ?? null,
-                  lastName: user.lastName ?? null,
+                  name: user.name ?? null,
                   avatar:
                     user.avatar && typeof user.avatar === 'object'
                       ? { url: user.avatar.url ?? null }

@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    avatars: Avatar;
     pages: Page;
     articles: Article;
     comments: Comment;
@@ -92,6 +93,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    avatars: AvatarsSelect<false> | AvatarsSelect<true>;
     pages: PagesSelect<false> | PagesSelect<true>;
     articles: ArticlesSelect<false> | ArticlesSelect<true>;
     comments: CommentsSelect<false> | CommentsSelect<true>;
@@ -151,11 +153,10 @@ export interface User {
   id: number;
   legacyUserId?: number | null;
   username?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
+  name?: string | null;
   description?: string | null;
   myWebUrl?: string | null;
-  avatar?: (number | null) | Media;
+  avatar?: (number | null) | Avatar;
   roles: ('admin' | 'editor' | 'user')[];
   updatedAt: string;
   createdAt: string;
@@ -164,6 +165,8 @@ export interface User {
   resetPasswordExpiration?: string | null;
   salt?: string | null;
   hash?: string | null;
+  _verified?: boolean | null;
+  _verificationToken?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
   sessions?:
@@ -175,6 +178,44 @@ export interface User {
     | null;
   password?: string | null;
   collection: 'users';
+}
+/**
+ * Profilové fotky uživatelů. Nahrávají si je lidé sami ze svého profilu.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "avatars".
+ */
+export interface Avatar {
+  id: number;
+  owner?: (number | null) | User;
+  alt?: string | null;
+  cloudinaryPublicId?: string | null;
+  cloudinaryUrl?: string | null;
+  cloudinaryResourceType?: string | null;
+  cloudinaryFormat?: string | null;
+  cloudinaryVersion?: number | null;
+  /**
+   * Direct URL to the original file without transformations
+   */
+  originalUrl?: string | null;
+  /**
+   * URL with applied transformations
+   */
+  transformedUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  /**
+   * File size in bytes
+   */
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -540,6 +581,10 @@ export interface PayloadLockedDocument {
         value: number | Media;
       } | null)
     | ({
+        relationTo: 'avatars';
+        value: number | Avatar;
+      } | null)
+    | ({
         relationTo: 'pages';
         value: number | Page;
       } | null)
@@ -604,8 +649,7 @@ export interface PayloadMigration {
 export interface UsersSelect<T extends boolean = true> {
   legacyUserId?: T;
   username?: T;
-  firstName?: T;
-  lastName?: T;
+  name?: T;
   description?: T;
   myWebUrl?: T;
   avatar?: T;
@@ -617,6 +661,8 @@ export interface UsersSelect<T extends boolean = true> {
   resetPasswordExpiration?: T;
   salt?: T;
   hash?: T;
+  _verified?: T;
+  _verificationToken?: T;
   loginAttempts?: T;
   lockUntil?: T;
   sessions?:
@@ -639,6 +685,32 @@ export interface MediaSelect<T extends boolean = true> {
   sourceLink?: T;
   creativeCommonsLicense?: T;
   r2BackupStatus?: T;
+  cloudinaryPublicId?: T;
+  cloudinaryUrl?: T;
+  cloudinaryResourceType?: T;
+  cloudinaryFormat?: T;
+  cloudinaryVersion?: T;
+  originalUrl?: T;
+  transformedUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "avatars_select".
+ */
+export interface AvatarsSelect<T extends boolean = true> {
+  owner?: T;
+  alt?: T;
   cloudinaryPublicId?: T;
   cloudinaryUrl?: T;
   cloudinaryResourceType?: T;

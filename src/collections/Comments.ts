@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { isAdmin } from '../access/isAdmin'
 import { populateCommentLabel } from '../hooks/populateCommentLabel'
 import { populateCommentAuthorPublic } from '../hooks/populateCommentAuthorPublic'
@@ -19,54 +20,118 @@ export const Comments: CollectionConfig = {
   access: {
     // Anonym: skrýt spam + recenze na NEpublikované stránky. Články jsou vždy veřejné
     // (nemají drafty). Řeší se přes polymorfní `relatedTo` (relationTo + value), protože
-    // nelze filtrovat cizí `_status` inline; `not_in` na polymorfní value navíc není podporováno.
+    // nelze filtrovat cizí `_status` inline.
+    //
+    // POZOR na obrácený zápis („povol vše KROMĚ draftů"): negativní operátory na
+    // polymorfní `relatedTo.value` (`not_in`, `not_equals`) nefungují — ověřeno
+    // měřením: zahodí VŠECHNY recenze na stránkách (z 371 komentářů vrátí jen 95
+    // článkových). Povolovat se proto musí pozitivním `in`.
+    //
+    // Toto pravidlo běží při KAŽDÉM anonymním čtení komentářů, takže musí být levné:
+    // dřív si bezpodmínečně vytáhlo seznam všech publikovaných stránek (na tomto
+    // webu 3067 ID, ~136 ms) jen kvůli 4 draftům, na kterých většinou žádný
+    // komentář není. Nově se to řeší dvěma malými dotazy a plný seznam se staví
+    // jen tehdy, když na draftu opravdu něco visí.
     read: async ({ req }): Promise<boolean | Where> => {
-      if (req.user) return true
+      // Vidět úplně VŠECHNO (spam i komentáře na rozpracovaných stránkách) smí
+      // jen redakce. Dokud se přihlašovali jen redaktoři, stačilo `if (req.user)`;
+      // od chvíle, kdy se přihlašují i čtenáři, by jim ta zkratka spam a drafty
+      // odhalila. Běžný přihlášený uživatel tedy prochází stejným filtrem jako
+      // nepřihlášený (drahé dotazy níž se počítají jednou za požadavek).
+      if (isAdminOrEditor({ req })) return true
       const notSpam: Where = { status: { not_equals: 'spam' } }
 
-      // Rychlá cesta: bez draft stránek není co skrývat (běžný stav).
-      const drafts = await req.payload.find({
-        collection: 'pages',
-        where: { _status: { equals: 'draft' } },
-        depth: 0,
-        limit: 0,
-        pagination: false,
-        overrideAccess: true,
-        req,
-        select: {},
-      })
-      if (drafts.docs.length === 0) return notSpam
+      // Výsledek platí pro celý požadavek — pravidlo se během jednoho vykreslení
+      // stránky vyhodnocuje víckrát (výpis komentářů, počty, recenze) a bez
+      // téhle paměti by se drahé dotazy níž opakovaly.
+      const cache = (req.context ??= {}) as { anonCommentFilter?: Where | false }
+      // `!== undefined`, ne pravdivostní test: do paměti se ukládá i zamítnutí
+      // (`false`). Bez toho by se po chybě dotazu zbytek požadavku pokoušel
+      // znovu a znovu a plnil log stejnou hláškou.
+      if (cache.anonCommentFilter !== undefined) return cache.anonCommentFilter
 
-      // Jsou drafty → povolit komentáře na články + recenze jen na publikované stránky.
-      const published = await req.payload.find({
-        collection: 'pages',
-        where: {
-          or: [{ _status: { equals: 'published' } }, { _status: { exists: false } }],
-        },
-        depth: 0,
-        limit: 0,
-        pagination: false,
-        overrideAccess: true,
-        req,
-        select: {},
-      })
-      const publishedIds = published.docs.map((p) => p.id)
+      try {
+        // 1) Bez draft stránek není co skrývat (běžný stav).
+        const drafts = await req.payload.find({
+          collection: 'pages',
+          where: { _status: { equals: 'draft' } },
+          depth: 0,
+          limit: 0,
+          pagination: false,
+          overrideAccess: true,
+          req,
+          select: {},
+        })
+        const draftIds = drafts.docs.map((p) => p.id)
+        if (draftIds.length === 0) return (cache.anonCommentFilter = notSpam)
 
-      return {
-        and: [
-          notSpam,
-          {
-            or: [
-              { 'relatedTo.relationTo': { equals: 'articles' } },
-              {
-                and: [
-                  { 'relatedTo.relationTo': { equals: 'pages' } },
-                  { 'relatedTo.value': { in: publishedIds } },
-                ],
-              },
+        // 2) Existuje vůbec komentář/recenze na některém z draftů? Stačí první nález.
+        const onDraft = await req.payload.find({
+          collection: 'comments',
+          where: {
+            and: [
+              // Spam veřejně stejně nesvítí, takže kvůli němu nemá cenu spouštět
+              // drahou větev níž ani přidávat stránku mezi povolené.
+              notSpam,
+              { 'relatedTo.relationTo': { equals: 'pages' } },
+              { 'relatedTo.value': { in: draftIds } },
             ],
           },
-        ],
+          depth: 0,
+          limit: 1,
+          overrideAccess: true,
+          req,
+          select: {},
+        })
+        if (onDraft.docs.length === 0) return (cache.anonCommentFilter = notSpam)
+
+        // 3) Je co skrývat → povolíme jen stránky, které KOMENTÁŘE MAJÍ a nejsou draft.
+        //    Seznam je tak dlouhý jako počet komentovaných stránek (tady 230), ne jako
+        //    počet všech stránek webu (3067).
+        const commented = await req.payload.find({
+          collection: 'comments',
+          where: { and: [notSpam, { 'relatedTo.relationTo': { equals: 'pages' } }] },
+          depth: 0,
+          limit: 0,
+          pagination: false,
+          overrideAccess: true,
+          req,
+          select: { relatedTo: true },
+        })
+        const allowedIds = [
+          ...new Set(
+            commented.docs
+              .map((c) => (c as { relatedTo?: { value?: unknown } }).relatedTo?.value)
+              .filter((v): v is number | string => typeof v === 'number' || typeof v === 'string'),
+          ),
+        ].filter((id) => !draftIds.includes(id as never))
+
+        const filtr: Where = {
+          and: [
+            notSpam,
+            {
+              or: [
+                { 'relatedTo.relationTo': { equals: 'articles' } },
+                {
+                  and: [
+                    { 'relatedTo.relationTo': { equals: 'pages' } },
+                    { 'relatedTo.value': { in: allowedIds } },
+                  ],
+                },
+              ],
+            },
+          ],
+        }
+        cache.anonCommentFilter = filtr
+        return filtr
+      } catch (err) {
+        // FAIL CLOSED: kdyby některý z dotazů selhal, nesmí to skončit pádem
+        // ani povolením všeho — anonym prostě neuvidí nic.
+        req.payload.logger.error(
+          `Pravidlo čtení komentářů selhalo, anonymní čtení zamítnuto: ${err instanceof Error ? err.message : err}`,
+        )
+        cache.anonCommentFilter = false
+        return false
       }
     },
     create: isAdmin,

@@ -956,8 +956,7 @@ export const fetchTouristPointSiblings = cache(
 type RawProfileUser = {
   id: number
   username?: string | null
-  firstName?: string | null
-  lastName?: string | null
+  name?: string | null
   description?: string | null
   myWebUrl?: string | null
   avatar?: { url?: string | null } | number | null
@@ -1038,8 +1037,7 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
     depth: 1,
     select: {
       username: true,
-      firstName: true,
-      lastName: true,
+      name: true,
       description: true,
       myWebUrl: true,
       avatar: true,
@@ -1329,9 +1327,9 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
   }
 
   return {
+    id: Number(user.id),
     username: user.username ?? username,
-    firstName: user.firstName ?? null,
-    lastName: user.lastName ?? null,
+    name: user.name?.trim() || null,
     description: user.description ?? null,
     myWebUrl: user.myWebUrl ?? null,
     avatarUrl: user.avatar && typeof user.avatar === 'object' ? (user.avatar.url ?? null) : null,

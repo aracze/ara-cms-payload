@@ -16,8 +16,7 @@ import {
 type PublicAuthor = {
   id: number
   username: string | null
-  firstName: string | null
-  lastName: string | null
+  name: string | null
   description: string | null
   avatar: { url: string | null } | null
 }
@@ -234,8 +233,7 @@ export const Articles: CollectionConfig = {
                 req,
                 select: {
                   username: true,
-                  firstName: true,
-                  lastName: true,
+                  name: true,
                   description: true,
                   avatar: true,
                 },
@@ -244,8 +242,7 @@ export const Articles: CollectionConfig = {
               result = {
                 id: user.id,
                 username: user.username ?? null,
-                firstName: user.firstName ?? null,
-                lastName: user.lastName ?? null,
+                name: user.name ?? null,
                 description: user.description ?? null,
                 avatar:
                   user.avatar && typeof user.avatar === 'object'

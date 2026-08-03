@@ -304,6 +304,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             pageId={Number(page.id)}
             pageTitle={page.title}
             reviews={reviewsData.reviews}
+            // Kam se vrátit po přihlášení z pruhu nad formulářem recenze.
+            backTo={page.fullSlug}
           />
         )}
 

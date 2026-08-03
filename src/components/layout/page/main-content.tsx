@@ -73,8 +73,7 @@ export const MainContent = ({
   genitive?: string | null
   createdByPublic?: {
     username?: string | null
-    firstName?: string | null
-    lastName?: string | null
+    name?: string | null
     avatar?: { url?: string | null } | null
   } | null
   /** Karta Praktické informace (jen turistické cíle) — adresa, web, mapa, autor. */
@@ -110,8 +109,10 @@ export const MainContent = ({
   // Autora bereme VÝHRADNĚ z veřejného virtuálního pole `createdByPublic` —
   // interní `createdBy` (surová relace na uživatele) se na frontend nevystavuje.
   const author = createdByPublic ?? null
-  const authorName =
-    author?.username || [author?.firstName, author?.lastName].filter(Boolean).join(' ') || null
+  // Pořadí stejné jako u autora článku: nejdřív celé jméno, pak uživatelské.
+  // U AUTORSTVÍ obsahu (článek, místo, cíl) dává smysl skutečné jméno; podpis
+  // pod komentáři a recenzemi zůstává uživatelským jménem (viz publicName).
+  const authorName = author?.name || author?.username || null
   // Surová URL avataru — absolutní i fallback (papoušek) řeší UserAvatar
   // v CollapsiblePageTextWithContributor. Null = bez fotky → papoušek.
   const avatarUrl = author?.avatar?.url ?? null

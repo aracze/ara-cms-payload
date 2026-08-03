@@ -35,7 +35,28 @@ const RATE_LIMIT_MAX = 5 // max komentářů
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // za 10 minut
 const rateBucket = new Map<string, number[]>()
 
-/** true = přes limit (odmítnout). Zároveň průběžně čistí staré záznamy. */
+/**
+ * IP volajícího z hlaviček od proxy. Prázdný řetězec = nezjistitelná.
+ *
+ * JEDNO místo pro všechny akce (komentáře, recenze, registrace, obnova hesla).
+ * Dřív si každá parsovala hlavičky po svém a zápisy se začaly rozcházet —
+ * dvě varianty se lišily v pořadí `trim()` a fallbacku.
+ */
+export function clientIp(h: Headers): string {
+  const forwarded = h.get('x-forwarded-for')?.split(',')[0]?.trim()
+  if (forwarded) return forwarded
+  return h.get('x-real-ip')?.trim() ?? ''
+}
+
+/**
+ * true = přes limit (odmítnout). Zároveň průběžně čistí staré záznamy.
+ *
+ * PRÁZDNÝ KLÍČ SE NELIMITUJE. Kdyby se všechny požadavky bez zjistitelné IP
+ * sesypaly do jednoho koše, stačil by jeden útočník a zablokoval by registraci
+ * i obnovu hesla všem ostatním, kterým IP taky nejde zjistit. Ochranu v takovém
+ * případě drží Turnstile a honeypot — a tam, kde je k dispozici e-mail, se
+ * klíčuje podle něj (viz `rateLimitKey`).
+ */
 export function isRateLimited(ip: string, now: number): boolean {
   if (!ip) return false
   const recent = (rateBucket.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
@@ -112,4 +133,15 @@ export async function verifyTurnstile(token: string | null, ip: string): Promise
   } catch {
     return false
   }
+}
+
+/**
+ * Klíč pro limit tam, kde známe cíl operace (e-mail).
+ *
+ * Když IP nejde zjistit, nemá smysl se limitu vzdát úplně: útok na konkrétní
+ * účet (bombardování obnovy hesla) jde omezit i podle e-mailu.
+ */
+export function rateLimitKey(ip: string, email: string): string {
+  if (ip) return ip
+  return email ? `email:${email.toLowerCase()}` : ''
 }

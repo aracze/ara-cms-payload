@@ -19,9 +19,18 @@ import { StarInput } from './star-input'
 export function ReviewRatingBox({
   pageId,
   turnstileSiteKey,
+  signedAs,
+  loginHint,
+  isSignedIn = false,
 }: {
   pageId: number
   turnstileSiteKey: string | null
+  /** Pruh „Píšeš jako…" / pozvánka k přihlášení (vykresluje server). */
+  signedAs?: React.ReactNode
+  /** Jednořádková výzva k přihlášení POD políčkem jména (nepřihlášený). */
+  loginHint?: React.ReactNode
+  /** Přihlášený nevyplňuje jméno — bere se ze session na serveru. */
+  isSignedIn?: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -105,7 +114,7 @@ export function ReviewRatingBox({
         <form
           ref={formRef}
           onSubmit={handleSubmit}
-          className="border-t border-[#e6eaee] bg-[#fafafa] px-4 py-5"
+          className="border-t border-[#e6eaee] bg-[#f5f7f9] p-6"
         >
           <input type="hidden" name="pageId" value={pageId} />
           <input type="hidden" name="renderedAt" value={renderedAt} />
@@ -119,6 +128,32 @@ export function ReviewRatingBox({
             </label>
           </div>
 
+          {signedAs}
+
+          {/* Přihlášený jméno nevyplňuje — podepíše se účtem (server si ho bere
+              ze session, hodnotě z formuláře by stejně nevěřil). */}
+          {!isSignedIn && (
+            <div className="mb-4">
+              <div className="max-w-xs">
+                <label
+                  htmlFor="review-name"
+                  className="mb-1.5 block text-sm font-semibold text-gray-500"
+                >
+                  Jméno
+                </label>
+                <input
+                  id="review-name"
+                  name="authorName"
+                  type="text"
+                  required
+                  maxLength={80}
+                  placeholder="Tvé jméno"
+                  className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
+                />
+              </div>
+              {loginHint}
+            </div>
+          )}
           <div className="mb-4">
             <label
               htmlFor="review-body"
@@ -134,25 +169,7 @@ export function ReviewRatingBox({
               maxLength={5000}
               rows={8}
               placeholder="Poděl se o své zkušenosti a zážitky a buď inspirací pro ostatní cestovatele. Odkazy či jiné html prvky nelze vkládat pro snížení spamu bez přidané hodnoty. Nekvalitní či bez hodnotné recenze budou automaticky mazané."
-              className="min-h-[140px] w-full resize-y rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] leading-relaxed text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
-            />
-          </div>
-
-          <div className="mb-4 max-w-xs">
-            <label
-              htmlFor="review-name"
-              className="mb-1.5 block text-sm font-semibold text-gray-500"
-            >
-              Jméno
-            </label>
-            <input
-              id="review-name"
-              name="authorName"
-              type="text"
-              required
-              maxLength={80}
-              placeholder="Tvé jméno"
-              className="w-full rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
+              className="min-h-[110px] w-full resize-y rounded-xl border-[1.5px] border-[#e6eaee] bg-white px-3.5 py-3 text-[15px] leading-relaxed text-[#2c3643] outline-none transition focus:border-[#215491] focus:ring-[3px] focus:ring-[#e9f1f9]"
             />
           </div>
 
@@ -177,7 +194,7 @@ export function ReviewRatingBox({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-2xl bg-[#115094] px-6 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#0d3f75] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#215491] px-7 py-2.5 font-heading text-[13px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a3f6c] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isPending ? 'Odesílám…' : 'Vložit recenzi'}
             </button>

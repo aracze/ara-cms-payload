@@ -3,7 +3,14 @@
 import { headers } from 'next/headers'
 import { getDb } from './db'
 import { fetchPageReviews } from './payload'
-import { isBotSubmission, isRateLimited, looksLikeSpam, verifyTurnstile } from './comment-spam'
+import {
+  clientIp,
+  isBotSubmission,
+  isRateLimited,
+  looksLikeSpam,
+  verifyTurnstile,
+} from './comment-spam'
+import { getCurrentUser } from './auth'
 import { PageCategory, ReviewPublic } from '@/types/payload'
 import type { Page as GeneratedPage } from '@/payload-types'
 
@@ -13,7 +20,8 @@ import type { Page as GeneratedPage } from '@/payload-types'
  * Zápis běží přes Payload Local API s `overrideAccess: true` (kolekce má
  * `create: isAdmin`), takže tady MUSÍME sami vynutit bezpečná pole: pevně
  * `type: 'review'`, `status` řídí jen heuristika, cíl je vždy publikovaný
- * turistický cíl, žádný `author`/`parentComment`/`legacyCommentId`. Ochranu
+ * turistický cíl, žádný `parentComment`/`legacyCommentId`. `author` se vyplní
+ * jen u přihlášeného a VÝHRADNĚ ze session na serveru, nikdy z formuláře. Ochranu
  * proti spamu řeší comment-spam.ts (sdílené vrstvy s komentáři).
  *
  * Revalidaci cache výpisu (page_reviews_<id>) obstará afterChange hook
@@ -29,9 +37,12 @@ export type ReviewFormState =
  * Vrací jen veřejná data (ReviewPublic); u draft stránek nic (stejná logika
  * jako anonymní přístupová práva kolekce comments).
  */
+/** Veřejná podoba přihlášeného pro inline formulář (jen jméno a avatar). */
+export type ReviewAuthorHint = { displayName: string; avatarUrl: string | null } | null
+
 export async function getPageReviews(
   pageId: number,
-): Promise<{ reviews: ReviewPublic[] } | { error: string }> {
+): Promise<{ reviews: ReviewPublic[]; signedAs: ReviewAuthorHint } | { error: string }> {
   if (!Number.isInteger(pageId) || pageId <= 0) {
     return { error: 'Neplatná stránka.' }
   }
@@ -53,7 +64,13 @@ export async function getPageReviews(
   }
 
   const { reviews } = await fetchPageReviews(pageId)
-  return { reviews }
+  // Přihlášeného přibalíme rovnou — inline formulář je klientský a sám by se
+  // na server zeptat nemohl; ušetří to další kolo dotazů.
+  const user = await getCurrentUser()
+  return {
+    reviews,
+    signedAs: user ? { displayName: user.publicName, avatarUrl: user.avatarUrl } : null,
+  }
 }
 
 const MAX_NAME_LEN = 80
@@ -67,7 +84,7 @@ export async function createReview(
 
   const pageId = Number(formData.get('pageId'))
   const rating = Number(formData.get('rating'))
-  const authorName = String(formData.get('authorName') ?? '').trim()
+  const submittedName = String(formData.get('authorName') ?? '').trim()
   const body = String(formData.get('body') ?? '').trim()
   const honeypot = formData.get('website') as string | null
   const renderedAt = Number(formData.get('renderedAt'))
@@ -75,7 +92,7 @@ export async function createReview(
 
   // Klientská IP (za reverzní proxy). Best-effort — slouží jen rate-limitu.
   const h = await headers()
-  const ip = (h.get('x-forwarded-for')?.split(',')[0] ?? h.get('x-real-ip') ?? '').trim()
+  const ip = clientIp(h)
 
   // 1) Honeypot / příliš rychlé odeslání → tichý „úspěch" (robot nic nepozná).
   if (isBotSubmission(honeypot, renderedAt, now)) {
@@ -89,11 +106,17 @@ export async function createReview(
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
     return { status: 'error', message: 'Přidej prosím hodnocení hvězdičkami (1–5).' }
   }
-  if (authorName.length === 0) {
-    return { status: 'error', message: 'Vyplň prosím jméno.' }
-  }
-  if (authorName.length > MAX_NAME_LEN) {
-    return { status: 'error', message: 'Jméno je příliš dlouhé.' }
+  // Identita přihlášeného se bere VÝHRADNĚ ze session na serveru (viz komentáře).
+  const currentUser = await getCurrentUser()
+  const authorName = currentUser ? currentUser.publicName : submittedName
+
+  if (!currentUser) {
+    if (authorName.length === 0) {
+      return { status: 'error', message: 'Vyplň prosím jméno.' }
+    }
+    if (authorName.length > MAX_NAME_LEN) {
+      return { status: 'error', message: 'Jméno je příliš dlouhé.' }
+    }
   }
   if (body.length === 0) {
     return { status: 'error', message: 'Napiš prosím text recenze.' }
@@ -153,6 +176,7 @@ export async function createReview(
         rating,
         body,
         authorName,
+        ...(currentUser ? { author: currentUser.id } : {}),
         relatedTo: { relationTo: 'pages', value: pageId },
         status,
         commentedAt: new Date(now).toISOString(),

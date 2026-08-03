@@ -23,6 +23,7 @@ import { migrations } from './migrations'
 import { buildPageUrl } from './lib/page-url'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { Avatars } from './collections/Avatars'
 import { Pages } from './collections/Pages'
 import { Articles } from './collections/Articles'
 import { Comments } from './collections/Comments'
@@ -55,7 +56,7 @@ export default buildConfig({
       afterNavLinks: ['/components/DatabaseNav#DatabaseNav'],
     },
   },
-  collections: [Users, Media, Pages, Articles, Comments, Transactions],
+  collections: [Users, Media, Avatars, Pages, Articles, Comments, Transactions],
   globals: [Homepage, Header, Footer],
   editor: lexicalEditor({
     features: ({ defaultFeatures }) => [
@@ -208,6 +209,9 @@ export default buildConfig({
             },
             collections: {
               media: true,
+              // Avatary jdou na Cloudinary stejnou cestou jako média — lokální
+              // disk kontejneru nasazení nepřežije.
+              avatars: true,
             },
           }),
         ]

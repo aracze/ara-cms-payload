@@ -8,6 +8,8 @@ import { Menu, X, ChevronDown } from 'lucide-react'
 import { ImageLink, PageCategory } from '@/types/payload'
 import { isCloudinary } from '@/lib/cloudinary-loader'
 import Search from '@/components/features/search/search'
+import { HeaderAccount } from '@/components/features/auth/header-account'
+import type { CurrentUser } from '@/lib/auth'
 
 const CONTINENT_ORDER = ['Evropa', 'Amerika', 'Asie', 'Afrika', 'Austrálie']
 
@@ -29,11 +31,21 @@ export function Header({
   pages,
   headerLogo,
   logoSvgHtml,
+  user,
+  turnstileSiteKey,
 }: {
   pages: NavPage[]
   headerLogo?: ImageLink | null
   /** Předsanitizované SVG loga (na serveru přes `sanitizeHeaderLogoSvg`). */
   logoSvgHtml?: string | null
+  /**
+   * Přihlášený uživatel (bezpečná podmnožina polí z `getCurrentUser`), nebo
+   * null. Zjišťuje ho SERVER v layoutu — hlavička je klientská komponenta
+   * a sama by se na to zeptat nemohla.
+   */
+  user?: CurrentUser | null
+  /** Veřejný klíč Turnstile pro formuláře v přihlašovacím okně. */
+  turnstileSiteKey?: string | null
 }) {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -247,6 +259,8 @@ export function Header({
             >
               Rady na cestu
             </Link>
+            {/* Účet: papoušek (nepřihlášen) / avatar s menu (přihlášen). */}
+            <HeaderAccount user={user ?? null} turnstileSiteKey={turnstileSiteKey ?? null} />
             <button
               ref={menuButtonRef}
               type="button"

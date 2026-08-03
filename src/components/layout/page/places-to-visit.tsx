@@ -16,8 +16,8 @@ import type { PageReviewStats } from '@/lib/payload'
 function touristPointAuthor(child: PageChild): TouristPointAuthor | null {
   const author = child.createdByPublic
   if (!author) return null
-  const name =
-    author.username || [author.firstName, author.lastName].filter(Boolean).join(' ') || null
+  // Pořadí stejné jako u autora článku — viz komentář v main-content.tsx.
+  const name = author.name || author.username || null
   if (!name) return null
   return {
     name,

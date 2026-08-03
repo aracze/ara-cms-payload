@@ -208,6 +208,68 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
   - Výchozím identifikátorem je e-mail.
   - Kolekce je připravena na rozšíření o role (např. admin, editor) a další uživatelské údaje.
   - V administraci lze spravovat hesla a přístupové údaje.
+  - **Přihlášení na webu** (`/prihlaseni`, na webu se otevírá jako modál z papouščí ikony
+    v hlavičce): stránka je základ (funguje i bez JavaScriptu, dá se poslat odkazem), modál je
+    jen zkratka — obojí používá tentýž formulář. Token nese `httpOnly` cookie `payload-token`
+    (platnost 7 dní = `tokenExpiration`; obě hodnoty MUSÍ souhlasit), po 5 neúspěšných pokusech
+    Payload účet na 10 minut zamkne. Přihlášeného čte `getCurrentUser` (`src/lib/auth.ts`) —
+    vrací jen bezpečnou podmnožinu polí (nikdy e-mail ani role) a **ptá se jen když existuje
+    cookie**: `payload.auth()` totiž kromě tokenu dopočítává oprávnění všech kolekcí, což
+    u anonymních návštěvníků spouštělo drahé pravidlo kolekce comments (~4 s na každou stránku).
+  - **Registrace** (`/registrace`) vytváří účet přes `registerAction`
+    (`src/lib/register-actions.ts`) s `overrideAccess: true`, protože kolekce má
+    `create: isAdmin`. Proto si akce sama vynucuje: pevně `roles: ['user']` (NIKDY z formuláře),
+    jen e-mail/heslo/uživatelské jméno, honeypot + rate limit + Turnstile jako u komentářů, a obsazený
+    e-mail se ZÁMĚRNĚ nehlásí (jinak by formulář posloužil ke zjišťování registrovaných adres).
+    Účet vzniká neověřený → Payload pošle potvrzovací e-mail s odkazem na
+    `/registrace/potvrzeni?token=…`; bez potvrzení Payload přihlášení odmítne (ověřeno).
+  - **Uživatelské jméno** je veřejná identita (adresa profilu + podpis u komentářů), takže si ji uživatel
+    volí sám — odvozovat ji z e-mailu by veřejně vyzradilo jeho část. Pravidla jsou v
+    `src/lib/username.ts` (3–30 znaků, jen `a-z0-9._-`, nesmí začínat/končit oddělovačem,
+    seznam zakázaných slov). Nové uživatelská jména se ukládají MALÝMI písmeny a obsazenost se kontroluje
+    bez ohledu na velikost (`like` = v Postgresu ILIKE + přesné srovnání v JS, protože Payload
+    nemá „rovná se bez ohledu na velikost"). V databázi je na `username` unikátní index — ten je
+    ale case-sensitive, takže je to jen pojistka proti souběžné registraci, ne hlavní kontrola.
+    Migrované uživatelská jména s diakritikou a velkými písmeny („káťa", „TravelPortal.cz") zůstávají.
+    Nastavení profilu proto NESMÍ být na `/profil/nastaveni` (kolidovalo by s uživatelským jménem) —
+    patří mimo, na `/nastaveni`.
+  - **Podpis pod veřejným obsahem = uživatelské jméno**, ne jméno a příjmení (`publicName`
+    v `src/lib/auth.ts`). Důvod je datový: všech 229 podepsaných komentářů z legacy webu je
+    uložených s uživatelským jménem, takže podpis celým jménem by u nových příspěvků vypadal
+    jinak než u starých pod nimi. Celé jméno patří do záhlaví profilu. „Píšeš jako…" nad
+    formulářem ukazuje PŘESNĚ ten podpis, který se pod příspěvkem objeví.
+  - **Jméno je JEDNO pole** (`name`), ne dvojice jméno + příjmení. Nikde v aplikaci se ty dvě
+    části nepoužívaly zvlášť (všech pět míst je zase slepilo dohromady) a jména se na dvě
+    kolonky spolehlivě nedělí — dvě příjmení, mononyma, tituly, jinde ve světě příjmení první.
+    Převod starých dat dělá `pnpm migrate:user-name` (25 účtů); pole `firstName`/`lastName`
+    zůstávají dočasně skrytá a jen ke čtení, než se sloupce zahodí i v produkci.
+  - **Úprava profilu probíhá na profilu** (`?upravit=1`), ne na samostatné stránce nastavení:
+    člověk mění to, na co se dívá. Profil se přitom NEMĚNÍ na formulář — zůstává profilem
+    a jen jeho části jdou přepsat na svém místě (fotka v hlavičce má překryv s fotoaparátem,
+    jméno je pole v nadpisu, medailonek a web mají čárkovaný rámeček). Celou stránku obtáčí
+    jeden `<form>` (`ProfileEditFrame`) a ukládá se z lišty přišpendlené dole. Tlačítko je skutečný odkaz, takže to funguje i bez
+    JavaScriptu; ukládá se výslovně tlačítkem (automatické ukládání po opuštění políčka nedává
+    jistotu, že se změna uložila, a hůř se z něj vzpamatovává při chybě). Zápis dělá
+    `updateProfileAction` (`src/lib/profile-actions.ts`): identita VÝHRADNĚ ze session (z
+    formuláře nechodí žádné ID účtu), `overrideAccess: false` (takže platí práva polí — `roles`
+    smí měnit jen admin), do `data` jdou jmenovitě vypsaná pole.
+  - **Vlastník vidí svůj profil vždy**, i když nemá žádný obsah — jinak by se nově registrovaný
+    člověk na svůj profil nedostal a nemohl si ho vyplnit. Pro ostatní zůstává prázdný profil 404.
+  - **`/nastaveni`** drží jen NEVEŘEJNÉ věci: přihlašovací e-mail (zatím jen ke čtení — změna
+    potřebuje potvrzení z nové adresy, jinak by překlep odřízl obnovu hesla), změnu hesla
+    a smazání účtu. Heslo se ověřuje `payload.login()` (Payload jinou cestu nenabízí) — pozor,
+    neúspěch se počítá do limitu pokusů. Po změně hesla se vystaví NOVÁ cookie: token je
+    bezstavový JWT, sám by platit nepřestal.
+  - **Smazání účtu** příspěvky NEMAŽE, jen je odpojí od účtu (`author: null`, jméno se opíše do
+    `authorName`) — komentář se pak chová jako od nepřihlášeného. Mazat je celé nejde, protože
+    by z diskusí zmizely i odpovědi ostatních. Volitelně se jméno nahradí za „Smazaný uživatel"
+    (GDPR: uživatelská jména typu „jakub.neuzil.5" jsou fakticky jméno). Účet maže
+    `deleteAccountAction` s `overrideAccess: true` — nutné (mazat smí jinak jen admin)
+    a bezpečné: totožnost je ověřená ze session A heslem, maže se výhradně `me.id`.
+
+  - ⚠️ **Zapnutí `auth.verify` vyžaduje jednorázový `pnpm backfill:verified`** — označí stávající
+    účty za ověřené. (Ověřeno, že Payload staré účty bez příznaku neblokoval, ale příznak má být
+    explicitní; skript je idempotentní.)
   - **Veřejný profil** (`/profil/<username>`, stejná adresa jako legacy web): hero s vlnkou
     jako každá jiná stránka — výchozí **klidná mlhavá fotka** (konstanta `PROFILE_COVER_URL`
     v `src/components/layout/profile/user-profile.tsx`; výměna = přepsání jedné Cloudinary
@@ -218,7 +280,7 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     náhled přegenerovat (příkaz je v komentáři u konstanty). Pod ním zůstává `bg-[#3b444f]`
     jako u všech ostatních hlaviček.
   - Identitu v hlavičce drží **jeden blok na ose stránky**: avatar (84 px), pod ním jméno
-    a `@username`. Když uživatel nemá vyplněné jméno a příjmení, je jméno = přezdívka
+    a `@username`. Když uživatel nemá vyplněné jméno a příjmení, je jméno = uživatelské jméno
     (např. „TravelPortal.cz") a místo `@username` se vykreslí **tenká linka** jako u titulků
     ostatních stránek, aby blok nekončil natvrdo.
     Blok scelují těsná odsazení a **plynulý tmavý „kužel"** — radiální gradient
@@ -281,6 +343,33 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
   - **Veřejný přístup**: Kolekce je nastavena tak, aby byly nahrané soubory veřejně čitelné.
   - **Zpracování obrázků**: Podporuje automatické generování náhledů, ořezy a optimalizaci (poháněno knihovnou Sharp).
   - Podporuje definici fokusu (focal point) pro inteligentní ořezy.
+
+- **Avatars (Profilové fotky uživatelů)**:
+  - ZÁMĚRNĚ mimo `media`: do redakční knihovny (~3300 souborů) smí vkládat jen redakce, kdežto
+    avatar si musí nahrát každý sám. Vlastní kolekce dává vlastní práva — `create` pro každého
+    přihlášeného, `update`/`delete` jen pro vlastníka (pravidlo vrací QUERY `owner = req.user.id`,
+    ne boolean, takže platí i na hromadné operace a výpis v adminu).
+  - Limity kontroluje SERVER, ne prohlížeč (`beforeOperation`): jen JPEG/PNG/WebP, max 2 MB.
+    `upload.mimeTypes` je jen filtr dialogu pro výběr souboru a dá se obejít.
+  - **Ořez na čtverec 512×512 dělá server** (`resizeOptions` + `fit: 'cover'`) — legacy web po
+    uživatelích chtěl, ať si čtvercovou fotku připraví sami, jinak se avatar deformoval.
+  - Původní název souboru se zahazuje (`avatar-<userId>-<čas>.<ext>`) — bývá v něm jméno nebo
+    cesta z cizího počítače a byl by veřejně v adrese.
+  - Soubory jdou na **Cloudinary** stejně jako `media` (zapíná se per kolekce v
+    `payload.config.ts`); lokální disk nepřipadá v úvahu, kontejner se při nasazení zahazuje.
+    ⚠️ Na rozdíl od `media` **nemají zálohu na R2**.
+  - Server akce mají výchozí strop těla 1 MB — kvůli dvoumegovým fotkám je v `next.config.mjs`
+    zvednutý `serverActions.bodySizeLimit` na 3 MB.
+  - ⚠️ **Nasazení — POŘADÍ KROKŮ**: (1) `pnpm backfill:verified` HNED po přenesení schématu
+    a JEŠTĚ NEŽ se pustí provoz — se zapnutým `auth.verify` se bez příznaku `_verified`
+    nepřihlásí nikdo včetně adminů; (2) `pnpm migrate:user-name` (jméno + příjmení → `name`);
+    (3) teprve pak zahodit sloupce `first_name` / `last_name` — opačné pořadí = ztráta jmen;
+    (4) převod avatarů (níž); (5) volitelně `pnpm cleanup:avatars` na osiřelé fotky.
+  - ⚠️ **Nasazení**: převod stávajících avatarů z `media` dělá `pnpm migrate:avatars <mapa.json>`.
+    Postup: (1) před přepnutím schématu vyexportovat mapu `users ⋈ media`, (2) vynulovat
+    `users.avatar_id` (jinak selže výměna cizího klíče), (3) přepnout schéma, (4) spustit skript.
+    Na produkci je nutné to zopakovat s produkčním `.env`, jinak by fotky zůstaly na DEV
+    Cloudinary účtu. Originály v `media` se NEMAŽOU (záloha).
 
 - **Comments (Komentáře a recenze)**:
   - Komentáře k článkům a recenze k místům/turistickým cílům (stránkám) — rozlišené polem `type` (`comment` / `review`); recenze má navíc hvězdičkové hodnocení. Cíl je polymorfní vazba `relatedTo` (článek / stránka).

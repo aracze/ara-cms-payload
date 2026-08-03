@@ -81,8 +81,7 @@ export interface ArticleMainPage {
 
 export interface ArticleAuthor {
   username?: string | null
-  firstName?: string | null
-  lastName?: string | null
+  name?: string | null
   description?: string | null
   avatar?: { url?: string | null } | null
 }
@@ -135,8 +134,7 @@ export interface Page {
   createdBy?:
     | {
         username?: string | null
-        firstName?: string | null
-        lastName?: string | null
+        name?: string | null
         avatar?: StrapiMedia | null
       }
     | number
@@ -144,8 +142,7 @@ export interface Page {
   createdByPublic?: {
     id: number
     username?: string | null
-    firstName?: string | null
-    lastName?: string | null
+    name?: string | null
     avatar?: StrapiMedia | null
   } | null
 }
@@ -299,9 +296,11 @@ export interface ProfileCommentItem {
 }
 
 export interface UserProfileData {
+  /** ID účtu — potřebné jen k rozpoznání „tohle je můj profil" (tlačítko Upravit). */
+  id: number
   username: string
-  firstName: string | null
-  lastName: string | null
+  /** Celé jméno v záhlaví profilu. Příspěvky podepisuje uživatelské jméno. */
+  name: string | null
   description: string | null
   myWebUrl: string | null
   avatarUrl: string | null
