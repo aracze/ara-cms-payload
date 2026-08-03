@@ -20,10 +20,6 @@ export function ResultList({
 
   return (
     <div className="flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
-      {/* Popisek odděluje zónu výsledků od pole s dotazem (bez něj se slévaly). */}
-      <div className="px-2 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-        Výsledky
-      </div>
       {results.slice(0, 10).map((result: FuseResult<SearchItem>, index: number) => {
         const item = result.item
         const showCategory = item.category && !PLACE_CATEGORIES.has(item.category)
