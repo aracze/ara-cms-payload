@@ -184,7 +184,6 @@ export function ResetPasswordForm({ token }: { token: string }) {
           name="password"
           autoComplete="new-password"
           autoFocus
-          hint="Aspoň 3 znaky."
         />
         <Field
           id={againId}
