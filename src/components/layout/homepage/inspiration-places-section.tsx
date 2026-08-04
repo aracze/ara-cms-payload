@@ -2,7 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { InspirationLink } from '@/types/payload'
 
-// Dlaždicová sekce „Inspirace na cestu" na konci homepage — denní výběr míst
+// Dlaždicová sekce „Inspirace na cestu" (pod sekcí článků) — denní výběr míst
 // s fotkou (schválený styl varianty A). Jméno místa sedí na lokálním gradientu
 // u spodní hrany (žádné celoplošné ztmavení — viz designová pravidla).
 

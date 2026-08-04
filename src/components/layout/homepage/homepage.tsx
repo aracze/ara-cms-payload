@@ -54,12 +54,12 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
           <InspirationSection data={inspiration} />
         </div>
 
-        <div className="mt-14">
-          <WhatsNewSection items={activity} />
+        <div className="mt-16">
+          <InspirationPlacesSection places={inspiration?.places ?? []} />
         </div>
 
         <div className="mt-16">
-          <InspirationPlacesSection places={inspiration?.places ?? []} />
+          <WhatsNewSection items={activity} />
         </div>
       </main>
     </div>
