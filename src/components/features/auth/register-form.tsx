@@ -160,7 +160,6 @@ export function RegisterForm({ turnstileSiteKey }: { turnstileSiteKey: string | 
           type="password"
           name="password"
           autoComplete="new-password"
-          hint="Aspoň 3 znaky."
           invalid={state.status === 'error' && state.field === 'password'}
         />
       </div>

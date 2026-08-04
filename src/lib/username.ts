@@ -96,7 +96,7 @@ const PASSWORD_MIN = 3
  * by Payload vrátil anglickou.
  */
 export function checkPassword(password: string): string | null {
-  if (password.length < PASSWORD_MIN) return `Heslo musí mít aspoň ${PASSWORD_MIN} znaků.`
+  if (password.length < PASSWORD_MIN) return `Heslo musí mít aspoň ${PASSWORD_MIN} znaky.`
   return null
 }
 
