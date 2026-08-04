@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
 import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
@@ -34,7 +34,12 @@ export function HomepageSearch() {
     <div ref={containerRef} className="w-full max-w-2xl relative">
       {/* Pilulka s kulatým tlačítkem-lupou (schválený návrh „varianta 3C"). */}
       <div className="bg-white rounded-full shadow-xl flex items-center h-14 pl-6 pr-1.5 gap-3 border-2 border-transparent focus-within:border-[#215491]/20 transition-all">
-        <SearchGraphic className="w-5 h-5 text-gray-400 shrink-0" />
+        {/* Lupa se během hledání točí — signál „pracuju" přímo v poli. */}
+        {isLoading ? (
+          <Loader2 className="w-5 h-5 text-gray-400 shrink-0 animate-spin" aria-hidden="true" />
+        ) : (
+          <SearchGraphic className="w-5 h-5 text-gray-400 shrink-0" />
+        )}
         <input
           aria-label="Hledat na webu"
           placeholder="Najdi si svůj cíl — třeba Chorvatsko…"
@@ -70,7 +75,13 @@ export function HomepageSearch() {
       {/* Inline results for homepage */}
       {isExpanded && query.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="max-h-[400px] overflow-y-auto p-4">
+          {/* Staré výsledky při načítání nového dotazu zůstávají, jen ztlumené
+              (stale-while-revalidate) — výpis nepoblikává do prázdna. */}
+          <div
+            className={`max-h-[400px] overflow-y-auto p-4 transition-opacity duration-200 ${
+              isLoading && results.length > 0 ? 'opacity-50' : ''
+            }`}
+          >
             <ResultList results={results} handleLinkClicked={() => setIsExpanded(false)} />
             <SearchStatus
               query={query}
