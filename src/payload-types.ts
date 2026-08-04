@@ -911,7 +911,10 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
  */
 export interface Homepage {
   id: number;
-  title: string;
+  /**
+   * Krátký text pod vyhledáváním na homepage (např. „Objevuj stovky turistických cílů a míst po celém světě."). Nech prázdné, když se nemá zobrazovat nic.
+   */
+  title?: string | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }

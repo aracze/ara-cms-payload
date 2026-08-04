@@ -13,6 +13,10 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Vodorovné přetečení nesmí rozjet stránku do strany — full-bleed pruhy
+       (w-screen, „Co je nového") a dekorace přesahující okraj. `clip` na
+       rozdíl od `hidden` neomezí sticky pozicování. */
+    overflow-x: clip;
   }
 
   /* Tailwind v4 nechává tlačítkům výchozí šipku (cursor: default) — vracíme

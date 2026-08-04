@@ -18,7 +18,8 @@ export interface StrapiMedia {
 }
 
 export interface Homepage {
-  title: string
+  /** Věta pod herem — nepovinná; prázdná/null = na webu se nezobrazí nic. */
+  title?: string | null
 }
 
 export interface SharedImageComponent {
@@ -293,6 +294,59 @@ export interface ProfileCommentItem {
   targetHref: string
   body: string
   commentedAt: string | null
+}
+
+/** Položka homepage sekce „Co je nového" — nové místo, recenze, nebo komentář. */
+export interface ActivityItem {
+  kind: 'place' | 'review' | 'comment'
+  /** Stabilní klíč pro React (kolekce+id — id se mezi kolekcemi můžou potkat). */
+  key: string
+  /** Název cílové stránky/článku. */
+  title: string
+  href: string
+  /** ISO datum události (vytvoření místa / vložení recenze či komentáře). */
+  date: string | null
+  authorName: string | null
+  /** Přezdívka registrovaného autora → proklik na /profil/<username>. */
+  authorUsername: string | null
+  avatarUrl: string | null
+  /** Úryvek textu místa, resp. citace recenze/komentáře. */
+  text: string | null
+  /** Drobečková cesta — u místa jeho poloha, u recenze/komentáře poloha cíle. */
+  context: string | null
+  /** Fotka místa (jen kind=place). */
+  image: string | null
+  /** Hvězdičky (jen kind=review). */
+  rating: number | null
+}
+
+// ─── Homepage: sekce rad, míst a rubrik (schválená varianta D, 8/2026) ──────
+// Vše skládá datová vrstva (fetchHomepageInspiration) — komponenty jen kreslí.
+
+/** Odkaz s fotkou pro homepage sekce (dlaždice rady/místa, řádek článku…). */
+export interface InspirationLink {
+  /** Stabilní klíč pro React (kolekce+id). */
+  key: string
+  title: string
+  href: string
+  imageUrl: string | null
+  /** Poloha místa (přímý rodič z drobečků, např. „Česká republika"); jinde null. */
+  sub?: string | null
+}
+
+/** Data homepage sekcí „Rady na cestu", „Inspirace na cestu" a „Témata ke čtení". */
+export interface HomepageInspiration {
+  /** Denní výběr rad pro dlaždice 2×2 (jen rady s fotkou). */
+  rady: InspirationLink[]
+  /** Odkaz na rubriku Rady na cestu („Všechny rady na cestu"). */
+  radyHref: string
+  /** Nejnovější články mimo rady — boční seznam „Nejnovější články". */
+  articles: InspirationLink[]
+  /** Denní výběr míst pro dlaždicovou sekci „Inspirace na cestu". */
+  places: InspirationLink[]
+  /** Rubriky článků pro sekci „Témata ke čtení" na konci stránky
+   *  (bez Rad na cestu — ty mají vlastní vitrínu nahoře). */
+  rubriky: InspirationLink[]
 }
 
 export interface UserProfileData {

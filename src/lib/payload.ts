@@ -16,11 +16,19 @@ import {
   ProfileReviewItem,
   ProfileCommentItem,
   ProfileMapPin,
+  ActivityItem,
+  HomepageInspiration,
+  InspirationLink,
 } from '@/types/payload'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import { getDb } from './db'
-import { getArticleImageUrl, isProduction } from './utils'
+import {
+  getArticleImageUrl,
+  isProduction,
+  richTextToPlainText,
+  stripLeadingContinent,
+} from './utils'
 
 /**
  * Datová vrstva webu nad Payload LOCAL API.
@@ -1016,9 +1024,11 @@ function breadcrumbPath(
 ): string | null {
   if (!Array.isArray(breadcrumbs)) return null
   const items = dropLast ? breadcrumbs.slice(0, -1) : breadcrumbs
-  const labels = items
-    .map((b) => b?.label)
-    .filter((l): l is string => typeof l === 'string' && l.length > 0)
+  // Kontextový popisek nese informaci od ZEMĚ — kontinent se vynechává
+  // (viz stripLeadingContinent; plná cesta zůstává jen v navigaci na stránce).
+  const labels = stripLeadingContinent(
+    items.map((b) => b?.label).filter((l): l is string => typeof l === 'string' && l.length > 0),
+  )
   return labels.length ? labels.join(' / ') : null
 }
 
@@ -1646,5 +1656,643 @@ export const fetchSitemapEntries = async () => {
   } catch (err) {
     console.error('[sitemap] load failed:', err)
     return { pages: [], articles: [] }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Homepage: sekce „Co je nového" — nová místa + recenze + komentáře v jednom
+// proudu (nahrazuje záložky starého webu). Klient filtruje/stránkuje lokálně,
+// proto se tahá víc položek na druh, než se hned zobrazí.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACTIVITY_PER_KIND = 12
+
+// Jen pole, která feed opravdu mapuje. POZOR: `author` (syrová relace) tu musí
+// být, i když se nezobrazuje — virtuální `authorPublic` z něj v afterRead čte
+// (stejná past jako `createdBy` u createdByPublic; bez něj zmizí avatary).
+const ACTIVITY_COMMENT_SELECT = {
+  type: true,
+  rating: true,
+  body: true,
+  commentedAt: true,
+  createdAt: true,
+  authorName: true,
+  relatedTo: true,
+  author: true,
+  authorPublic: true,
+} as const
+
+type RawActivityPage = {
+  id: number
+  title: string
+  fullSlug: string
+  text?: unknown
+  createdAt?: string | null
+  breadcrumbs?: { label?: string | null }[] | null
+  featuredImage?: { image?: unknown } | null
+  createdByPublic?: {
+    username?: string | null
+    name?: string | null
+    avatar?: { url?: string | null } | null
+  } | null
+}
+
+type RawActivityComment = {
+  id: number
+  type?: string
+  rating?: number | null
+  body: string
+  commentedAt?: string | null
+  createdAt?: string | null
+  authorName?: string | null
+  relatedTo?: { relationTo?: string; value?: number | { id: number } | null } | null
+  authorPublic?: { username?: string | null; avatar?: { url?: string | null } | null } | null
+}
+
+/** Zhuštění na jeden řádek výpisu (legacy texty obsahují i vložený balast). */
+function activityExcerpt(text: string, max = 160): string | null {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  if (!compact) return null
+  return compact.length > max ? compact.slice(0, max).trimEnd() + '…' : compact
+}
+
+async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
+  const payload = await getDb()
+
+  const [placesRes, reviewsRes, commentsRes] = await Promise.all([
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { _status: { equals: 'published' } },
+          {
+            category: {
+              in: [
+                PageCategory.Misto_k_navstiveni,
+                PageCategory.Turisticky_cil,
+                PageCategory.Mista,
+              ],
+            },
+          },
+        ],
+      },
+      // createdAt = původní datum vzniku místa (u migrovaných doplněno ze staré
+      // DB skriptem backfill-page-created-dates).
+      sort: '-createdAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+      joins: false,
+      select: {
+        title: true,
+        fullSlug: true,
+        text: true,
+        createdAt: true,
+        breadcrumbs: BREADCRUMBS_SELECT,
+        featuredImage: true,
+        // createdByPublic (virtuální) čte data.createdBy — bez něj v selectu
+        // vrací null a autor by ve výpisu chyběl.
+        createdBy: true,
+        createdByPublic: true,
+      },
+    }),
+    // overrideAccess: false → anonymní pravidlo kolekce skryje spam i recenze
+    // na nepublikovaných stránkách. commentedAt je vyplněné VŽDY (migrace
+    // i nové vklady), takže DB sort je bezpečný.
+    payload.find({
+      collection: 'comments',
+      overrideAccess: false,
+      where: { type: { equals: 'review' } },
+      sort: '-commentedAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+      // `joins: false` tu na rozdíl od pages není (ani nejde) — komentáře
+      // žádná join pole nemají, typ ho proto nepovoluje.
+      select: ACTIVITY_COMMENT_SELECT,
+    }),
+    payload.find({
+      collection: 'comments',
+      overrideAccess: false,
+      where: { type: { equals: 'comment' } },
+      sort: '-commentedAt',
+      limit: ACTIVITY_PER_KIND,
+      depth: 0,
+      select: ACTIVITY_COMMENT_SELECT,
+    }),
+  ])
+
+  // Cíle recenzí/komentářů hromadně (stejný vzor jako profil) — populace přes
+  // depth by stála dotaz za každou položku.
+  const rawComments = [...reviewsRes.docs, ...commentsRes.docs] as unknown as RawActivityComment[]
+  const pageTargetIds = new Set<number>()
+  const articleTargetIds = new Set<number>()
+  for (const c of rawComments) {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) continue
+    if (c.relatedTo?.relationTo === 'pages') pageTargetIds.add(id)
+    else if (c.relatedTo?.relationTo === 'articles') articleTargetIds.add(id)
+  }
+
+  type TargetPage = {
+    id: number
+    title: string
+    fullSlug: string
+    breadcrumbs?: { label?: string | null }[] | null
+  }
+  type TargetArticle = {
+    id: number
+    title: string
+    slug?: string | null
+    mainPage?: number | { id: number } | null
+  }
+  const [targetPagesRes, targetArticlesRes] = await Promise.all([
+    pageTargetIds.size
+      ? payload.find({
+          collection: 'pages',
+          overrideAccess: false,
+          where: { id: { in: [...pageTargetIds] } },
+          depth: 0,
+          joins: false,
+          limit: pageTargetIds.size,
+          pagination: false,
+          select: { title: true, fullSlug: true, breadcrumbs: BREADCRUMBS_SELECT },
+        })
+      : { docs: [] },
+    articleTargetIds.size
+      ? payload.find({
+          collection: 'articles',
+          overrideAccess: false,
+          where: { id: { in: [...articleTargetIds] } },
+          depth: 0,
+          joins: false,
+          limit: articleTargetIds.size,
+          pagination: false,
+          select: { title: true, slug: true, mainPage: true },
+        })
+      : { docs: [] },
+  ])
+  const targetPageById = new Map(
+    (targetPagesRes.docs as unknown as TargetPage[]).map((p) => [p.id, p]),
+  )
+  const targetArticleById = new Map(
+    (targetArticlesRes.docs as unknown as TargetArticle[]).map((a) => [a.id, a]),
+  )
+
+  // Adresa článku = fullSlug hlavní stránky + slug článku (viz articleHref
+  // v profilu) — hlavní stránky dohledáme jedním dotazem.
+  const mainPageIds = new Set<number>()
+  for (const a of targetArticleById.values()) {
+    const id = relationIdOf(a.mainPage ?? null)
+    if (id != null) mainPageIds.add(id)
+  }
+  const mainPagesRes = mainPageIds.size
+    ? await payload.find({
+        collection: 'pages',
+        overrideAccess: false,
+        where: { id: { in: [...mainPageIds] } },
+        depth: 0,
+        joins: false,
+        limit: mainPageIds.size,
+        pagination: false,
+        select: { fullSlug: true, breadcrumbs: BREADCRUMBS_SELECT },
+      })
+    : { docs: [] }
+  const mainPageById = new Map((mainPagesRes.docs as unknown as TargetPage[]).map((p) => [p.id, p]))
+
+  const targetOf = (
+    c: RawActivityComment,
+  ): { title: string; href: string; context: string | null } | null => {
+    const id = relationIdOf(c.relatedTo?.value ?? null)
+    if (id == null) return null
+    if (c.relatedTo?.relationTo === 'pages') {
+      const p = targetPageById.get(id)
+      // Poslední drobeček je místo samo (= titulek řádku), proto se vynechává.
+      return p
+        ? {
+            title: p.title,
+            href: p.fullSlug,
+            context: breadcrumbPath(p.breadcrumbs, { dropLast: true }),
+          }
+        : null
+    }
+    if (c.relatedTo?.relationTo === 'articles') {
+      const a = targetArticleById.get(id)
+      if (!a?.slug) return null
+      const mainId = relationIdOf(a.mainPage ?? null)
+      const main = mainId != null ? mainPageById.get(mainId) : undefined
+      if (!main) return null
+      return {
+        title: a.title,
+        href: `${main.fullSlug.replace(/\/$/, '')}/${a.slug}`,
+        // U článku celá cesta jeho místa („Evropa / Anglie") — titulek řádku je
+        // název článku, takže se nic neduplikuje.
+        context: breadcrumbPath(main.breadcrumbs, { dropLast: false }),
+      }
+    }
+    return null
+  }
+
+  const enrichedPlaces = await enrichFeaturedImages(placesRes.docs as unknown as RawActivityPage[])
+  const placeItems: ActivityItem[] = enrichedPlaces.map((p) => {
+    const img = p.featuredImage?.image
+    const author = p.createdByPublic
+    return {
+      kind: 'place',
+      key: `place-${p.id}`,
+      title: p.title,
+      href: p.fullSlug,
+      date: p.createdAt ?? null,
+      authorName: author?.name?.trim() || author?.username || null,
+      authorUsername: author?.username ?? null,
+      avatarUrl: author?.avatar?.url ?? null,
+      text: activityExcerpt(richTextToPlainText(p.text)),
+      context: breadcrumbPath(p.breadcrumbs, { dropLast: true }),
+      image: img && typeof img === 'object' ? ((img as { url?: string | null }).url ?? null) : null,
+      rating: null,
+    }
+  })
+
+  const commentItems: ActivityItem[] = rawComments.flatMap((c) => {
+    const target = targetOf(c)
+    // Bez dohledatelného cíle (nepublikovaná stránka apod.) položku vynecháme —
+    // odkaz na 404 je horší než chybějící řádek.
+    if (!target) return []
+    return [
+      {
+        kind: c.type === 'review' ? ('review' as const) : ('comment' as const),
+        key: `comment-${c.id}`,
+        title: target.title,
+        href: target.href,
+        date: c.commentedAt ?? c.createdAt ?? null,
+        authorName: c.authorName?.trim() || c.authorPublic?.username || null,
+        authorUsername: c.authorPublic?.username ?? null,
+        avatarUrl: c.authorPublic?.avatar?.url ?? null,
+        text: activityExcerpt(c.body),
+        context: target.context,
+        image: null,
+        rating: c.type === 'review' ? (c.rating ?? null) : null,
+      },
+    ]
+  })
+
+  // Jeden proud, nejnovější nahoře; klíč jako rozhodčí pro stabilní pořadí.
+  return [...placeItems, ...commentItems].sort((a, b) => {
+    const diff = new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime()
+    return diff !== 0 ? diff : a.key.localeCompare(b.key)
+  })
+}
+
+const fetchLatestActivityCached = cached(fetchLatestActivityUncached, 'latest-activity', () => [
+  'latest-activity',
+  'pages',
+  'articles',
+  'comments',
+  // Položky nesou jména/avatary autorů (createdByPublic/authorPublic) — změna
+  // profilu musí feed invalidovat hned, ne až časovou pojistkou.
+  'users',
+])
+
+export const fetchLatestActivity = async (): Promise<{
+  items: ActivityItem[]
+  /**
+   * Čas načtení — referenční „teď" pro relativní časy ve feedu. Počítá se
+   * ZÁMĚRNĚ tady (mimo unstable_cache i mimo render komponenty): v cache by
+   * zamrzl a v komponentě ho zakazuje react-compiler (impure during render).
+   */
+  fetchedAt: number
+}> => {
+  try {
+    return { items: await fetchLatestActivityCached(), fetchedAt: Date.now() }
+  } catch (err) {
+    // Homepage nesmí spadnout kvůli sekci novinek — bez dat se prostě nevykreslí.
+    console.error('[whats-new] load failed:', err)
+    return { items: [], fetchedAt: Date.now() }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Homepage: data pro tři sekce (schválená varianta D, 8/2026) — „Rady na
+// cestu" (denní výběr 4 rad jako dlaždice + boční seznam nejnovějších článků
+// „Nejnovější články"), dlaždicová „Inspirace na cestu" (denní výběr míst) a mozaika
+// rubrik „Témata ke čtení" na konci stránky.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RADY_NA_CESTU_SLUG = 'rady-na-cestu'
+const INSPIRATION_RADY_LIMIT = 4
+const INSPIRATION_ARTICLES_LIMIT = 4
+const INSPIRATION_PLACES_LIMIT = 4
+
+/**
+ * Deterministický generátor náhody (mulberry32). Denní výběry (rady, místa)
+ * se odvozují ze seedu = dnešního data, takže jsou STEJNÉ pro všechny
+ * návštěvníky celý den — jen tak fungují s produkční cache (skutečná náhoda
+ * per request by stejně zamrzla na tom, co se zrovna nacachovalo).
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed | 0
+  return () => {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Dnešek v pražském čase jako číslo (20260803) — seed denních výběrů. */
+function todaySeed(): number {
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(new Date())
+  return Number(day.replaceAll('-', ''))
+}
+
+/** Vybere až `count` položek deterministicky (částečný Fisher–Yates). */
+function seededPick<T>(items: T[], count: number, rand: () => number): T[] {
+  const arr = [...items]
+  const n = Math.min(count, arr.length)
+  for (let i = 0; i < n; i++) {
+    const j = i + Math.floor(rand() * (arr.length - i))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr.slice(0, n)
+}
+
+type RawInspirationArticle = {
+  id: number
+  title: string
+  slug?: string | null
+  mainPage?: number | { id: number } | null
+  featuredImage?: { image?: unknown } | null
+}
+
+const featuredImageUrl = (doc: { featuredImage?: { image?: unknown } | null }): string | null => {
+  const img = doc.featuredImage?.image
+  return img && typeof img === 'object' ? ((img as { url?: string | null }).url ?? null) : null
+}
+
+async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> {
+  const payload = await getDb()
+
+  // Rubrika „Rady na cestu" — kotva bočního seznamu (id pro dotaz, fullSlug pro
+  // odkazy). Bez ní se seznam rad prostě nevykreslí (web nesmí spadnout).
+  const rubrikaRes = await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { slug: { equals: RADY_NA_CESTU_SLUG } },
+        { category: { equals: PageCategory.Rubrika } },
+      ],
+    },
+    limit: 1,
+    depth: 0,
+    joins: false,
+    select: { title: true, fullSlug: true },
+  })
+  const rubrika = (rubrikaRes.docs[0] ?? null) as {
+    id: number
+    title: string
+    fullSlug: string
+  } | null
+
+  const [radyAllRes, articlesRes, placeIdsRes, rubrikyRes] = await Promise.all([
+    // Kandidáti dlaždic rad: VŠECHNY rady s fotkou (18 malých řádků) — denní
+    // výběr 4 z nich dělá seedovaný los níž. sort: 'id' kvůli deterministickému
+    // míchání.
+    rubrika
+      ? payload.find({
+          collection: 'articles',
+          overrideAccess: false,
+          where: {
+            and: [
+              { mainPage: { equals: rubrika.id } },
+              { 'featuredImage.image': { exists: true } },
+            ],
+          },
+          sort: 'id',
+          pagination: false,
+          limit: 0,
+          depth: 0,
+          joins: false,
+          select: { title: true, slug: true, featuredImage: true },
+        })
+      : Promise.resolve({ docs: [] } as PayloadDocsResponse<unknown>),
+    // Boční seznam „Nejnovější články": nejnovější články MIMO rady (rady mají
+    // dlaždice vedle). +2 rezerva na články bez dohledatelné hlavní stránky.
+    payload.find({
+      collection: 'articles',
+      overrideAccess: false,
+      where: {
+        and: [
+          { publishedAt: { exists: true } },
+          { mainPage: { exists: true } },
+          ...(rubrika ? [{ mainPage: { not_equals: rubrika.id } }] : []),
+        ],
+      },
+      sort: '-publishedAt',
+      limit: INSPIRATION_ARTICLES_LIMIT + 2,
+      depth: 0,
+      joins: false,
+      select: { title: true, slug: true, mainPage: true, featuredImage: true },
+    }),
+    // Kandidáti dlaždic „Inspirace na cestu": jen id všech publikovaných míst
+    // s fotkou (~stovky řádků; vybraná dotáhne druhý dotaz). sort: 'id' kvůli
+    // deterministickému míchání — bez stabilního pořadí by seed nestačil.
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { _status: { equals: 'published' } },
+          { category: { equals: PageCategory.Misto_k_navstiveni } },
+          { 'featuredImage.image': { exists: true } },
+        ],
+      },
+      sort: 'id',
+      pagination: false,
+      limit: 0,
+      depth: 0,
+      joins: false,
+      select: { slug: true },
+    }),
+    // Rubriky pro „Témata ke čtení" na konci stránky — všechny kromě Rad na
+    // cestu (mají vlastní vitrínu nahoře). Řazení podle názvu je jen stabilní
+    // základ pro deterministické denní míchání níž (bez pevného pořadí by
+    // seed nestačil).
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { _status: { equals: 'published' } },
+          { category: { equals: PageCategory.Rubrika } },
+          { slug: { not_equals: RADY_NA_CESTU_SLUG } },
+        ],
+      },
+      sort: 'title',
+      limit: 12,
+      depth: 0,
+      joins: false,
+      select: { title: true, fullSlug: true, featuredImage: true },
+    }),
+  ])
+
+  // — Dlaždice rad: denní los 4 rad z kandidátů. Vlastní proud náhody (seed+1),
+  // aby výběr rad a míst nebyly svázané.
+  const radyPicked = seededPick(
+    (radyAllRes.docs as RawInspirationArticle[]).filter((a) => !!a.slug),
+    INSPIRATION_RADY_LIMIT,
+    mulberry32(todaySeed() + 1),
+  )
+  const enrichedRady = await enrichFeaturedImages(radyPicked)
+  const rady: InspirationLink[] = rubrika
+    ? enrichedRady.map((a) => ({
+        key: `article-${a.id}`,
+        title: a.title,
+        href: `${rubrika.fullSlug.replace(/\/$/, '')}/${a.slug}`,
+        imageUrl: featuredImageUrl(a),
+      }))
+    : []
+
+  // — Boční seznam „Nejnovější články": href = fullSlug hlavní stránky + slug článku
+  // (stejné pravidlo jako všude jinde). Hlavní stránky dohledá jeden hromadný
+  // dotaz; článek bez dohledatelné (nepublikované) stránky se vynechá.
+  const articleCandidates = (articlesRes.docs as RawInspirationArticle[]).filter((a) => !!a.slug)
+  const articleMainIds = [
+    ...new Set(
+      articleCandidates
+        .map((a) => relationId(a.mainPage))
+        .filter((id): id is number | string => id != null),
+    ),
+  ]
+  const articleMainPages = articleMainIds.length
+    ? ((
+        await payload.find({
+          collection: 'pages',
+          overrideAccess: false,
+          where: { id: { in: articleMainIds } },
+          limit: articleMainIds.length,
+          pagination: false,
+          depth: 0,
+          joins: false,
+          select: { fullSlug: true },
+        })
+      ).docs as unknown as Array<{ id: number | string; fullSlug?: string | null }>)
+    : []
+  const articleMainById = new Map(articleMainPages.map((p) => [p.id, p]))
+  const articleDocs = articleCandidates
+    .filter((a) => {
+      const mainId = relationId(a.mainPage)
+      return mainId != null && !!articleMainById.get(mainId)?.fullSlug
+    })
+    .slice(0, INSPIRATION_ARTICLES_LIMIT)
+  const enrichedArticles = await enrichFeaturedImages(articleDocs)
+  const articles: InspirationLink[] = enrichedArticles.map((a) => {
+    const main = articleMainById.get(relationId(a.mainPage)!)!
+    return {
+      key: `article-${a.id}`,
+      title: a.title,
+      href: `${main.fullSlug!.replace(/\/$/, '')}/${a.slug}`,
+      imageUrl: featuredImageUrl(a),
+    }
+  })
+
+  // — Denní výběr míst se seedem z data (sdílený seededPick). Vybraná místa
+  // (INSPIRATION_PLACES_LIMIT) dotáhne druhý dotaz a vrátí se v pořadí výběru.
+  const chosenIds = seededPick(
+    (placeIdsRes.docs as { id: number }[]).map((d) => d.id),
+    INSPIRATION_PLACES_LIMIT,
+    mulberry32(todaySeed()),
+  )
+  let places: InspirationLink[] = []
+  if (chosenIds.length > 0) {
+    const placesRes = await payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: { id: { in: chosenIds } },
+      limit: chosenIds.length,
+      pagination: false,
+      depth: 0,
+      joins: false,
+      select: {
+        title: true,
+        fullSlug: true,
+        featuredImage: true,
+        breadcrumbs: BREADCRUMBS_SELECT,
+      },
+    })
+    const enrichedPlaces = await enrichFeaturedImages(
+      placesRes.docs as unknown as Array<{
+        id: number
+        title: string
+        fullSlug: string
+        featuredImage?: { image?: unknown } | null
+        breadcrumbs?: { label?: string | null }[] | null
+      }>,
+    )
+    const byId = new Map(enrichedPlaces.map((p) => [p.id, p]))
+    places = chosenIds.flatMap((id) => {
+      const p = byId.get(id)
+      if (!p) return []
+      // Poslední drobeček je místo samo → poloha = předposlední (přímý rodič).
+      // U míst na nejvyšší úrovni (Turecko) žádný není → bez podtitulku.
+      const parentLabel = p.breadcrumbs?.at(-2)?.label
+      return [
+        {
+          key: `page-${p.id}`,
+          title: p.title,
+          href: p.fullSlug,
+          imageUrl: featuredImageUrl(p),
+          sub: typeof parentLabel === 'string' && parentLabel ? parentLabel : null,
+        },
+      ]
+    })
+  }
+
+  const enrichedRubriky = await enrichFeaturedImages(
+    rubrikyRes.docs as unknown as Array<{
+      id: number
+      title: string
+      fullSlug: string
+      featuredImage?: { image?: unknown } | null
+    }>,
+  )
+  // Denní obměna pořadí rubrik — rozložení „Témata ke čtení" dává prvním třem
+  // velké dlaždice, takže se v nich rubriky každý den prostřídají. Vlastní
+  // proud náhody (seed+2), aby míchání nebylo svázané s losem míst (seed)
+  // ani rad (seed+1).
+  const rubriky: InspirationLink[] = seededPick(
+    enrichedRubriky,
+    enrichedRubriky.length,
+    mulberry32(todaySeed() + 2),
+  ).map((r) => ({
+    key: `page-${r.id}`,
+    title: r.title,
+    href: r.fullSlug,
+    imageUrl: featuredImageUrl(r),
+  }))
+
+  return {
+    rady,
+    radyHref: rubrika?.fullSlug ?? `/${RADY_NA_CESTU_SLUG}`,
+    articles,
+    places,
+    rubriky,
+  }
+}
+
+// Denní rotaci rad a míst zajišťuje revalidate pojistka v cached() (max 5 min
+// po půlnoci se přepočítá) — seed je do té doby stejný, takže se nic nemění.
+const fetchHomepageInspirationCached = cached(
+  fetchHomepageInspirationUncached,
+  'homepage-inspiration',
+  () => ['homepage-inspiration', 'pages', 'articles'],
+)
+
+export const fetchHomepageInspiration = async (): Promise<HomepageInspiration | null> => {
+  try {
+    return await fetchHomepageInspirationCached()
+  } catch (err) {
+    // Homepage nesmí spadnout kvůli inspiraci — bez dat se sekce nevykreslí.
+    console.error('[inspiration] load failed:', err)
+    return null
   }
 }
