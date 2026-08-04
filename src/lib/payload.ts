@@ -1947,6 +1947,9 @@ const fetchLatestActivityCached = cached(fetchLatestActivityUncached, 'latest-ac
   'pages',
   'articles',
   'comments',
+  // Položky nesou jména/avatary autorů (createdByPublic/authorPublic) — změna
+  // profilu musí feed invalidovat hned, ne až časovou pojistkou.
+  'users',
 ])
 
 export const fetchLatestActivity = async (): Promise<{
