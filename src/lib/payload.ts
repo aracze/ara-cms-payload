@@ -1941,20 +1941,22 @@ export const fetchLatestActivity = async (): Promise<ActivityItem[]> => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Homepage: data pro dvě sekce (schváleno 8/2026) — „Články a rady na cestu"
-// (nejnovější článek s fotkou + boční seznam rad) nahoře a dlaždicová
-// „Inspirace na cestu" (denní výběr míst) na konci stránky.
+// Homepage: data pro tři sekce (schválená varianta D, 8/2026) — „Rady na
+// cestu" (denní výběr 4 rad jako dlaždice + boční seznam nejnovějších článků
+// „Nejnovější články"), dlaždicová „Inspirace na cestu" (denní výběr míst) a mozaika
+// rubrik „Témata ke čtení" na konci stránky.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RADY_NA_CESTU_SLUG = 'rady-na-cestu'
-const INSPIRATION_TIPS_LIMIT = 4
+const INSPIRATION_RADY_LIMIT = 4
+const INSPIRATION_ARTICLES_LIMIT = 4
 const INSPIRATION_PLACES_LIMIT = 4
 
 /**
- * Deterministický generátor náhody (mulberry32). Výběr míst se odvozuje ze
- * seedu = dnešního data, takže je STEJNÝ pro všechny návštěvníky celý den —
- * jen tak funguje s produkční cache (skutečná náhoda per request by stejně
- * zamrzla na tom, co se zrovna nacachovalo).
+ * Deterministický generátor náhody (mulberry32). Denní výběry (rady, místa)
+ * se odvozují ze seedu = dnešního data, takže jsou STEJNÉ pro všechny
+ * návštěvníky celý den — jen tak fungují s produkční cache (skutečná náhoda
+ * per request by stejně zamrzla na tom, co se zrovna nacachovalo).
  */
 function mulberry32(seed: number): () => number {
   let a = seed | 0
@@ -1966,17 +1968,27 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-/** Dnešek v pražském čase jako číslo (20260803) — seed denní rotace míst. */
+/** Dnešek v pražském čase jako číslo (20260803) — seed denních výběrů. */
 function todaySeed(): number {
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(new Date())
   return Number(day.replaceAll('-', ''))
+}
+
+/** Vybere až `count` položek deterministicky (částečný Fisher–Yates). */
+function seededPick<T>(items: T[], count: number, rand: () => number): T[] {
+  const arr = [...items]
+  const n = Math.min(count, arr.length)
+  for (let i = 0; i < n; i++) {
+    const j = i + Math.floor(rand() * (arr.length - i))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr.slice(0, n)
 }
 
 type RawInspirationArticle = {
   id: number
   title: string
   slug?: string | null
-  text?: unknown
   mainPage?: number | { id: number } | null
   featuredImage?: { image?: unknown } | null
 }
@@ -2011,34 +2023,46 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
     fullSlug: string
   } | null
 
-  const [featureRes, tipsRes, placeIdsRes] = await Promise.all([
-    // Velká karta = nejnovější článek, který má fotku (bez ní karta nefunguje).
-    payload.find({
-      collection: 'articles',
-      overrideAccess: false,
-      where: {
-        and: [{ 'featuredImage.image': { exists: true } }, { publishedAt: { exists: true } }],
-      },
-      sort: '-publishedAt',
-      limit: 1,
-      depth: 0,
-      joins: false,
-      select: { title: true, slug: true, text: true, mainPage: true, featuredImage: true },
-    }),
-    // Boční seznam rad: +1 rezerva pro případ, že nejnovější rada visí zároveň
-    // na velké kartě (pak se z seznamu vynechá).
+  const [radyAllRes, articlesRes, placeIdsRes, rubrikyRes] = await Promise.all([
+    // Kandidáti dlaždic rad: VŠECHNY rady s fotkou (18 malých řádků) — denní
+    // výběr 4 z nich dělá seedovaný los níž. sort: 'id' kvůli deterministickému
+    // míchání.
     rubrika
       ? payload.find({
           collection: 'articles',
           overrideAccess: false,
-          where: { mainPage: { equals: rubrika.id } },
-          sort: '-publishedAt',
-          limit: INSPIRATION_TIPS_LIMIT + 1,
+          where: {
+            and: [
+              { mainPage: { equals: rubrika.id } },
+              { 'featuredImage.image': { exists: true } },
+            ],
+          },
+          sort: 'id',
+          pagination: false,
+          limit: 0,
           depth: 0,
           joins: false,
           select: { title: true, slug: true, featuredImage: true },
         })
-      : Promise.resolve({ docs: [], totalDocs: 0 } as PayloadDocsResponse<unknown>),
+      : Promise.resolve({ docs: [] } as PayloadDocsResponse<unknown>),
+    // Boční seznam „Nejnovější články": nejnovější články MIMO rady (rady mají
+    // dlaždice vedle). +2 rezerva na články bez dohledatelné hlavní stránky.
+    payload.find({
+      collection: 'articles',
+      overrideAccess: false,
+      where: {
+        and: [
+          { publishedAt: { exists: true } },
+          { mainPage: { exists: true } },
+          ...(rubrika ? [{ mainPage: { not_equals: rubrika.id } }] : []),
+        ],
+      },
+      sort: '-publishedAt',
+      limit: INSPIRATION_ARTICLES_LIMIT + 2,
+      depth: 0,
+      joins: false,
+      select: { title: true, slug: true, mainPage: true, featuredImage: true },
+    }),
     // Kandidáti dlaždic „Inspirace na cestu": jen id všech publikovaných míst
     // s fotkou (~stovky řádků; vybraná dotáhne druhý dotaz). sort: 'id' kvůli
     // deterministickému míchání — bez stabilního pořadí by seed nestačil.
@@ -2059,56 +2083,86 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
       joins: false,
       select: { slug: true },
     }),
+    // Rubriky pro „Témata ke čtení" na konci stránky — všechny kromě Rad na
+    // cestu (mají vlastní vitrínu nahoře). Řazení podle názvu (DB má českou
+    // ICU kolaci, takže ř/š/ž sedí).
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        and: [
+          { _status: { equals: 'published' } },
+          { category: { equals: PageCategory.Rubrika } },
+          { slug: { not_equals: RADY_NA_CESTU_SLUG } },
+        ],
+      },
+      sort: 'title',
+      limit: 12,
+      depth: 0,
+      joins: false,
+      select: { title: true, fullSlug: true, featuredImage: true },
+    }),
   ])
 
-  // — Velká karta: href = fullSlug hlavní stránky + slug článku (stejné pravidlo
-  // jako všude jinde). Bez dohledatelné hlavní stránky článek nemá URL → null.
-  let feature: HomepageInspiration['feature'] = null
-  let featureId: number | null = null
-  const rawFeature = (featureRes.docs[0] ?? null) as RawInspirationArticle | null
-  if (rawFeature?.slug) {
-    const mainId = relationId(rawFeature.mainPage)
-    let mainPage: { title?: string | null; fullSlug?: string | null } | null = null
-    if (mainId != null && rubrika && mainId === rubrika.id) {
-      mainPage = rubrika
-    } else if (mainId != null) {
-      const mainRes = await payload.find({
-        collection: 'pages',
-        overrideAccess: false,
-        where: { id: { equals: mainId } },
-        limit: 1,
-        depth: 0,
-        joins: false,
-        select: { title: true, fullSlug: true },
-      })
-      mainPage = (mainRes.docs[0] ?? null) as { title?: string | null; fullSlug?: string | null }
-    }
-    if (mainPage?.fullSlug) {
-      featureId = rawFeature.id
-      const [enriched] = await enrichFeaturedImages([rawFeature])
-      feature = {
-        title: rawFeature.title,
-        href: `${mainPage.fullSlug.replace(/\/$/, '')}/${rawFeature.slug}`,
-        imageUrl: featuredImageUrl(enriched),
-        excerpt: activityExcerpt(richTextToPlainText(rawFeature.text), 200),
-        placeName: mainPage.title ?? null,
-      }
-    }
-  }
-
-  // — Boční seznam rad (bez článku z velké karty).
-  const tipDocs = (tipsRes.docs as RawInspirationArticle[])
-    .filter((a) => a.id !== featureId && !!a.slug)
-    .slice(0, INSPIRATION_TIPS_LIMIT)
-  const enrichedTips = await enrichFeaturedImages(tipDocs)
-  const tips: InspirationLink[] = rubrika
-    ? enrichedTips.map((a) => ({
+  // — Dlaždice rad: denní los 4 rad z kandidátů. Vlastní proud náhody (seed+1),
+  // aby výběr rad a míst nebyly svázané.
+  const radyPicked = seededPick(
+    (radyAllRes.docs as RawInspirationArticle[]).filter((a) => !!a.slug),
+    INSPIRATION_RADY_LIMIT,
+    mulberry32(todaySeed() + 1),
+  )
+  const enrichedRady = await enrichFeaturedImages(radyPicked)
+  const rady: InspirationLink[] = rubrika
+    ? enrichedRady.map((a) => ({
         key: `article-${a.id}`,
         title: a.title,
         href: `${rubrika.fullSlug.replace(/\/$/, '')}/${a.slug}`,
         imageUrl: featuredImageUrl(a),
       }))
     : []
+
+  // — Boční seznam „Nejnovější články": href = fullSlug hlavní stránky + slug článku
+  // (stejné pravidlo jako všude jinde). Hlavní stránky dohledá jeden hromadný
+  // dotaz; článek bez dohledatelné (nepublikované) stránky se vynechá.
+  const articleCandidates = (articlesRes.docs as RawInspirationArticle[]).filter((a) => !!a.slug)
+  const articleMainIds = [
+    ...new Set(
+      articleCandidates
+        .map((a) => relationId(a.mainPage))
+        .filter((id): id is number | string => id != null),
+    ),
+  ]
+  const articleMainPages = articleMainIds.length
+    ? ((
+        await payload.find({
+          collection: 'pages',
+          overrideAccess: false,
+          where: { id: { in: articleMainIds } },
+          limit: articleMainIds.length,
+          pagination: false,
+          depth: 0,
+          joins: false,
+          select: { fullSlug: true },
+        })
+      ).docs as unknown as Array<{ id: number | string; fullSlug?: string | null }>)
+    : []
+  const articleMainById = new Map(articleMainPages.map((p) => [p.id, p]))
+  const articleDocs = articleCandidates
+    .filter((a) => {
+      const mainId = relationId(a.mainPage)
+      return mainId != null && !!articleMainById.get(mainId)?.fullSlug
+    })
+    .slice(0, INSPIRATION_ARTICLES_LIMIT)
+  const enrichedArticles = await enrichFeaturedImages(articleDocs)
+  const articles: InspirationLink[] = enrichedArticles.map((a) => {
+    const main = articleMainById.get(relationId(a.mainPage)!)!
+    return {
+      key: `article-${a.id}`,
+      title: a.title,
+      href: `${main.fullSlug!.replace(/\/$/, '')}/${a.slug}`,
+      imageUrl: featuredImageUrl(a),
+    }
+  })
 
   // — Denní výběr míst: částečný Fisher–Yates se seedem z data. Vybraných 6
   // míst dotáhne druhý dotaz a vrátí se v pořadí výběru.
@@ -2165,17 +2219,32 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
     })
   }
 
+  const enrichedRubriky = await enrichFeaturedImages(
+    rubrikyRes.docs as unknown as Array<{
+      id: number
+      title: string
+      fullSlug: string
+      featuredImage?: { image?: unknown } | null
+    }>,
+  )
+  const rubriky: InspirationLink[] = enrichedRubriky.map((r) => ({
+    key: `page-${r.id}`,
+    title: r.title,
+    href: r.fullSlug,
+    imageUrl: featuredImageUrl(r),
+  }))
+
   return {
-    feature,
-    tips,
-    tipsTotal: tipsRes.totalDocs ?? tips.length,
-    tipsHref: rubrika?.fullSlug ?? `/${RADY_NA_CESTU_SLUG}`,
+    rady,
+    radyHref: rubrika?.fullSlug ?? `/${RADY_NA_CESTU_SLUG}`,
+    articles,
     places,
+    rubriky,
   }
 }
 
-// Denní rotaci míst zajišťuje revalidate pojistka v cached() (max 5 min po
-// půlnoci se přepočítá) — seed je do té doby stejný, takže se nic nemění.
+// Denní rotaci rad a míst zajišťuje revalidate pojistka v cached() (max 5 min
+// po půlnoci se přepočítá) — seed je do té doby stejný, takže se nic nemění.
 const fetchHomepageInspirationCached = cached(
   fetchHomepageInspirationUncached,
   'homepage-inspiration',

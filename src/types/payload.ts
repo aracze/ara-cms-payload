@@ -319,39 +319,33 @@ export interface ActivityItem {
   rating: number | null
 }
 
-// ─── Homepage: sekce „Inspirace a rady na cestu" (schválená varianta B) ─────
-// Vše skládá datová vrstva (fetchHomepageInspiration) — komponenta jen kreslí.
+// ─── Homepage: sekce rad, míst a rubrik (schválená varianta D, 8/2026) ──────
+// Vše skládá datová vrstva (fetchHomepageInspiration) — komponenty jen kreslí.
 
-/** Řádek bočního seznamu rad / dlaždice místa v sekci „Inspirace na cestu". */
+/** Odkaz s fotkou pro homepage sekce (dlaždice rady/místa, řádek článku…). */
 export interface InspirationLink {
   /** Stabilní klíč pro React (kolekce+id). */
   key: string
   title: string
   href: string
   imageUrl: string | null
-  /** Poloha místa (přímý rodič z drobečků, např. „Česká republika"); u rad null. */
+  /** Poloha místa (přímý rodič z drobečků, např. „Česká republika"); jinde null. */
   sub?: string | null
 }
 
-/** Data homepage sekce „Inspirace a rady na cestu". */
+/** Data homepage sekcí „Rady na cestu", „Inspirace na cestu" a „Témata ke čtení". */
 export interface HomepageInspiration {
-  /** Nejnovější článek s fotkou (velká karta); null, když žádný nemá platnou URL. */
-  feature: {
-    title: string
-    href: string
-    imageUrl: string | null
-    excerpt: string | null
-    /** Název hlavní stránky článku (destinace/rubrika) do řádku nad titulkem. */
-    placeName: string | null
-  } | null
-  /** Nejnovější rady na cestu (boční seznam, bez článku z velké karty). */
-  tips: InspirationLink[]
-  /** Celkový počet rad — text odkazu „Všech N rad". */
-  tipsTotal: number
-  /** Odkaz na rubriku Rady na cestu. */
-  tipsHref: string
+  /** Denní výběr rad pro dlaždice 2×2 (jen rady s fotkou). */
+  rady: InspirationLink[]
+  /** Odkaz na rubriku Rady na cestu („Všechny rady na cestu"). */
+  radyHref: string
+  /** Nejnovější články mimo rady — boční seznam „Nejnovější články". */
+  articles: InspirationLink[]
   /** Denní výběr míst pro dlaždicovou sekci „Inspirace na cestu". */
   places: InspirationLink[]
+  /** Rubriky článků pro sekci „Témata ke čtení" na konci stránky
+   *  (bez Rad na cestu — ty mají vlastní vitrínu nahoře). */
+  rubriky: InspirationLink[]
 }
 
 export interface UserProfileData {

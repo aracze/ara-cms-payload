@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import type { InspirationLink } from '@/types/payload'
+import { SectionHeading } from './section-heading'
 
 // Dlaždicová sekce „Inspirace na cestu" (pod sekcí článků) — denní výběr míst
 // s fotkou (schválený styl varianty A). Jméno místa sedí na lokálním gradientu
@@ -11,15 +12,7 @@ export function InspirationPlacesSection({ places }: { places: InspirationLink[]
 
   return (
     <section aria-labelledby="inspiration-places-heading" className="max-w-5xl mx-auto text-left">
-      <div className="flex items-baseline justify-between gap-x-6 gap-y-1 flex-wrap mb-4">
-        <h2
-          id="inspiration-places-heading"
-          className="text-2xl font-bold text-gray-800 tracking-tight"
-        >
-          Inspirace na cestu
-        </h2>
-        <span className="text-[13px] text-gray-400">zítra tu najdete jiná místa</span>
-      </div>
+      <SectionHeading id="inspiration-places-heading">Inspirace na cestu</SectionHeading>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {places.map((place) => (

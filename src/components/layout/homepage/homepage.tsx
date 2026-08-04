@@ -6,6 +6,7 @@ import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { WhatsNewSection } from './whats-new-section'
 import { InspirationSection } from './inspiration-section'
 import { InspirationPlacesSection } from './inspiration-places-section'
+import { ReadingTopicsSection } from './reading-topics-section'
 import { fetchLatestActivity, fetchHomepageInspiration } from '@/lib/payload'
 
 // Konfigurovatelné přes env (fallback zachovává původní chování), ať URL není
@@ -60,6 +61,10 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
 
         <div className="mt-16">
           <WhatsNewSection items={activity} />
+        </div>
+
+        <div className="mt-16">
+          <ReadingTopicsSection rubriky={inspiration?.rubriky ?? []} />
         </div>
       </main>
     </div>
