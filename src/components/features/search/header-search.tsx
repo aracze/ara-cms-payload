@@ -7,7 +7,7 @@ import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
 
 export function HeaderSearch() {
-  const { query, setQuery, results, clearSearch, isLoading } = useSearch()
+  const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -103,6 +103,7 @@ export function HeaderSearch() {
                       query={query}
                       isLoading={isLoading}
                       hasResults={results.length > 0}
+                      hasError={hasError}
                     />
                   </div>
                 </div>
