@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { isProduction } from './utils'
+import { publicBaseUrlOptional } from './public-url'
 import { SESSION_SECONDS, TOKEN_COOKIE } from './session-constants'
 
 /**
@@ -14,12 +15,24 @@ import { SESSION_SECONDS, TOKEN_COOKIE } from './session-constants'
 
 export { SESSION_SECONDS, TOKEN_COOKIE }
 
+/**
+ * Příznak `Secure` (cookie jen přes HTTPS) podle SKUTEČNÉ adresy webu, ne podle
+ * NODE_ENV: testovací produkce běží na holém HTTP (IP bez domény) a prohlížeč
+ * by tam „Secure" cookie odmítl uložit — přihlášení by po první další stránce
+ * zmizelo. Až web pojede na doméně s HTTPS, příznak se zapne sám z adresy.
+ */
+function isSecureCookieNeeded(): boolean {
+  const base = publicBaseUrlOptional()
+  if (base) return base.startsWith('https')
+  return isProduction()
+}
+
 /** Uloží token do cookie prohlížeče (po přihlášení i po změně hesla). */
 export async function setSessionCookie(token: string): Promise<void> {
   const jar = await cookies()
   jar.set(TOKEN_COOKIE, token, {
     httpOnly: true, // skript v prohlížeči se k tokenu nedostane
-    secure: isProduction(), // v produkci jen přes HTTPS
+    secure: isSecureCookieNeeded(),
     sameSite: 'lax', // cookie neputuje s požadavky z cizích stránek
     path: '/',
     maxAge: SESSION_SECONDS,

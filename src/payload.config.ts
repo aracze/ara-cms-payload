@@ -45,12 +45,15 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
 export default buildConfig({
-  // Veřejná adresa webu. Bez ní Payload při každém požadavku hlásí, že původ
-  // není v seznamu povolených (CORS/CSRF), a odvozuje ho z prázdného řetězce —
-  // v logu produkce to bylo u každého volání API. Adresa vychází ze stejného
-  // místa jako odkazy v e-mailech (src/lib/public-url.ts), jen ve variantě,
-  // která při chybějící proměnné nespadne: tohle se vyhodnocuje i při buildu.
-  serverURL: publicBaseUrlOptional(),
+  // Veřejná adresa webu — ale JEN na HTTPS. Nastavené `serverURL` totiž Payload
+  // vždy přidá do CSRF allowlistu a ten pak vynucuje: požadavky bez hlavičky
+  // Origin (běžné otevření stránky) ověřuje přes `Sec-Fetch-Site` — jenže tu
+  // prohlížeče na holém HTTP (testovací produkce na IP) vůbec neposílají.
+  // Payload pak přihlašovací cookie tiše zahodí a web i administrace každého
+  // okamžitě „odhlásí" (2026-08-03: rozbité přihlášení na produkci). Na HTTP
+  // proto serverURL nenastavujeme (ochranu proti CSRF nese SameSite=Lax
+  // cookie); až web pojede na doméně s HTTPS, zapne se allowlist sám.
+  serverURL: publicBaseUrlOptional()?.startsWith('https') ? publicBaseUrlOptional() : undefined,
   admin: {
     user: Users.slug,
     importMap: {
