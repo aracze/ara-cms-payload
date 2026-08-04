@@ -18,7 +18,8 @@ export interface StrapiMedia {
 }
 
 export interface Homepage {
-  title: string
+  /** Věta pod herem — nepovinná; prázdná/null = na webu se nezobrazí nic. */
+  title?: string | null
 }
 
 export interface SharedImageComponent {
