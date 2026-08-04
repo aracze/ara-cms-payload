@@ -44,7 +44,14 @@ const KIND_META: Record<
   },
 }
 
-export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
+export function WhatsNewSection({
+  items,
+  renderedAt,
+}: {
+  items: ActivityItem[]
+  /** Čas serverového renderu — stejné „teď" pro server i hydrataci (viz formatCommentDate). */
+  renderedAt: number
+}) {
   const [filter, setFilter] = useState<FilterKey>('all')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
@@ -95,7 +102,7 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
 
       <div className="relative flex flex-col">
         {shown.map((item, index) => (
-          <ActivityRow key={item.key} item={item} first={index === 0} />
+          <ActivityRow key={item.key} item={item} first={index === 0} renderedAt={renderedAt} />
         ))}
         {shown.length === 0 && (
           <p className="py-6 text-center text-sm text-gray-400">Zatím tu nic není.</p>
@@ -117,8 +124,16 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
   )
 }
 
-function ActivityRow({ item, first }: { item: ActivityItem; first: boolean }) {
-  const { relative, absolute } = formatCommentDate(item.date)
+function ActivityRow({
+  item,
+  first,
+  renderedAt,
+}: {
+  item: ActivityItem
+  first: boolean
+  renderedAt: number
+}) {
+  const { relative, absolute } = formatCommentDate(item.date, renderedAt)
   const { verb, noAuthor, Icon, badgeBg } = KIND_META[item.kind]
 
   return (

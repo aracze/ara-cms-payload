@@ -11,15 +11,19 @@ import { SectionHeading } from './section-heading'
 export function InspirationSection({ data }: { data: HomepageInspiration | null }) {
   if (!data) return null
   const { rady, radyHref, articles } = data
-  if (rady.length === 0 && articles.length === 0) return null
+  const hasRady = rady.length > 0
+  const hasArticles = articles.length > 0
+  if (!hasRady && !hasArticles) return null
 
   return (
     <section aria-labelledby="inspiration-heading" className="max-w-5xl mx-auto text-left">
       <SectionHeading id="inspiration-heading">Rady a tipy na cestu</SectionHeading>
 
       <div className="grid gap-6 md:grid-cols-3 items-stretch">
-        {rady.length > 0 && (
-          <div className="md:col-span-2 flex flex-col">
+        {hasRady && (
+          // Osamocený blok (bez článků) zabere celou šířku, jinak by vedle
+          // něj zela prázdná třetina mřížky.
+          <div className={`flex flex-col ${hasArticles ? 'md:col-span-2' : 'md:col-span-3'}`}>
             <div className="grid grid-cols-2 gap-3 md:gap-3.5">
               {rady.map((rada) => (
                 <Link
@@ -59,8 +63,12 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
           </div>
         )}
 
-        {articles.length > 0 && (
-          <div className="flex flex-col bg-white rounded-3xl border border-gray-100/50 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)] p-5">
+        {hasArticles && (
+          <div
+            className={`flex flex-col bg-white rounded-3xl border border-gray-100/50 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.1)] p-5 ${
+              hasRady ? '' : 'md:col-span-3'
+            }`}
+          >
             <h3 className="font-heading font-bold text-[11.5px] tracking-[0.12em] uppercase text-[#215491] mb-1">
               Nejnovější články
             </h3>

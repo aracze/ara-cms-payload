@@ -1667,6 +1667,21 @@ export const fetchSitemapEntries = async () => {
 
 const ACTIVITY_PER_KIND = 12
 
+// Jen pole, která feed opravdu mapuje. POZOR: `author` (syrová relace) tu musí
+// být, i když se nezobrazuje — virtuální `authorPublic` z něj v afterRead čte
+// (stejná past jako `createdBy` u createdByPublic; bez něj zmizí avatary).
+const ACTIVITY_COMMENT_SELECT = {
+  type: true,
+  rating: true,
+  body: true,
+  commentedAt: true,
+  createdAt: true,
+  authorName: true,
+  relatedTo: true,
+  author: true,
+  authorPublic: true,
+} as const
+
 type RawActivityPage = {
   id: number
   title: string
@@ -1751,6 +1766,9 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
       sort: '-commentedAt',
       limit: ACTIVITY_PER_KIND,
       depth: 0,
+      // `joins: false` tu na rozdíl od pages není (ani nejde) — komentáře
+      // žádná join pole nemají, typ ho proto nepovoluje.
+      select: ACTIVITY_COMMENT_SELECT,
     }),
     payload.find({
       collection: 'comments',
@@ -1759,6 +1777,7 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
       sort: '-commentedAt',
       limit: ACTIVITY_PER_KIND,
       depth: 0,
+      select: ACTIVITY_COMMENT_SELECT,
     }),
   ])
 
@@ -1930,13 +1949,21 @@ const fetchLatestActivityCached = cached(fetchLatestActivityUncached, 'latest-ac
   'comments',
 ])
 
-export const fetchLatestActivity = async (): Promise<ActivityItem[]> => {
+export const fetchLatestActivity = async (): Promise<{
+  items: ActivityItem[]
+  /**
+   * Čas načtení — referenční „teď" pro relativní časy ve feedu. Počítá se
+   * ZÁMĚRNĚ tady (mimo unstable_cache i mimo render komponenty): v cache by
+   * zamrzl a v komponentě ho zakazuje react-compiler (impure during render).
+   */
+  fetchedAt: number
+}> => {
   try {
-    return await fetchLatestActivityCached()
+    return { items: await fetchLatestActivityCached(), fetchedAt: Date.now() }
   } catch (err) {
     // Homepage nesmí spadnout kvůli sekci novinek — bez dat se prostě nevykreslí.
     console.error('[whats-new] load failed:', err)
-    return []
+    return { items: [], fetchedAt: Date.now() }
   }
 }
 
@@ -2165,16 +2192,13 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
     }
   })
 
-  // — Denní výběr míst: částečný Fisher–Yates se seedem z data. Vybraných 6
-  // míst dotáhne druhý dotaz a vrátí se v pořadí výběru.
-  const ids = (placeIdsRes.docs as { id: number }[]).map((d) => d.id)
-  const rand = mulberry32(todaySeed())
-  const drawCount = Math.min(INSPIRATION_PLACES_LIMIT, ids.length)
-  for (let i = 0; i < drawCount; i++) {
-    const j = i + Math.floor(rand() * (ids.length - i))
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
-  }
-  const chosenIds = ids.slice(0, drawCount)
+  // — Denní výběr míst se seedem z data (sdílený seededPick). Vybraná místa
+  // (INSPIRATION_PLACES_LIMIT) dotáhne druhý dotaz a vrátí se v pořadí výběru.
+  const chosenIds = seededPick(
+    (placeIdsRes.docs as { id: number }[]).map((d) => d.id),
+    INSPIRATION_PLACES_LIMIT,
+    mulberry32(todaySeed()),
+  )
   let places: InspirationLink[] = []
   if (chosenIds.length > 0) {
     const placesRes = await payload.find({

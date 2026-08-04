@@ -16,13 +16,19 @@ const absFmt = new Intl.DateTimeFormat('cs-CZ', {
   timeZone: 'Europe/Prague',
 })
 
-export function formatCommentDate(iso: string | null): { relative: string; absolute: string } {
+export function formatCommentDate(
+  iso: string | null,
+  // Referenční „teď" — klientské komponenty (homepage feed) předávají čas
+  // serverového renderu, aby hydratace nepřepočítala text o pár vteřin jinak
+  // (mismatch na hranici jednotek). Serverové komponenty nechávají výchozí.
+  now: number = Date.now(),
+): { relative: string; absolute: string } {
   if (!iso) return { relative: '', absolute: '' }
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return { relative: '', absolute: '' }
 
   const absolute = absFmt.format(date)
-  const diffSec = Math.round((Date.now() - date.getTime()) / 1000)
+  const diffSec = Math.round((now - date.getTime()) / 1000)
 
   // Budoucí data (drobný posun hodin) hlásíme jako „právě teď".
   if (diffSec < 45) return { relative: 'právě teď', absolute }

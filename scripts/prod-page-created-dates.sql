@@ -1,6 +1,8 @@
 -- Doplnění původního data vytvoření stránek ze staré MySQL (viz
 -- scripts/backfill-page-created-dates.ts). Idempotentní; spustit JEDNOU na
--- produkci: docker compose exec -T db psql -U postgres -d aracze < tento-soubor
+-- produkci (ON_ERROR_STOP: při chybě skončit s nenulovým kódem, ne tiše
+-- pokračovat): docker compose exec -T db psql -U postgres -d aracze \
+--   -v ON_ERROR_STOP=1 < tento-soubor
 BEGIN;
 CREATE TEMP TABLE legacy_dates (lid int, dc timestamptz) ON COMMIT DROP;
 INSERT INTO legacy_dates (lid, dc) VALUES

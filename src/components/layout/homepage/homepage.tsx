@@ -65,7 +65,7 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
         </div>
 
         <div className="mt-16">
-          <WhatsNewSection items={activity} />
+          <WhatsNewSection items={activity.items} renderedAt={activity.fetchedAt} />
         </div>
 
         <div className="mt-16">

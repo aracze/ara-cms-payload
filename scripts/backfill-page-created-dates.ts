@@ -28,14 +28,13 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const payload = await getPayload({ config })
 // Postgres pool adaptéru — vědomě mimo veřejné typy (viz komentář v hlavičce).
+type PgQuery = (
+  q: string,
+  p?: unknown[],
+) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>
 const pool = (
   payload.db as unknown as {
-    pool: {
-      query: (
-        q: string,
-        p?: unknown[],
-      ) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>
-    }
+    pool: { query: PgQuery; connect: () => Promise<{ query: PgQuery; release: () => void }> }
   }
 ).pool
 
@@ -79,33 +78,41 @@ if (DRY_RUN) {
   process.exit(0)
 }
 
-await pool.query('BEGIN')
+// Transakce MUSÍ běžet na JEDNOM spojení — pool.query si pro každý příkaz
+// půjčuje libovolné spojení z poolu, takže BEGIN/UPDATE/COMMIT by se mohly
+// rozjet na různá spojení a atomicita by byla iluze.
+const client = await pool.connect()
 try {
-  const updPages = await pool.query(
+  await client.query('BEGIN')
+  const updPages = await client.query(
     `UPDATE pages p SET created_at = d.dc
      FROM (SELECT unnest($1::int[]) AS lid, unnest($2::timestamptz[]) AS dc) d
      WHERE p.legacy_page_id = d.lid AND p.created_at IS DISTINCT FROM d.dc`,
     [ids, dates],
   )
-  const updVersions = await pool.query(
+  const updVersions = await client.query(
     `UPDATE _pages_v v SET version_created_at = d.dc
      FROM (SELECT unnest($1::int[]) AS lid, unnest($2::timestamptz[]) AS dc) d
      JOIN pages p ON p.legacy_page_id = d.lid
      WHERE v.parent_id = p.id AND v.version_created_at IS DISTINCT FROM d.dc`,
     [ids, dates],
   )
-  await pool.query('COMMIT')
+  await client.query('COMMIT')
   console.log(`Hotovo: pages ${updPages.rowCount} řádků, _pages_v ${updVersions.rowCount} řádků.`)
 } catch (err) {
-  await pool.query('ROLLBACK')
+  await client.query('ROLLBACK')
   throw err
+} finally {
+  client.release()
 }
 
 // SQL pro produkci — stejné změny, aplikují se ručně přes psql na serveru.
 const values = legacy.map((l) => `(${l.id}, '${l.iso}'::timestamptz)`).join(',\n')
 const prodSql = `-- Doplnění původního data vytvoření stránek ze staré MySQL (viz
 -- scripts/backfill-page-created-dates.ts). Idempotentní; spustit JEDNOU na
--- produkci: docker compose exec -T db psql -U postgres -d aracze < tento-soubor
+-- produkci (ON_ERROR_STOP: při chybě skončit s nenulovým kódem, ne tiše
+-- pokračovat): docker compose exec -T db psql -U postgres -d aracze \\
+--   -v ON_ERROR_STOP=1 < tento-soubor
 BEGIN;
 CREATE TEMP TABLE legacy_dates (lid int, dc timestamptz) ON COMMIT DROP;
 INSERT INTO legacy_dates (lid, dc) VALUES
