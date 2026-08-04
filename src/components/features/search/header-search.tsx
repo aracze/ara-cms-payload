@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
 import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
@@ -67,7 +67,15 @@ export function HeaderSearch() {
               {/* h-[65px] = přesná výška hlavičky — panel ji při otevření nahradí
                   bez poskočení (hlavička má h-[65px] v header.tsx). */}
               <div className="max-w-7xl mx-auto px-4 md:px-12 h-[65px] flex items-center gap-4">
-                <SearchGraphic className="w-6 h-6 text-gray-400 shrink-0" strokeWidth={2.5} />
+                {/* Lupa se během hledání točí — signál „pracuju" přímo v poli. */}
+                {isLoading ? (
+                  <Loader2
+                    className="w-6 h-6 text-gray-400 shrink-0 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <SearchGraphic className="w-6 h-6 text-gray-400 shrink-0" strokeWidth={2.5} />
+                )}
                 <input
                   ref={inputRef}
                   aria-label="Hledat"
@@ -97,7 +105,13 @@ export function HeaderSearch() {
               </div>
               {(query.length > 0 || results.length > 0) && (
                 <div className="border-t border-gray-100">
-                  <div className="max-w-7xl mx-auto px-4 md:px-12 pb-8">
+                  {/* Staré výsledky při načítání nového dotazu zůstávají, jen
+                      ztlumené (stale-while-revalidate) — výpis nepoblikává. */}
+                  <div
+                    className={`max-w-7xl mx-auto px-4 md:px-12 pb-8 transition-opacity duration-200 ${
+                      isLoading && results.length > 0 ? 'opacity-50' : ''
+                    }`}
+                  >
                     <ResultList results={results} handleLinkClicked={handleClear} />
                     <SearchStatus
                       query={query}
