@@ -37,12 +37,14 @@ import { PromoBlock } from './blocks/Promo'
 import { Homepage } from './globals/Homepage'
 import { Header } from './globals/Header'
 import { Footer } from './globals/Footer'
-import { publicBaseUrlOptional } from './lib/public-url'
+import { isHttpsUrl, publicBaseUrlOptional } from './lib/public-url'
 import { dbDumpEndpoint } from './endpoints/dbDump'
 import { dbImportEndpoint } from './endpoints/dbImport'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+const publicBase = publicBaseUrlOptional()
 
 export default buildConfig({
   // Veřejná adresa webu — ale JEN na HTTPS. Nastavené `serverURL` totiž Payload
@@ -53,7 +55,7 @@ export default buildConfig({
   // okamžitě „odhlásí" (2026-08-03: rozbité přihlášení na produkci). Na HTTP
   // proto serverURL nenastavujeme (ochranu proti CSRF nese SameSite=Lax
   // cookie); až web pojede na doméně s HTTPS, zapne se allowlist sám.
-  serverURL: publicBaseUrlOptional()?.startsWith('https') ? publicBaseUrlOptional() : undefined,
+  serverURL: publicBase && isHttpsUrl(publicBase) ? publicBase : undefined,
   admin: {
     user: Users.slug,
     importMap: {

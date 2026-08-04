@@ -47,3 +47,14 @@ export function publicBaseUrlOptional(): string | undefined {
   const raw = process.env.NEXT_PUBLIC_PAYLOAD_BASE_URL?.trim()
   return raw ? raw.replace(/\/$/, '') : undefined
 }
+
+/**
+ * Běží daná adresa na HTTPS? Striktní kontrola schématu `https://` bez ohledu
+ * na velikost písmen — `startsWith('https')` by chybně prošlo i `httpsfoo://`
+ * a naopak neprošlo `HTTPS://`. Jedno sdílené místo pro obě rozhodnutí, která
+ * na skutečném HTTPS závisí: příznak `Secure` přihlašovací cookie
+ * (session-cookie.ts) a `serverURL` s CSRF allowlistem (payload.config.ts).
+ */
+export function isHttpsUrl(url: string): boolean {
+  return /^https:\/\//i.test(url)
+}

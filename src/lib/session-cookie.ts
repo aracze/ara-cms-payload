@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { isProduction } from './utils'
-import { publicBaseUrlOptional } from './public-url'
+import { isHttpsUrl, publicBaseUrlOptional } from './public-url'
 import { SESSION_SECONDS, TOKEN_COOKIE } from './session-constants'
 
 /**
@@ -23,7 +23,7 @@ export { SESSION_SECONDS, TOKEN_COOKIE }
  */
 function isSecureCookieNeeded(): boolean {
   const base = publicBaseUrlOptional()
-  if (base) return base.startsWith('https')
+  if (base) return isHttpsUrl(base)
   return isProduction()
 }
 
