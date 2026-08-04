@@ -21,7 +21,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'comment', label: 'Komentáře' },
 ]
 
-const PAGE_SIZE = 8
+const PAGE_SIZE = 5
 
 // Přítomný čas záměrně — funguje pro všechny rody („Panda přidává", „Karel přidává").
 const KIND_META: Record<
@@ -53,9 +53,17 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
   const shown = filtered.slice(0, visibleCount)
 
   return (
-    <section aria-labelledby="whats-new-heading" className="max-w-5xl mx-auto text-left">
-      <div className="flex items-baseline justify-between gap-x-6 gap-y-2 flex-wrap mb-4">
-        <h2 id="whats-new-heading" className="text-2xl font-bold text-gray-800 tracking-tight">
+    // Pruh přes CELOU šířku okna jako „Co dalšího vidět" u cílů: vizuál
+    // (bílé pozadí + měkký stín nahoře a dole) je absolutní vrstva probouraná
+    // z obsahového sloupce ven; obsah zůstává ve sloupci. Přetečení o šířku
+    // posuvníku hlídá html { overflow-x: clip } v globals.css.
+    <section aria-labelledby="whats-new-heading" className="relative py-10 text-left">
+      <div
+        aria-hidden="true"
+        className="absolute inset-y-0 left-1/2 w-screen -translate-x-1/2 pointer-events-none bg-white [box-shadow:0_0.3rem_2.9rem_0_rgba(0,0,0,0.08)]"
+      />
+      <div className="relative flex items-baseline justify-between gap-x-6 gap-y-2 flex-wrap mb-4">
+        <h2 id="whats-new-heading" className="text-[22px] font-bold text-[#1a3f6c]">
           Co je nového
         </h2>
         <div role="group" aria-label="Filtr novinek" className="flex gap-2 flex-wrap">
@@ -80,7 +88,7 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
         </div>
       </div>
 
-      <div className="flex flex-col">
+      <div className="relative flex flex-col">
         {shown.map((item, index) => (
           <ActivityRow key={item.key} item={item} first={index === 0} />
         ))}
@@ -90,7 +98,7 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
       </div>
 
       {filtered.length > visibleCount && (
-        <div className="text-center mt-3">
+        <div className="relative text-center mt-3">
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
@@ -146,9 +154,11 @@ function ActivityRow({ item, first }: { item: ActivityItem; first: boolean }) {
           {item.authorName ? (
             <>
               {item.authorUsername ? (
+                // Bez podtržení i tady — uvnitř celoklikacího řádku signalizují
+                // odkazy jednotně jen barvou (titulek ztmavne, autor zmodrá).
                 <Link
                   href={`/profil/${item.authorUsername}`}
-                  className="relative z-10 font-bold text-gray-900 hover:text-[#215491] hover:underline"
+                  className="relative z-10 font-bold text-gray-900 transition-colors hover:text-[#215491]"
                 >
                   {item.authorName}
                 </Link>
@@ -160,9 +170,11 @@ function ActivityRow({ item, first }: { item: ActivityItem; first: boolean }) {
           ) : (
             <>{noAuthor}: </>
           )}
+          {/* Bez podtržení — web podtrhává jen při najetí přímo na odkaz
+              (autoři); u celoklikacího řádku stačí pozadí + ztmavení barvy. */}
           <Link
             href={item.href}
-            className="font-bold text-[#215491] group-hover:underline after:absolute after:inset-0"
+            className="font-bold text-[#215491] transition-colors group-hover:text-[#1a4579] after:absolute after:inset-0"
           >
             {item.title}
           </Link>
