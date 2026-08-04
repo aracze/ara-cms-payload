@@ -6,7 +6,7 @@ import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
 
 export function HomepageSearch() {
-  const { query, setQuery, results, clearSearch, isLoading } = useSearch()
+  const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -72,7 +72,12 @@ export function HomepageSearch() {
         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[150] animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="max-h-[400px] overflow-y-auto p-4">
             <ResultList results={results} handleLinkClicked={() => setIsExpanded(false)} />
-            <SearchStatus query={query} isLoading={isLoading} hasResults={results.length > 0} />
+            <SearchStatus
+              query={query}
+              isLoading={isLoading}
+              hasResults={results.length > 0}
+              hasError={hasError}
+            />
           </div>
         </div>
       )}
