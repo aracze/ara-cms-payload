@@ -4,77 +4,101 @@ import type { InspirationLink } from '@/types/payload'
 import { SectionHeading } from './section-heading'
 
 // Sekce „Témata ke čtení" na konci homepage — rozcestník rubrik článků
-// (náhrada /inspirace starého webu, který se záměrně nestaví). Vědomě menší
-// dlaždice než „Inspirace na cestu": rubriky jsou druhořadý obsah, výška
-// karty to říká za nás.
-//
-// Mozaika po vzoru starého webu: řádky šestisloupcové mřížky se střídají
-// [široká + úzká] → [tři stejné] → [úzká + široká] (zrcadlově). Působí to
-// živě, ale rozložení je deterministické — počítá se jen z počtu rubrik,
-// takže nic nepřeskakuje a poslední řádek nikdy nezůstane děravý.
+// (náhrada /inspirace starého webu, který se záměrně nestaví). Rozložení
+// „rytmus výškou" (vybraná varianta C z maket, 4. 8. 2026): první tři rubriky
+// velké, zbytek menší v řadách po čtyřech. Dynamiku dělá výškový kontrast
+// řádků, ne střídání šířek — hrany dlaždic na sebe v řádku vždy navazují.
+// Pořadí rubrik se denně obměňuje (seedovaný los ve fetchHomepageInspiration),
+// takže velké dlaždice připadnou každý den jiným rubrikám. Dlaždice jsou
+// vědomě menší než u „Inspirace na cestu": rubriky jsou druhořadý obsah.
 
-type MosaicTile = { span: 2 | 3 | 4 | 6; tall: boolean }
+type TopicTile = { span: 3 | 4 | 6 | 12; big: boolean }
 
-/** Rozpočítá dlaždice do řádků; při zbytku 1–2 položek řádek dopočítá. */
-function mosaicLayout(count: number): MosaicTile[] {
-  const ROWS: { spans: MosaicTile['span'][]; tall: boolean }[] = [
-    { spans: [4, 2], tall: true },
-    { spans: [2, 2, 2], tall: false },
-    { spans: [2, 4], tall: true },
-    { spans: [2, 2, 2], tall: false },
+/** První tři velké, zbytek po čtyřech; bez osamocené dlaždice na konci. */
+function topicsLayout(count: number): TopicTile[] {
+  if (count === 1) return [{ span: 12, big: true }]
+  if (count === 2)
+    return [
+      { span: 6, big: true },
+      { span: 6, big: true },
+    ]
+  const tiles: TopicTile[] = [
+    { span: 4, big: true },
+    { span: 4, big: true },
+    { span: 4, big: true },
   ]
-  const tiles: MosaicTile[] = []
-  let remaining = count
-  let rowIndex = 0
-  while (remaining > 0) {
-    const row = ROWS[rowIndex % ROWS.length]
-    if (remaining >= row.spans.length) {
-      for (const span of row.spans) tiles.push({ span, tall: row.tall })
-      remaining -= row.spans.length
-    } else if (remaining === 2) {
-      tiles.push({ span: 3, tall: true }, { span: 3, tall: true })
-      remaining = 0
+  let rest = count - 3
+  while (rest > 0) {
+    if (rest === 1) {
+      tiles.push({ span: 12, big: false })
+      rest = 0
+    } else if (rest === 2) {
+      tiles.push({ span: 6, big: false }, { span: 6, big: false })
+      rest = 0
+    } else if (rest === 3) {
+      tiles.push({ span: 4, big: false }, { span: 4, big: false }, { span: 4, big: false })
+      rest = 0
+    } else if (rest === 5) {
+      // Řada po čtyřech by nechala poslední dlaždici samotnou → 3 + 2.
+      tiles.push(
+        { span: 4, big: false },
+        { span: 4, big: false },
+        { span: 4, big: false },
+        { span: 6, big: false },
+        { span: 6, big: false },
+      )
+      rest = 0
     } else {
-      tiles.push({ span: 6, tall: true })
-      remaining = 0
+      tiles.push(
+        { span: 3, big: false },
+        { span: 3, big: false },
+        { span: 3, big: false },
+        { span: 3, big: false },
+      )
+      rest -= 4
     }
-    rowIndex += 1
   }
   return tiles
 }
 
 // Tailwind potřebuje třídy jako celé řetězce (JIT je hledá staticky).
-const SPAN_CLASS: Record<MosaicTile['span'], string> = {
-  2: 'md:col-span-2',
+const SPAN_CLASS: Record<TopicTile['span'], string> = {
   3: 'md:col-span-3',
   4: 'md:col-span-4',
   6: 'md:col-span-6',
+  12: 'md:col-span-12',
 }
 
-const SIZES: Record<MosaicTile['span'], string> = {
-  2: '(max-width: 768px) 50vw, 360px',
-  3: '(max-width: 768px) 50vw, 520px',
-  4: '(max-width: 768px) 50vw, 700px',
-  6: '(max-width: 768px) 50vw, 1024px',
+// Šířky dlaždic v mřížce max-w-5xl (1024 px) pro srcset — mírně nadsazené.
+const DESKTOP_SIZES: Record<TopicTile['span'], string> = {
+  3: '250px',
+  4: '340px',
+  6: '500px',
+  12: '1024px',
 }
 
 export function ReadingTopicsSection({ rubriky }: { rubriky: InspirationLink[] }) {
   if (rubriky.length === 0) return null
 
-  const tiles = mosaicLayout(rubriky.length)
+  const tiles = topicsLayout(rubriky.length)
 
   return (
     <section aria-labelledby="reading-topics-heading" className="max-w-5xl mx-auto text-left">
       <SectionHeading id="reading-topics-heading">Témata ke čtení</SectionHeading>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-12 md:gap-4">
         {rubriky.map((rubrika, index) => {
           const tile = tiles[index]
+          // Lichý počet: poslední dlaždice na mobilu přes oba sloupce,
+          // ať nezůstává osamocená v půlce řádku.
+          const mobileFull = rubriky.length % 2 === 1 && index === rubriky.length - 1
           return (
             <Link
               key={rubrika.key}
               href={rubrika.href}
-              className={`group relative block h-20 rounded-xl overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] ${SPAN_CLASS[tile.span]} ${tile.tall ? 'md:h-28' : 'md:h-24'}`}
+              className={`group relative block h-20 rounded-2xl overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] ${
+                mobileFull ? 'col-span-2' : ''
+              } ${SPAN_CLASS[tile.span]} ${tile.big ? 'md:h-[178px]' : 'md:h-[124px]'}`}
             >
               {rubrika.imageUrl ? (
                 <Image
@@ -82,16 +106,20 @@ export function ReadingTopicsSection({ rubriky }: { rubriky: InspirationLink[] }
                   alt=""
                   fill
                   className="object-cover transition-transform duration-700 group-hover:scale-105"
-                  sizes={SIZES[tile.span]}
+                  sizes={`(max-width: 768px) ${mobileFull ? '100vw' : '50vw'}, ${DESKTOP_SIZES[tile.span]}`}
                 />
               ) : (
                 <span className="absolute inset-0 bg-gradient-to-br from-[#1a3f6c]/10 to-[#1a3f6c]/20" />
               )}
               <span
                 aria-hidden="true"
-                className="absolute inset-x-0 bottom-0 h-[75%] bg-gradient-to-t from-[#0f1a2a]/75 to-transparent"
+                className="absolute inset-x-0 bottom-0 h-[58%] bg-gradient-to-t from-[#0f1a2a]/70 to-transparent"
               />
-              <span className="absolute left-3.5 right-3 bottom-2.5 text-white font-bold text-[14.5px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]">
+              <span
+                className={`absolute left-4 right-3 text-white font-bold leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.35)] ${
+                  tile.big ? 'bottom-3.5 text-[16.5px]' : 'bottom-3 text-[15px]'
+                }`}
+              >
                 {rubrika.title}
               </span>
             </Link>

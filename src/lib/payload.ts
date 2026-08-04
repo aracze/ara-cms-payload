@@ -2084,8 +2084,9 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
       select: { slug: true },
     }),
     // Rubriky pro „Témata ke čtení" na konci stránky — všechny kromě Rad na
-    // cestu (mají vlastní vitrínu nahoře). Řazení podle názvu (DB má českou
-    // ICU kolaci, takže ř/š/ž sedí).
+    // cestu (mají vlastní vitrínu nahoře). Řazení podle názvu je jen stabilní
+    // základ pro deterministické denní míchání níž (bez pevného pořadí by
+    // seed nestačil).
     payload.find({
       collection: 'pages',
       overrideAccess: false,
@@ -2227,7 +2228,15 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
       featuredImage?: { image?: unknown } | null
     }>,
   )
-  const rubriky: InspirationLink[] = enrichedRubriky.map((r) => ({
+  // Denní obměna pořadí rubrik — rozložení „Témata ke čtení" dává prvním třem
+  // velké dlaždice, takže se v nich rubriky každý den prostřídají. Vlastní
+  // proud náhody (seed+2), aby míchání nebylo svázané s losem míst (seed)
+  // ani rad (seed+1).
+  const rubriky: InspirationLink[] = seededPick(
+    enrichedRubriky,
+    enrichedRubriky.length,
+    mulberry32(todaySeed() + 2),
+  ).map((r) => ({
     key: `page-${r.id}`,
     title: r.title,
     href: r.fullSlug,
