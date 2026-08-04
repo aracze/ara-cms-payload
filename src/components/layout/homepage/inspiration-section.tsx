@@ -3,12 +3,10 @@ import Image from 'next/image'
 import type { HomepageInspiration } from '@/types/payload'
 import { SectionHeading } from './section-heading'
 
-// Sekce „Články a rady na cestu" — dlaždice 2×2 s denním výběrem rad a boční
-// seznam nejnovějších článků (schválená varianta D + G, 8/2026). Název sekce
-// vědomě pokrývá OBA sloupce (navazuje na starý web); levý sloupec se
-// identifikuje odkazem „Všechny rady na cestu" pod dlaždicemi, pravý štítkem
-// „Nejnovější články". Dlaždice mluví stejným jazykem jako „Inspirace na
-// cestu" (fotka + název na lokálním gradientu).
+// Sekce „Rady a tipy na cestu" — dlaždice 2×2 s denním výběrem rad a boční
+// seznam nejnovějších článků (varianta D, 8/2026; název sekce 4. 8. 2026).
+// Sloupce se identifikují samy — levý odkazem „Všechny rady na cestu" pod
+// dlaždicemi, pravý štítkem „Nejnovější články".
 
 export function InspirationSection({ data }: { data: HomepageInspiration | null }) {
   if (!data) return null
@@ -17,7 +15,7 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
 
   return (
     <section aria-labelledby="inspiration-heading" className="max-w-5xl mx-auto text-left">
-      <SectionHeading id="inspiration-heading">Články a rady na cestu</SectionHeading>
+      <SectionHeading id="inspiration-heading">Rady a tipy na cestu</SectionHeading>
 
       <div className="grid gap-6 md:grid-cols-3 items-stretch">
         {rady.length > 0 && (

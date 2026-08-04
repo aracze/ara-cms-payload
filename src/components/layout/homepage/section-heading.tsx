@@ -1,7 +1,7 @@
 // Centrovaný nadpis sekce homepage — stejný vzor jako sekce na stránkách míst
 // (places-to-visit, articles-list-classic): Poppins, tmavě modrá, korálová
-// linka. Výjimkou je „Co je nového" — proudový formát s filtry si nechává
-// nadpis vlevo (vědomé rozhodnutí, 4. 8. 2026).
+// linka. Používají ho všechny pojmenované sekce homepage včetně „Co je
+// nového" (tam s filtry vpravo na úrovni nadpisu).
 
 export function SectionHeading({ id, children }: { id: string; children: string }) {
   return (

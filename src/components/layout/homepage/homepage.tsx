@@ -47,13 +47,18 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
         // obsahu (např. truncate řádky v „Co je nového") a na mobilu přetéká.
         className="w-full max-w-7xl mx-auto px-4 md:px-12 py-16 text-center focus:outline-none"
       >
-        <h2 className="text-3xl font-bold text-gray-800 mb-6 uppercase tracking-wider">
-          {homepage?.title}
-        </h2>
+        {/* „Medailonek webu" mezi herem a první sekcí — stejná typografie jako
+            text „o mně" na profilu (17 px, #4a4a4a, max 720 px na středu).
+            Zobrazuje se JEN když je vyplněný v adminu (globál Homepage →
+            Title); prázdné pole = žádný text a první sekce sedí rovnou pod
+            herem (mezeru pod textem proto nese text sám, ne sekce). */}
+        {homepage?.title?.trim() && (
+          <p className="mx-auto mb-12 max-w-[720px] whitespace-pre-line text-[17px] leading-relaxed text-[#4a4a4a]">
+            {homepage.title.trim()}
+          </p>
+        )}
 
-        <div className="mt-10">
-          <InspirationSection data={inspiration} />
-        </div>
+        <InspirationSection data={inspiration} />
 
         <div className="mt-16">
           <InspirationPlacesSection places={inspiration?.places ?? []} />

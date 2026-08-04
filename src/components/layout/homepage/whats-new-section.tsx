@@ -7,6 +7,7 @@ import { MapPin, Star, MessageCircle, type LucideIcon } from 'lucide-react'
 import type { ActivityItem } from '@/types/payload'
 import { formatCommentDate } from '@/lib/relative-time'
 import { UserAvatar } from '@/components/user-avatar'
+import { SectionHeading } from './section-heading'
 
 // Sekce „Co je nového" — jeden proud novinek (nová místa + recenze + komentáře)
 // s nenápadným filtrem. Nahrazuje záložkovou sekci starého webu; výchozí pohled
@@ -62,11 +63,15 @@ export function WhatsNewSection({ items }: { items: ActivityItem[] }) {
         aria-hidden="true"
         className="absolute inset-y-0 left-1/2 w-screen -translate-x-1/2 pointer-events-none bg-white [box-shadow:0_0.3rem_2.9rem_0_rgba(0,0,0,0.08)]"
       />
-      <div className="relative flex items-baseline justify-between gap-x-6 gap-y-2 flex-wrap mb-4">
-        <h2 id="whats-new-heading" className="text-[22px] font-bold text-[#1a3f6c]">
-          Co je nového
-        </h2>
-        <div role="group" aria-label="Filtr novinek" className="flex gap-2 flex-wrap">
+      {/* Centrovaný nadpis jako ostatní sekce, filtry vpravo na úrovni nadpisu
+          (na mobilu by se s ním tloukly, tam zůstávají pod ním na středu). */}
+      <div className="relative">
+        <SectionHeading id="whats-new-heading">Co je nového</SectionHeading>
+        <div
+          role="group"
+          aria-label="Filtr novinek"
+          className="-mt-2 mb-6 flex flex-wrap justify-center gap-2 md:absolute md:right-0 md:top-2 md:m-0 md:justify-end"
+        >
           {FILTERS.map((f) => (
             <button
               key={f.key}
