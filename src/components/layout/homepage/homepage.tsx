@@ -13,14 +13,19 @@ const HOMEPAGE_HERO_IMAGE =
 export const Homepage = ({ homepage }: { homepage?: HomepageType | null }) => {
   return (
     <div className="flex flex-col min-h-screen">
-      <section className="relative w-full h-[315px] overflow-hidden bg-[#3b444f]">
-        <StaticHeroImage imageUrl={HOMEPAGE_HERO_IMAGE} />
+      <section className="relative w-full h-[315px] bg-[#3b444f]">
+        {/* Dekorace mají vlastní ořezanou vrstvu POD vyhledáváním — overflow-hidden
+            nesmí být na sekci a vlna nesmí být nad titulkem, jinak ořízne/překreslí
+            rozbalený našeptávač, který přesahuje pod hero. */}
+        <div className="absolute inset-0 overflow-hidden">
+          <StaticHeroImage imageUrl={HOMEPAGE_HERO_IMAGE} />
+
+          <StaticHeroOverlay filterId="blurFilterHome" />
+
+          <StaticHeroWave />
+        </div>
 
         <StaticHeroTitle title={'Najdi si svůj cíl'} />
-
-        <StaticHeroOverlay filterId="blurFilterHome" />
-
-        <StaticHeroWave />
       </section>
 
       <main
