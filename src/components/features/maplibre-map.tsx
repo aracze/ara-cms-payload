@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import { preconnect } from 'react-dom'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 /**
@@ -129,6 +130,10 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
   const [loaded, setLoaded] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  // Spojení na server dlaždic se naváže hned při renderu stránky s mapou —
+  // než k mapě uživatel doscrolluje, TLS handshake už je hotový.
+  preconnect('https://tiles.openfreemap.org', { crossOrigin: 'anonymous' })
+
   // Mapová knihovna (~250 kB) se stahuje až když se mapa blíží viewportu —
   // na stránkách s mapou pod přehybem se hned při načtení nestahuje nic.
   useEffect(() => {
@@ -186,6 +191,9 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
               'Mapu přiblížíte kolečkem myši s klávesou Ctrl',
             'CooperativeGesturesHandler.MacHelpText': 'Mapu přiblížíte kolečkem myši s klávesou ⌘',
             'CooperativeGesturesHandler.MobileHelpText': 'Mapu posunete dvěma prsty',
+            'NavigationControl.ZoomIn': 'Přiblížit',
+            'NavigationControl.ZoomOut': 'Oddálit',
+            'Popup.Close': 'Zavřít kartičku místa',
           },
         })
         mapInstanceRef.current = map
@@ -212,13 +220,16 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           closeButton: true,
         })
 
+        // Uživatelům s omezeným pohybem se mapa nepřisouvá animovaně, ale skokem.
+        const snizitPohyb = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
         // Otevření kartičky (klik na pin i hover z výpisu). Pin mimo aktuální
         // výřez mapu přisune do středu; pin u okraje řeší automatická kotva
         // kartičky a zbylý drobný přesah dorovná panBy o změřený rozdíl —
         // dohromady stejné chování jako autopan Google InfoWindow.
         const openPopup = (m: MapMarker) => {
           const outOfView = !map.getBounds().contains([m.lng, m.lat])
-          if (outOfView) map.easeTo({ center: [m.lng, m.lat], duration: 350 })
+          if (outOfView) map.easeTo({ center: [m.lng, m.lat], duration: snizitPohyb ? 0 : 350 })
           popup.setLngLat([m.lng, m.lat]).setHTML(buildInfoWindowContent(m)).addTo(map)
           if (outOfView) return // po vycentrování se kartička vejde vždy
           requestAnimationFrame(() => {
@@ -233,7 +244,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
             else if (pr.right > cr.right - okraj) dx = pr.right - (cr.right - okraj)
             if (pr.top < cr.top + okraj) dy = pr.top - (cr.top + okraj)
             else if (pr.bottom > cr.bottom - okraj) dy = pr.bottom - (cr.bottom - okraj)
-            if (dx || dy) map.panBy([dx, dy], { duration: 250 })
+            if (dx || dy) map.panBy([dx, dy], { duration: snizitPohyb ? 0 : 250 })
           })
         }
 
@@ -241,6 +252,17 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         for (const m of markers) {
           const el = document.createElement('div')
           el.style.cssText = `width:${MARKER_SIZE}px;height:${MARKER_SIZE}px;cursor:pointer;`
+          // Pin je interaktivní prvek — musí jít ovládat i klávesnicí a čtečka
+          // musí vědět, co otevírá (Google markery tohle neuměly).
+          el.setAttribute('role', 'button')
+          el.setAttribute('tabindex', '0')
+          el.setAttribute('aria-label', `Zobrazit kartičku místa ${m.title}`)
+          el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openPopup(m)
+            }
+          })
           if (m.imageUrl) {
             const img = document.createElement('img')
             img.src = buildMarkerIconUrl(m.imageUrl)
