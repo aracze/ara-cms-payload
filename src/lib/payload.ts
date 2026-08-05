@@ -19,7 +19,9 @@ import {
   ActivityItem,
   HomepageInspiration,
   InspirationLink,
+  PracticalInfoSection,
 } from '@/types/payload'
+import { practicalInfoSectionCategories } from './practical-info'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import type { Payload } from 'payload'
@@ -1437,6 +1439,52 @@ export const fetchPageLightByFullSlug = cache(async (slug: string) => {
     return { data: { pages: [] as Page[] } }
   }
 })
+
+/**
+ * Sekce pro složenou stránku „Praktické informace": sousední podstránky místa
+ * (děti stejného rodiče) v kategoriích, ze kterých se stránka skládá.
+ * Jen pole potřebná pro skládání (title, fullSlug, category, text) — řazení
+ * a nadpisy sekcí řeší composePracticalInfoHtml.
+ */
+async function fetchPracticalInfoSectionsUncached(
+  parentFullSlug: string,
+): Promise<PracticalInfoSection[]> {
+  const payload = await getDb()
+  const res = await payload.find({
+    overrideAccess: false,
+    collection: 'pages',
+    where: {
+      'parent.fullSlug': { equals: parentFullSlug },
+      category: { in: practicalInfoSectionCategories },
+    },
+    limit: 20,
+    // depth 1: texty obsahují obrázky (upload uzly) a interní odkazy — bez
+    // populace by zůstaly jen jako ID a z poskládané stránky by vypadly.
+    depth: 1,
+    select: { title: true, fullSlug: true, category: true, text: true },
+    joins: false,
+  })
+  return (res.docs ?? []) as unknown as PracticalInfoSection[]
+}
+
+const fetchPracticalInfoSectionsCached = cached(
+  fetchPracticalInfoSectionsUncached,
+  'practical-info-sections',
+  // Široký tag 'pages' — složená stránka závisí na textech VÍCE podstránek,
+  // takže se musí invalidovat při publikaci kterékoli z nich.
+  ([parentFullSlug]) => ['page_' + parentFullSlug + '_practical-sections', 'pages'],
+)
+
+export const fetchPracticalInfoSections = cache(
+  async (parentFullSlug: string): Promise<PracticalInfoSection[]> => {
+    try {
+      return await fetchPracticalInfoSectionsCached(ensureCorrectFullSlug(parentFullSlug))
+    } catch (err) {
+      console.error(`[page] načtení sekcí praktických informací selhalo:`, err)
+      return []
+    }
+  },
+)
 
 /**
  * Levné zjištění, zda má stránka (podle fullSlug) nějaké články — jen počet,

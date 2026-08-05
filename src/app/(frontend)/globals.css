@@ -82,6 +82,9 @@
   .prose h2 a {
     color: inherit;
     text-decoration: none;
+    /* Obecné odkazy mají odlehčenou váhu (.prose a = 500) a přebily by tučnost
+       nadpisu — odkaz v nadpisu musí držet váhu nadpisu. */
+    font-weight: inherit;
   }
 
   .prose h3 {
@@ -94,6 +97,48 @@
   }
 
   .prose h4 {
+    font-size: 18px;
+    line-height: 1.3;
+    color: #212529;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    @apply font-heading font-semibold;
+  }
+
+  /* Složená stránka „Praktické informace": nadpisy textů podstránek jsou
+     posunuté o úroveň níž (sekce = h2, podkapitoly h3–h5), vizuálně ale drží
+     vzhled starého webu — každá úroveň přebírá styl o stupeň vyššího nadpisu.
+     Sekce (h2) odpovídají sekčním h1 starého webu (28px, modrá #004d94). */
+  .pi-prose h2 {
+    font-size: 28px;
+    line-height: 1.35;
+    color: #004d94;
+    margin-top: 30px;
+    margin-bottom: 10px;
+    /* Extrabold (800): bold Poppinsu je ve velkých velikostech opticky slabý
+       a sekce se od podkapitol (h3, bold) málo lišily. */
+    @apply font-heading font-extrabold;
+  }
+
+  .pi-prose h3 {
+    font-size: 22px;
+    line-height: 1.25;
+    color: #005580;
+    margin-top: 25px;
+    margin-bottom: 12px;
+    @apply font-heading font-bold;
+  }
+
+  .pi-prose h4 {
+    font-size: 21px;
+    line-height: 1.3;
+    color: #005580;
+    margin-top: 33px;
+    margin-bottom: 13px;
+    @apply font-heading font-semibold;
+  }
+
+  .pi-prose h5 {
     font-size: 18px;
     line-height: 1.3;
     color: #212529;
@@ -186,13 +231,20 @@
 
   /* Čtecí sloupec (články i textové stránky – místa, praktické informace…):
      odsazení ~64px řídí `lg:px-16` na OBSAHOVÉM SLOUPCI (aby s textem lícoval
-     i autor a patička), ne padding na prose. Obrázky a mapy se přes to odsazení
-     "vylámou" do plné šířky sloupce (proto `-64px` = přesně to px-16). */
+     i autor a patička), ne padding na prose. Obrázky, mapy a širokoúhlé bloky
+     (Sezónnost, Nice-to-know, Denní náklady) se přes to odsazení "vylámou"
+     do plné šířky sloupce (proto `-64px` = přesně to px-16). */
   @media (min-width: 1024px) {
     .prose.reading-prose .image-wrapper,
-    .prose.reading-prose .rich-text-map-container {
+    .prose.reading-prose .rich-text-map-container,
+    .prose.reading-prose .rich-text-seasonality-container,
+    .prose.reading-prose .nice-to-know,
+    .prose.reading-prose .pi-budget {
       margin-left: -64px;
       margin-right: -64px;
+      /* Bloky s `w-full` by se zápornými okraji jen POSUNULY doleva (100 %
+         šířky rodiče se nezvětší) — width:auto je nechá skutečně roztáhnout. */
+      width: auto;
     }
   }
 
@@ -486,7 +538,7 @@
 
   .prose .nice-to-know__wrap {
     @apply flex flex-wrap justify-between;
-    padding: 27px 0 44px;
+    padding-bottom: 15px;
     margin-left: -15px;
     margin-right: -15px;
   }
@@ -531,12 +583,10 @@
     line-height: 1.2;
   }
 
-  .prose .nice-to-know-item__body span {
-    color: rgb(59, 68, 79);
-    font-size: 16px;
-    display: block;
-    margin-top: 4px;
-  }
+  /* Pozn.: dřívější pravidlo `.nice-to-know-item__body span` (barva/16px na
+     všechny spany) mělo vyšší specificitu než __title a přebíjelo mu velikost
+     i barvu. Hodnoty karet si styly drží přes __value-wrap, titulek přes
+     __title — plošné pravidlo bylo jen škodlivé. */
 
   /* Language bubble */
   .prose .language-bubble {
@@ -647,7 +697,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    height: 80px;
+    /* Výšku NEpřebíjet — bere ji ze společné hlavičky karet (63px), jinak by
+       tmavá karta byla vyšší než ostatní a popisky by nelícovaly. */
     justify-content: center;
     padding-bottom: 5px;
   }

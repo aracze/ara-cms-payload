@@ -14,7 +14,9 @@ import {
   fetchPageReviewStats,
   fetchTouristPointSiblings,
   pageHasArticlesBySlug,
+  fetchPracticalInfoSections,
 } from '@/lib/payload'
+import { composePracticalInfoHtml } from '@/lib/practical-info'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
 import {
@@ -31,6 +33,9 @@ const exchangeRateCategories: PageCategory[] = [
   PageCategory.Mista,
   PageCategory.Misto_k_navstiveni,
   PageCategory.Turisticky_cil,
+  // Praktické informace: kurz plní blok „Aktuální měna" ve vlastním textu
+  // stránky i texty skládaných sekcí (Měna a ceny) — bez něj zůstane „--".
+  PageCategory.Prakticke_informace,
 ]
 
 export const Page = async ({ page }: { page: PayloadPage }) => {
@@ -121,6 +126,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     reviewsData,
     reviewStats,
     siblings,
+    practicalInfoSections,
   ] = await Promise.all([
     fetchPracticalInfoSourceChildren(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -149,9 +155,25 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     reviewsPromise,
     reviewStatsPromise,
     siblingsPromise,
+    // Složená stránka „Praktické informace" — texty sousedních podstránek
+    // (děti kontextového místa) v jednom dotazu; jinde prázdné pole zdarma.
+    page.category === PageCategory.Prakticke_informace
+      ? fetchPracticalInfoSections(menuContext.contextFullSlug)
+      : Promise.resolve([]),
   ])
   const contextHasPlaces = contextFlags.hasPlaces
   const contextHasArticles = contextFlags.hasArticles
+
+  // Praktické informace = složená stránka (legacy parita): vlastní text (úvod,
+  // karty Nice-to-know) + sekce z textů podstránek místa s kotvami a odkazy
+  // na samostatné stránky. Bez nalezených sekcí zůstává jen vlastní text.
+  const mainText =
+    page.category === PageCategory.Prakticke_informace && practicalInfoSections.length > 0
+      ? composePracticalInfoHtml(page.text, practicalInfoSections, {
+          currencyCode: effectiveCurrencyCode,
+          exchangeRate: exchangeData?.rate,
+        })
+      : page.text
 
   // Pás „Další vyhledávaná Místa…" — jen při více než 2 sousedech (legacy
   // pravidlo). Obrázky a rodič (titulek + lokál pro nadpis) se dotahují až
@@ -281,12 +303,16 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             isSubPlace={menuContext.isSubPlace}
             hasPlaces={contextHasPlaces}
             hasArticles={contextHasArticles}
+            // Turistický cíl je v menu schovaný (patří pod sekci „Místa" svého
+            // místa), takže by jinak nesvítilo nic — zvýrazníme „Místa", stejně
+            // jako článek zvýrazňuje „Články".
+            activeSection={page.category === PageCategory.Turisticky_cil ? 'mista' : undefined}
           />
         )}
 
         {/* 2. CONTENT AREA */}
         <MainContent
-          text={page.text}
+          text={mainText}
           pageChildren={pageChildren}
           pageCategory={page.category}
           timezone={page.detail?.timezone || safeRootPage?.detail?.timezone}

@@ -126,12 +126,11 @@ export const Subnavigation = ({
       currentPageCategory === PageCategory.Prakticke_informace)
 
   return (
-    <nav
-      aria-label="Sekundární navigace"
-      className="bg-white border-b border-gray-100 relative z-30 overflow-x-auto whitespace-nowrap"
-    >
-      <div className="max-w-7xl mx-auto px-4 md:px-12">
-        <div className="flex gap-0 justify-center text-xs md:text-base font-semibold font-heading">
+    <nav aria-label="Sekundární navigace" className="bg-white relative z-30">
+      {/* Oddělovací linka jen do šířky obsahu (parita se starým webem), ne přes
+          celý viewport — proto border na vnitřním kontejneru, ne na <nav>. */}
+      <div className="max-w-7xl mx-auto border-b border-gray-100 overflow-x-auto whitespace-nowrap">
+        <div className="flex gap-0 justify-center text-xs md:text-base font-semibold font-heading px-4 md:px-12">
           {/* Context page (the Place that owns this menu) */}
           <Link
             href={contextFullSlug}
