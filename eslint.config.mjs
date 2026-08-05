@@ -25,8 +25,10 @@ const eslintConfig = [
   },
   {
     // grails/ = lokální kopie legacy webu (git-ignored, na CI neexistuje);
-    // playwright-report/ a test-results/ = generované výstupy testů.
-    ignores: ['.next/', 'grails/', 'playwright-report/', 'test-results/'],
+    // playwright-report/ a test-results/ = generované výstupy testů;
+    // public/maplibre/ = zkopírovaný dist MapLibre workeru (viz
+    // scripts/build-map-style.mjs), cizí minifikovaný kód nelintujeme.
+    ignores: ['.next/', 'grails/', 'playwright-report/', 'test-results/', 'public/maplibre/'],
   },
 ]
 

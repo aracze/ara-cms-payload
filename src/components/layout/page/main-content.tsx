@@ -3,7 +3,7 @@ import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import Link from 'next/link'
 import { Globe, MapPin } from 'lucide-react'
 import { LocalTime } from '@/components/features/local-time'
-import { GoogleMap } from '@/components/features/google-map'
+import { MapLibreMap } from '@/components/features/maplibre-map'
 import { UserAvatar } from '@/components/user-avatar'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { websiteHref, websiteLabel } from '@/lib/utils'
@@ -196,7 +196,7 @@ export const MainContent = ({
 
                 {touristPointInfo.mapCenter && (
                   <div className="mt-2">
-                    <GoogleMap
+                    <MapLibreMap
                       markers={[
                         {
                           id: 'cil',

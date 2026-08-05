@@ -1,7 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
-import { GoogleMap, MapMarker } from '@/components/features/google-map'
+import { MapLibreMap, MapMarker } from '@/components/features/maplibre-map'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
 import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
@@ -137,7 +137,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
           {hasMap && (
             <div className="w-full lg:w-[44%]">
               <div className="lg:sticky lg:top-5">
-                <GoogleMap
+                <MapLibreMap
                   markers={markers}
                   centerLat={mapCenter.lat}
                   centerLng={mapCenter.lng}
