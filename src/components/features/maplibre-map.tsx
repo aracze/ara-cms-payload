@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { preconnect } from 'react-dom'
+import DOMPurify from 'isomorphic-dompurify'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 /**
@@ -80,6 +81,8 @@ function toCloudinaryVariant(url: string, transform: string): string {
 // Obsah kartičky místa se skládá jako HTML řetězec a předává do setHTML, takže
 // KAŽDÁ hodnota v atributu (href, src) musí být ověřená + escapovaná — jinak by
 // šlo přes fullSlug/imageUrl vloženého markeru vypadnout z atributu (XSS).
+// Výsledek navíc prochází DOMPurify (projektové pravidlo pro HTML sink) —
+// strukturální pojistka pro budoucí úpravy šablony, ne náhrada escapování.
 
 // href míří na interní stránku: musí začínat '/' a neobsahovat whitespace,
 // uvozovky ani lomené závorky (blokuje javascript:, data: i únik z atributu).
@@ -265,7 +268,10 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         const openPopup = (m: MapMarker) => {
           const outOfView = !map.getBounds().contains([m.lng, m.lat])
           if (outOfView) map.easeTo({ center: [m.lng, m.lat], duration: snizitPohyb ? 0 : 350 })
-          popup.setLngLat([m.lng, m.lat]).setHTML(buildInfoWindowContent(m)).addTo(map)
+          popup
+            .setLngLat([m.lng, m.lat])
+            .setHTML(DOMPurify.sanitize(buildInfoWindowContent(m)))
+            .addTo(map)
           if (outOfView) return // po vycentrování se kartička vejde vždy
           requestAnimationFrame(() => {
             if (cancelled || !mapInstanceRef.current) return
@@ -339,11 +345,13 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           if (!m) return
           const show = () => openPopup(m)
           const hide = () => popup.remove()
-          item.addEventListener('mouseover', show)
-          item.addEventListener('mouseout', hide)
+          // mouseenter/mouseleave nebublají — pohyb myši mezi vnitřními prvky
+          // řádku tak kartičku neotevírá a nezavírá pořád dokola.
+          item.addEventListener('mouseenter', show)
+          item.addEventListener('mouseleave', hide)
           hoverHandlers.push(
-            { el: item, type: 'mouseover', fn: show },
-            { el: item, type: 'mouseout', fn: hide },
+            { el: item, type: 'mouseenter', fn: show },
+            { el: item, type: 'mouseleave', fn: hide },
           )
         })
 
