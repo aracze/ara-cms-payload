@@ -22,6 +22,9 @@ import {
 } from '@/types/payload'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
+import type { Payload } from 'payload'
+import type { PostgresAdapter } from '@payloadcms/db-postgres'
+import { and, asc, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
 import {
   getArticleImageUrl,
@@ -2022,6 +2025,35 @@ const featuredImageUrl = (doc: { featuredImage?: { image?: unknown } | null }): 
   return img && typeof img === 'object' ? ((img as { url?: string | null }).url ?? null) : null
 }
 
+/**
+ * ID kandidátů pro denní výběr míst — ZÁMĚRNĚ přímý SQL dotaz přes drizzle,
+ * ne payload.find: Local API žene každý vrácený dokument přes afterRead
+ * pipeline (field hooky, sanitizace), což při ~660 kandidátech stálo v dev
+ * serveru ~0,8 s na KAŽDÝ request (změřeno 4. 8. 2026; samotné SQL trvá
+ * jednotky ms). Potřebujeme ale jen ID.
+ *
+ * Práva se tím neobcházejí: filtr `_status = published` odpovídá anonymnímu
+ * pravidlu čtení stránek a vylosovaná místa stejně dotahuje běžný payload.find
+ * s `overrideAccess: false` (plná práva + sanitizace polí). Řazení podle id
+ * drží deterministické denní míchání — bez stabilního pořadí by seed nestačil.
+ */
+async function fetchPlaceCandidateIds(payload: Payload): Promise<number[]> {
+  const db = payload.db as unknown as PostgresAdapter
+  const pages = db.tables.pages
+  const rows = await db.drizzle
+    .select({ id: pages.id })
+    .from(pages)
+    .where(
+      and(
+        eq(pages._status, 'published'),
+        eq(pages.category, PageCategory.Misto_k_navstiveni),
+        isNotNull(pages.featuredImage_image),
+      ),
+    )
+    .orderBy(asc(pages.id))
+  return rows.map((r) => Number(r.id))
+}
+
 async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> {
   const payload = await getDb()
 
@@ -2047,7 +2079,7 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
     fullSlug: string
   } | null
 
-  const [radyAllRes, articlesRes, placeIdsRes, rubrikyRes] = await Promise.all([
+  const [radyAllRes, articlesRes, placeIds, rubrikyRes] = await Promise.all([
     // Kandidáti dlaždic rad: VŠECHNY rady s fotkou (18 malých řádků) — denní
     // výběr 4 z nich dělá seedovaný los níž. sort: 'id' kvůli deterministickému
     // míchání.
@@ -2088,25 +2120,9 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
       select: { title: true, slug: true, mainPage: true, featuredImage: true },
     }),
     // Kandidáti dlaždic „Inspirace na cestu": jen id všech publikovaných míst
-    // s fotkou (~stovky řádků; vybraná dotáhne druhý dotaz). sort: 'id' kvůli
-    // deterministickému míchání — bez stabilního pořadí by seed nestačil.
-    payload.find({
-      collection: 'pages',
-      overrideAccess: false,
-      where: {
-        and: [
-          { _status: { equals: 'published' } },
-          { category: { equals: PageCategory.Misto_k_navstiveni } },
-          { 'featuredImage.image': { exists: true } },
-        ],
-      },
-      sort: 'id',
-      pagination: false,
-      limit: 0,
-      depth: 0,
-      joins: false,
-      select: { slug: true },
-    }),
+    // s fotkou (~stovky řádků; vybraná dotáhne druhý dotaz níž) — přímé SQL,
+    // viz komentář u fetchPlaceCandidateIds.
+    fetchPlaceCandidateIds(payload),
     // Rubriky pro „Témata ke čtení" na konci stránky — všechny kromě Rad na
     // cestu (mají vlastní vitrínu nahoře). Řazení podle názvu je jen stabilní
     // základ pro deterministické denní míchání níž (bez pevného pořadí by
@@ -2191,11 +2207,7 @@ async function fetchHomepageInspirationUncached(): Promise<HomepageInspiration> 
 
   // — Denní výběr míst se seedem z data (sdílený seededPick). Vybraná místa
   // (INSPIRATION_PLACES_LIMIT) dotáhne druhý dotaz a vrátí se v pořadí výběru.
-  const chosenIds = seededPick(
-    (placeIdsRes.docs as { id: number }[]).map((d) => d.id),
-    INSPIRATION_PLACES_LIMIT,
-    mulberry32(todaySeed()),
-  )
+  const chosenIds = seededPick(placeIds, INSPIRATION_PLACES_LIMIT, mulberry32(todaySeed()))
   let places: InspirationLink[] = []
   if (chosenIds.length > 0) {
     const placesRes = await payload.find({

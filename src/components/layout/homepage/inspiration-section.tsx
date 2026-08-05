@@ -36,6 +36,10 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
                       src={rada.imageUrl}
                       alt=""
                       fill
+                      // Dlaždice jsou hned pod herem (nad ohybem) a bývají LCP
+                      // elementem stránky — bez priority je next/image načítá
+                      // líně a prohlížeč hlásí pomalé LCP.
+                      priority
                       className="object-cover transition-transform duration-700 group-hover:scale-105"
                       sizes="(max-width: 768px) 50vw, 340px"
                     />
