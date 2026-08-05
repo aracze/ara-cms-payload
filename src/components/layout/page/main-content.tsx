@@ -9,6 +9,7 @@ import { richTextToHtml } from '@/lib/rich-text-html'
 import { websiteHref, websiteLabel } from '@/lib/utils'
 import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
+import { TocSidebar } from '@/components/features/toc-sidebar'
 
 /** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
 export interface TouristPointInfo {
@@ -26,14 +27,14 @@ interface TocItem {
   level: number
 }
 
-function extractHeadings(html: string): TocItem[] {
+function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   const headings: TocItem[] = []
   // Nadpisy mají po renderu atributy (např. id z richTextToHtml) — otevírací
   // tag proto musí povolit i atributy, jinak by TOC zůstalo prázdné.
   // Zachytíme i atributy otevíracího tagu, ať přečteme skutečné `id`, které
   // vygeneroval richTextToHtml (vč. případných -2/-3 u opakovaných nadpisů) —
   // jinak by TOC odkaz nesouhlasil s kotvou v textu.
-  const regex = /<(h[23])([^>]*)>(.*?)<\/\1>/gi
+  const regex = new RegExp(`<(h[2-${maxLevel}])([^>]*)>(.*?)</\\1>`, 'gi')
   let match
   while ((match = regex.exec(html)) !== null) {
     const level = parseInt(match[1][1], 10)
@@ -98,7 +99,10 @@ export const MainContent = ({
     PageCategory.Prakticke_informace,
   ]
   const showTableOfContents = !!pageCategory && tocCategories.includes(pageCategory)
-  const headings = showTableOfContents ? extractHeadings(textHtml) : []
+  // Složené Praktické informace mají nadpisy posunuté o úroveň níž — obsah
+  // proto bere h2–h4 (sekce + dvě úrovně podkapitol, jako starý web s h1–h3).
+  const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
+  const headings = showTableOfContents ? extractHeadings(textHtml, isPracticalInfo ? 4 : 3) : []
 
   const practicalInfoChild = pageChildren.find(
     (c) => c.title === 'Praktické informace' || c.fullSlug.includes('/prakticke-informace'),
@@ -147,8 +151,9 @@ export const MainContent = ({
           }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
           // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
-          // orientované fotky by jinak zabraly celou obrazovku.
-          proseClassName={touristPointInfo ? 'poi-prose' : undefined}
+          // orientované fotky by jinak zabraly celou obrazovku. Praktické
+          // informace: posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose).
+          proseClassName={touristPointInfo ? 'poi-prose' : isPracticalInfo ? 'pi-prose' : undefined}
         />
       </div>
 
@@ -335,34 +340,17 @@ export const MainContent = ({
         )}
 
         {/* Obsah (TOC) + reklama ve společném sticky bloku (jako u článku) —
-            jen na praktických informacích. Sticky společně, ať se nepřekrývají. */}
+            jen na informačních podstránkách. Panel má scrollspy (zvýrazňuje
+            čtenou sekci a posouvá se za ní) a vnitřní posuvník — dlouhý obsah
+            složených Praktických informací by jinak přerostl obrazovku.
+            Reklama jde dovnitř jako children (zůstává server-side). */}
         {showTableOfContents && (
-          <div className="hidden lg:block sticky top-5">
-            {headings.length > 0 && (
-              <nav aria-label="Obsah stránky">
-                <ul>
-                  {headings.map((heading) => (
-                    <li key={heading.id}>
-                      <a
-                        href={`#${heading.id}`}
-                        className={`block py-4 border-b border-[#e4e4e4] transition-colors duration-300 hover:text-black no-underline ${
-                          heading.level === 2
-                            ? 'font-semibold text-gray-800/85'
-                            : 'font-normal text-gray-800/65'
-                        }`}
-                      >
-                        {heading.text}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            )}
+          <TocSidebar items={headings} practicalInfo={isPracticalInfo}>
             <div className={headings.length > 0 ? 'mt-12' : ''}>
               <AdSenseScript />
               <ArticleAd variant="primary" />
             </div>
-          </div>
+          </TocSidebar>
         )}
       </aside>
     </main>

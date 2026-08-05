@@ -27,7 +27,10 @@ const openSans = Open_Sans({
 })
 
 const poppins = Poppins({
-  weight: ['300', '400', '500', '600', '700'],
+  // 800: extra tučné nadpisy sekcí na složených Praktických informacích —
+  // Poppins má bold (700) opticky slabý, bez nahraného řezu by ho prohlížeč
+  // jen uměle ztučnil (nehezké) nebo nechal na 700.
+  weight: ['300', '400', '500', '600', '700', '800'],
   subsets: ['latin', 'latin-ext'],
   variable: '--font-poppins',
   display: 'swap',

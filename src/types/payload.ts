@@ -74,6 +74,17 @@ export interface RichTextRoot {
   }
 }
 
+/**
+ * Jedna sekce složené stránky „Praktické informace" — sousední podstránka
+ * místa (Vstupní podmínky, Měna a ceny…), ze které se skládá text i kotva.
+ */
+export interface PracticalInfoSection {
+  title: string
+  fullSlug: string
+  category: string
+  text?: string | RichTextRoot | null
+}
+
 export interface ArticleMainPage {
   id: string | number
   title: string
