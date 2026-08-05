@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { randomFillSync } from 'node:crypto'
 import sharp from 'sharp'
 import { CLOUDINARY_MAX_BYTES, Media, shrinkToFitCloudinary } from '@/collections/Media'
 
@@ -19,18 +20,53 @@ import { CLOUDINARY_MAX_BYTES, Media, shrinkToFitCloudinary } from '@/collection
 
 const logger = { info: () => {} }
 
-/** JPEG ze šumu — nedá se zkomprimovat na nic, takže velikost je předvídatelná. */
-async function noisyJpeg(
+/**
+ * Šum — obrázek, který se nedá zkomprimovat na nic, takže má předvídatelně
+ * velký výstup. `randomFillSync` je nativní; JS smyčka přes desítky MB byla
+ * zdaleka nejdražší část celého běhu testů.
+ */
+function noise(bytes: number): Buffer {
+  const raw = Buffer.allocUnsafe(bytes)
+  randomFillSync(raw)
+  return raw
+}
+
+/**
+ * Vygenerované obrázky se drží v paměti a sdílejí mezi testy. Nejdražší z nich
+ * (6000×4000) potřebují dva testy — bez cache by se 72 MB dat generovalo dvakrát.
+ * Obsah bufferů nikdo nemění (funkce `file.data` PŘEPISUJE novým bufferem), takže
+ * je sdílení bezpečné.
+ */
+const imageCache = new Map<string, Buffer>()
+async function cachedImage(key: string, make: () => Promise<Buffer>): Promise<Buffer> {
+  const hit = imageCache.get(key)
+  if (hit) return hit
+  const made = await make()
+  imageCache.set(key, made)
+  return made
+}
+
+/** JPEG ze šumu. */
+function noisyJpeg(
   width: number,
   height: number,
   opts?: { quality?: number; orientation?: number },
 ): Promise<Buffer> {
-  const raw = Buffer.alloc(width * height * 3)
-  for (let i = 0; i < raw.length; i++) raw[i] = (i * 2654435761) % 256
+  const quality = opts?.quality ?? 95
+  return cachedImage(`jpeg-${width}x${height}-q${quality}-o${opts?.orientation ?? 0}`, () => {
+    let pipeline = sharp(noise(width * height * 3), { raw: { width, height, channels: 3 } })
+    if (opts?.orientation) pipeline = pipeline.withMetadata({ orientation: opts.orientation })
+    return pipeline.jpeg({ quality }).toBuffer()
+  })
+}
 
-  let pipeline = sharp(raw, { raw: { width, height, channels: 3 } })
-  if (opts?.orientation) pipeline = pipeline.withMetadata({ orientation: opts.orientation })
-  return pipeline.jpeg({ quality: opts?.quality ?? 95 }).toBuffer()
+/** Nekomprimované PNG ze šumu — spolehlivě přeleze limit. */
+function noisyPng(width: number, height: number): Promise<Buffer> {
+  return cachedImage(`png-${width}x${height}`, () =>
+    sharp(noise(width * height * 3), { raw: { width, height, channels: 3 } })
+      .png({ compressionLevel: 0 })
+      .toBuffer(),
+  )
 }
 
 function fileFrom(buffer: Buffer, name: string, mimetype: string) {
@@ -80,11 +116,7 @@ describe('zmenšování obrázků nad limit Cloudinary', () => {
   }, 60_000)
 
   it('velké PNG zmenší a nechá ho PNG (nepřevádí na JPEG kvůli průhlednosti)', async () => {
-    const raw = Buffer.alloc(4000 * 3000 * 3)
-    for (let i = 0; i < raw.length; i++) raw[i] = (i * 2654435761) % 256
-    const buffer = await sharp(raw, { raw: { width: 4000, height: 3000, channels: 3 } })
-      .png({ compressionLevel: 0 })
-      .toBuffer()
+    const buffer = await noisyPng(4000, 3000)
     expect(buffer.length).toBeGreaterThan(CLOUDINARY_MAX_BYTES)
 
     const file = fileFrom(buffer, 'velky-obrazek.png', 'image/png')
@@ -105,6 +137,19 @@ describe('zmenšování obrázků nad limit Cloudinary', () => {
     await expect(shrinkToFitCloudinary(logger, file)).rejects.toThrow(/příliš velký/)
 
     // Soubor zůstal nedotčený — nemá smysl posílat na Cloudinary zmrzačené PDF.
+    expect(file.size).toBe(buffer.length)
+  }, 30_000)
+
+  it('u poškozeného obrázku vyhodí 400, ne 500 (sharp na něm spadne)', async () => {
+    // Prohlížeč nastaví MIME typ podle přípony, takže přejmenovaný nebo
+    // nedotažený soubor projde kontrolou typu a spadne až v sharpu. Bez
+    // ošetření by z toho byla zas ta nicneříkající pětistovka.
+    const buffer = Buffer.alloc(12 * 1024 * 1024, 0x41)
+    const file = fileFrom(buffer, 'poskozena-fotka.jpg', 'image/jpeg')
+
+    await expect(shrinkToFitCloudinary(logger, file)).rejects.toMatchObject({
+      status: 400,
+    })
     expect(file.size).toBe(buffer.length)
   }, 30_000)
 })

@@ -311,13 +311,24 @@ export async function shrinkToFitCloudinary(
     )
   }
 
-  const { width, height } = await sharp(file.data).metadata()
-  if (!width || !height) {
-    throw new APIError(
-      `Soubor „${file.name}" je příliš velký (${originalMb} MB) a nepodařilo se z něj přečíst rozměry, takže ho neumíme zmenšit. Zmenšete ho prosím ručně na méně než 10 MB.`,
+  // Chybu sharpu MUSÍME přeložit na 400. MIME typ posílá prohlížeč podle
+  // přípony, takže přejmenovaný nebo nedotažený soubor kontrolu typu výš projde
+  // a spadne až tady — a neošetřená výjimka by z API vypadla jako 500, tedy zas
+  // ta „Something went wrong", kterou tímhle celým odstraňujeme.
+  const unprocessable = () =>
+    new APIError(
+      `Soubor „${file.name}" je příliš velký (${originalMb} MB) a nepodařilo se ho zpracovat jako obrázek — může být poškozený nebo mít jinou příponu, než čemu odpovídá obsah. Zmenšete ho prosím ručně na méně než 10 MB.`,
       400,
     )
+
+  let width: number | undefined
+  let height: number | undefined
+  try {
+    ;({ width, height } = await sharp(file.data).metadata())
+  } catch {
+    throw unprocessable()
   }
+  if (!width || !height) throw unprocessable()
 
   const longestEdge = Math.max(width, height)
   let scale = 1
@@ -340,14 +351,24 @@ export async function shrinkToFitCloudinary(
     // `.rotate()` musí být před `resize`: zapeče orientaci z EXIFu do pixelů.
     // Bez toho by se u fotek z mobilu ztratila (sharp metadata při re-enkódu
     // zahazuje) a obrázek by se zobrazoval otočený.
-    buffer = await encodeSameFormat(
-      sharp(file.data)
-        .rotate()
-        .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true }),
-      file.mimetype,
-    )
+    try {
+      buffer = await encodeSameFormat(
+        sharp(file.data)
+          .rotate()
+          .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true }),
+        file.mimetype,
+      )
+    } catch {
+      // Hlavička se přečetla, ale dekódování pixelů selhalo (typicky nedotažený
+      // soubor). Zase 400, ne 500.
+      throw unprocessable()
+    }
 
-    if (buffer.length <= DOWNSCALE_TARGET_BYTES) {
+    // Přijímáme na SKUTEČNÉM limitu, ne na cíli s rezervou. Kdyby překódování
+    // vyšlo třeba na 9,8 MB, Cloudinary to bez řečí vezme — a jít do další
+    // iterace by znamenalo obětovat rozlišení úplně zbytečně. Rezerva
+    // (DOWNSCALE_TARGET_BYTES) slouží jen k MÍŘENÍ při výpočtu měřítka.
+    if (buffer.length <= CLOUDINARY_MAX_BYTES) {
       file.data = buffer
       file.size = buffer.length
       logger.info(
