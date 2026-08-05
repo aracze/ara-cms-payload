@@ -179,7 +179,7 @@ export async function createReview(
         ...(currentUser ? { author: currentUser.id } : {}),
         relatedTo: { relationTo: 'pages', value: pageId },
         status,
-        commentedAt: new Date(now).toISOString(),
+        // Datum vložení = systémové createdAt (Payload nastaví při insertu).
       },
     })
   } catch (err) {

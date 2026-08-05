@@ -168,7 +168,7 @@ export interface CommentPublic {
   id: number
   authorName: string
   body: string
-  /** Datum vložení (legacy `commentedAt`, u nových = čas vytvoření). */
+  /** Datum vložení (createdAt; u migrovaných = původní datum ze staré DB). */
   commentedAt: string | null
   /** Username registrovaného autora (odkaz na profil), jinak null. */
   authorUsername: string | null
@@ -201,7 +201,7 @@ export interface ReviewPublic {
   body: string
   /** Hvězdičkové hodnocení 1–5 (kolekce ho u recenze vynucuje). */
   rating: number
-  /** Datum vložení (legacy `commentedAt`, u nových = čas vytvoření). */
+  /** Datum vložení (createdAt; u migrovaných = původní datum ze staré DB). */
   reviewedAt: string | null
   /** Username registrovaného autora (odkaz na profil), jinak null. */
   authorUsername: string | null

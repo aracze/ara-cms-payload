@@ -418,10 +418,6 @@ export interface Comment {
    * Vše se publikuje; spam se označí (skryje z veřejnosti).
    */
   status: 'published' | 'spam';
-  /**
-   * Původní datum z legacy webu (u migrovaných dat).
-   */
-  commentedAt?: string | null;
   legacyCommentId?: number | null;
   updatedAt: string;
   createdAt: string;
@@ -844,7 +840,6 @@ export interface CommentsSelect<T extends boolean = true> {
   parentComment?: T;
   authorPublic?: T;
   status?: T;
-  commentedAt?: T;
   legacyCommentId?: T;
   updatedAt?: T;
   createdAt?: T;
