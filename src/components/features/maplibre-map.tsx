@@ -33,8 +33,8 @@ interface MapLibreMapProps {
   height?: string
   /**
    * Dorámovat výřez na všechny piny (fitBounds) — `centerLat`/`centerLng`/`zoom`
-   * pak slouží jen jako výchozí stav. Zapíná to profil autora, kde jsou body po
-   * celém světě; stránky míst si střed a zoom volí samy, proto je to volitelné.
+   * pak slouží jen jako výchozí stav. Používá profil autora i výpisy míst;
+   * mapa s jediným pinem (karta cíle) zůstává na středu/zoomu z CMS.
    */
   fitToMarkers?: boolean
 }

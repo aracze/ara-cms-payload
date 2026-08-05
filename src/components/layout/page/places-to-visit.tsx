@@ -142,6 +142,10 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
                   centerLat={mapCenter.lat}
                   centerLng={mapCenter.lng}
                   zoom={mapZoom}
+                  // Výřez dorámovat na všechny piny — ruční střed/zoom z CMS
+                  // nechával část cílů mimo výchozí pohled (např. Dubrovník
+                  // u přehledu Chorvatska); teď jsou jen výchozí stav.
+                  fitToMarkers
                 />
               </div>
             </div>
