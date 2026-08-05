@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { StaticHeroWave } from '@/components/features/static-hero-wave'
-import { GoogleMap } from '@/components/features/google-map'
+import { MapLibreMap } from '@/components/features/maplibre-map'
 import { ProfileCardGrid } from '@/components/layout/profile/profile-card-grid'
 import { AvatarPicker } from '@/components/layout/profile/avatar-picker'
 import { ProfileEditFrame, ProfileSaveRow } from '@/components/layout/profile/profile-edit-frame'
@@ -360,13 +360,13 @@ export function UserProfile({
           // `!rounded-none`: komponenta mapy má zaoblené rohy (počítá s mapou
           // v obsahovém sloupci), u pásu přes celou šířku by visely do prázdna.
           // Cíleno JEN na dva vlastní obaly mapy (`> div` a `> div > div`) —
-          // obecné `[&_div]` sráželo rohy i bublinám, které uvnitř mapy kreslí
-          // Google, a ty pak byly hranaté.
+          // obecné `[&_div]` sráželo rohy i kartičkám míst, které mapa kreslí
+          // uvnitř, a ty pak byly hranaté.
           <section
             aria-label="Mapa míst a turistických cílů autora"
             className="w-full pt-4 [&>div]:!rounded-none [&>div>div]:!rounded-none"
           >
-            <GoogleMap
+            <MapLibreMap
               markers={profile.mapPins}
               centerLat={mapCenter.lat}
               centerLng={mapCenter.lng}
