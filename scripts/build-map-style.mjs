@@ -20,7 +20,11 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT_DIR = join(ROOT, 'public/map-styles')
 
-const liberty = await (await fetch('https://tiles.openfreemap.org/styles/liberty')).json()
+const odpoved = await fetch('https://tiles.openfreemap.org/styles/liberty')
+if (!odpoved.ok) {
+  throw new Error(`Liberty styl se nepodařilo stáhnout: HTTP ${odpoved.status}`)
+}
+const liberty = await odpoved.json()
 
 // ── Palety ───────────────────────────────────────────────────────────────────
 // Klíče: VODA/VODA_LINKA (moře, řeky), PAPIR (pevnina), LES/TRAVA/PARK (zeleně

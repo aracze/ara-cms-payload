@@ -29,8 +29,7 @@ export async function seedMapPages(): Promise<void> {
       category: 'Místa',
       _status: 'published',
       detail: { latitude: '45.0', longitude: '15.5', googleMapsZoom: 7 },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any,
+    },
   })
 
   for (const place of mapPlaces) {
@@ -44,8 +43,7 @@ export async function seedMapPages(): Promise<void> {
         parent: parent.id,
         _status: 'published',
         detail: { latitude: place.lat, longitude: place.lng },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      },
     })
   }
 }

@@ -45,10 +45,21 @@ const MARKER_SIZE = 44
 /** Strop přiblížení při fitBounds — v MapLibre škále (Google 12 ≈ MapLibre 11). */
 const MAX_FIT_ZOOM = 11
 
+// Kontrola HOSTITELE, ne podřetězce (CodeQL: „cloudinary.com" může být kdekoliv
+// v cizí URL — https://cloudinary.com.utocnik.cz by prošla a dostala transformace).
+function isCloudinaryHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname
+    return host === 'cloudinary.com' || host.endsWith('.cloudinary.com')
+  } catch {
+    return false
+  }
+}
+
 // Kruhová „avatarová" ikona markeru z Cloudinary (r_max = kruh, bo_3px = bílý
 // rámeček). Pro ne-Cloudinary URL vrací originál (kruh/rámeček doplní CSS).
 function buildMarkerIconUrl(url: string): string {
-  return url.includes('cloudinary.com')
+  return isCloudinaryHost(url)
     ? url.replace('/upload/', '/upload/w_44,h_44,c_fill,g_auto,r_max,bo_3px_solid_white,f_png/')
     : url
 }
@@ -63,7 +74,7 @@ function escapeHtml(value: string): string {
 }
 
 function toCloudinaryVariant(url: string, transform: string): string {
-  return url.includes('cloudinary.com') ? url.replace('/upload/', `/upload/${transform}/`) : url
+  return isCloudinaryHost(url) ? url.replace('/upload/', `/upload/${transform}/`) : url
 }
 
 // Obsah kartičky místa se skládá jako HTML řetězec a předává do setHTML, takže
@@ -134,6 +145,16 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
   // než k mapě uživatel doscrolluje, TLS handshake už je hotový.
   preconnect('https://tiles.openfreemap.org', { crossOrigin: 'anonymous' })
 
+  // Mapa se bourá a staví jen při skutečné změně pinů: rodičovské server
+  // komponenty posílají při každém re-renderu NOVÉ pole se stejným obsahem
+  // a s identitou pole v závislostech efektu by se mapa zbytečně přestavěla
+  // (probliknutí). Proto se identita stabilizuje přes obsahový klíč.
+  const markersKey = JSON.stringify(
+    markers.map((m) => [m.id, m.lat, m.lng, m.title, m.fullSlug, m.imageUrl ?? null]),
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- markersKey zastupuje obsah markers
+  const stableMarkers = React.useMemo(() => markers, [markersKey])
+
   // Mapová knihovna (~250 kB) se stahuje až když se mapa blíží viewportu —
   // na stránkách s mapou pod přehybem se hned při načtení nestahuje nic.
   useEffect(() => {
@@ -164,6 +185,20 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
     // (parita s předchozí Google verzí). Plní se uvnitř async bloku níž,
     // uklízí se v cleanupu efektu.
     const hoverHandlers: Array<{ el: Element; type: string; fn: EventListener }> = []
+
+    const currentMarkers = stableMarkers
+
+    // Selhání startu mapy: kromě chybové UI i zrušit instanci — jinak by po
+    // přepnutí render větve na chybu zůstal viset WebGL kontext a worker.
+    const failMap = (message: string) => {
+      if (cancelled) return
+      setLoadError(message)
+      setLoaded(false)
+      const instance = mapInstanceRef.current
+      mapInstanceRef.current = null
+      // remove() až mimo právě běžící event handler mapy.
+      if (instance) queueMicrotask(() => instance.remove())
+    }
 
     ;(async () => {
       try {
@@ -249,7 +284,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         }
 
         const bounds = new maplibregl.LngLatBounds()
-        for (const m of markers) {
+        for (const m of currentMarkers) {
           const el = document.createElement('div')
           el.style.cssText = `width:${MARKER_SIZE}px;height:${MARKER_SIZE}px;cursor:pointer;`
           // Pin je interaktivní prvek — musí jít ovládat i klávesnicí a čtečka
@@ -263,14 +298,17 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
               openPopup(m)
             }
           })
-          if (m.imageUrl) {
+          // Stejná hygiena URL jako u kartičky: do <img src> jen ověřená
+          // absolutní http(s) adresa; jiná hodnota = záložní kolečko níž.
+          const markerImageUrl = m.imageUrl ? toSafeImageUrl(m.imageUrl) : null
+          if (markerImageUrl) {
             const img = document.createElement('img')
-            img.src = buildMarkerIconUrl(m.imageUrl)
+            img.src = buildMarkerIconUrl(markerImageUrl)
             img.alt = m.title
             img.width = MARKER_SIZE
             img.height = MARKER_SIZE
             img.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;'
-            if (!m.imageUrl.includes('cloudinary.com')) {
+            if (!isCloudinaryHost(markerImageUrl)) {
               img.style.borderRadius = '50%'
               img.style.border = '3px solid #fff'
             }
@@ -294,7 +332,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         // Najetí na kartu/řádek ve výpisu (`data-poiid` = id stránky) ukáže
         // kartičku u příslušného pinu; opuštění ji zavře. Výpis je v DOM dřív
         // než mapa (server-rendered), takže stačí posluchače navěsit jednou.
-        const markerById = new Map(markers.map((m) => [String(m.id), m]))
+        const markerById = new Map(currentMarkers.map((m) => [String(m.id), m]))
         document.querySelectorAll('[data-poiid]').forEach((item) => {
           const poiId = (item as HTMLElement).dataset.poiid
           const m = poiId ? markerById.get(poiId) : undefined
@@ -309,7 +347,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           )
         })
 
-        if (fitToMarkers && markers.length > 1) {
+        if (fitToMarkers && currentMarkers.length > 1) {
           map.fitBounds(bounds, {
             padding: { top: 56, right: 40, bottom: 24, left: 40 },
             maxZoom: MAX_FIT_ZOOM,
@@ -344,17 +382,12 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         map.on('error', (e: { error?: { message?: string } }) => {
           const message = e?.error?.message ?? 'Mapu se nepodařilo načíst'
           console.warn('[MapLibreMap] chyba mapy:', message)
-          if (!cancelled && !mapStarted) {
-            setLoadError(message)
-          }
+          if (!mapStarted) failMap(message)
         })
       } catch (err) {
         const message =
           err instanceof Error && err.message ? err.message : 'Mapu se nepodařilo načíst'
-        if (!cancelled) {
-          setLoadError(message)
-          setLoaded(false)
-        }
+        failMap(message)
         console.warn('[MapLibreMap] load error:', message)
       }
     })()
@@ -365,7 +398,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
     }
-  }, [inView, markers, centerLat, centerLng, zoom, fitToMarkers])
+  }, [inView, stableMarkers, centerLat, centerLng, zoom, fitToMarkers])
 
   // Vnější kontejner je vždy v DOM (i před načtením) se stejnými rozměry —
   // IntersectionObserver má co pozorovat a nevzniká CLS při dokreslení mapy.
