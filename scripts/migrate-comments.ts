@@ -233,7 +233,7 @@ async function run() {
       skippedBadRating++
       continue
     }
-    const commentedAt = row.date_created ? new Date(row.date_created).toISOString() : undefined
+    const createdAt = row.date_created ? new Date(row.date_created).toISOString() : undefined
 
     const data = {
       type: type as 'comment' | 'review',
@@ -243,7 +243,7 @@ async function run() {
       authorName,
       author: authorUserId ?? null,
       status: 'published' as const,
-      commentedAt,
+      createdAt,
       legacyCommentId: row.comment_id,
     }
 

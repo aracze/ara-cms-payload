@@ -638,7 +638,6 @@ type RawComment = {
   authorName: string
   body: string
   rating?: number | null
-  commentedAt?: string | null
   createdAt?: string | null
   author?: number | { id: number } | null
   parentComment?: number | { id: number } | null
@@ -690,11 +689,10 @@ async function fetchArticleCommentsUncached(
     pagination: false,
   })
 
-  // Řadíme v JS podle EFEKTIVNÍHO času `commentedAt ?? createdAt` (commentedAt je
-  // jen legacy a může být null; nové komentáře ho mají, ale display i tak fallbackuje
-  // na createdAt), s `id` jako rozhodčím. DB `sort: 'commentedAt'` by null hodnoty
-  // rozházel a rozbil chronologii, na které staví sestavení vláken níže.
-  const effectiveTime = (c: RawComment) => new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
+  // Řadíme podle createdAt (u migrovaných = původní datum ze staré DB, viz
+  // prod-comment-created-dates.sql) s `id` jako rozhodčím — chronologie nese
+  // sestavení vláken níže.
+  const effectiveTime = (c: RawComment) => new Date(c.createdAt ?? 0).getTime()
   const docs = (res.docs as unknown as RawComment[]).slice().sort((a, b) => {
     const diff = effectiveTime(a) - effectiveTime(b)
     return diff !== 0 ? diff : a.id - b.id
@@ -708,7 +706,7 @@ async function fetchArticleCommentsUncached(
       id: c.id,
       authorName: c.authorName,
       body: c.body,
-      commentedAt: c.commentedAt ?? c.createdAt ?? null,
+      commentedAt: c.createdAt ?? null,
       authorUsername: c.authorPublic?.username ?? null,
       avatarUrl: c.authorPublic?.avatar?.url ?? null,
       isAuthor: authorId != null && authorId === articleAuthorId,
@@ -794,11 +792,11 @@ async function fetchPageReviewsUncached(pageId: number): Promise<{ reviews: Revi
   })
 
   // Nejnovější nahoře (legacy: comments.reverse()). Řadíme v JS podle efektivního
-  // času `commentedAt ?? createdAt` (commentedAt může být null) s `id` jako rozhodčím.
+  // času `createdAt` (u migrovaných = původní datum) s `id` jako rozhodčím.
   // Záznam bez hodnocení (nemělo by nastat — kolekce ho u recenze vynucuje) se
   // VYŘADÍ; fallback na číslo by tiše ukazoval falešné hvězdičky. Stejně
   // přeskakuje null rating i souhrn fetchPageReviewStats níže.
-  const effectiveTime = (c: RawComment) => new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
+  const effectiveTime = (c: RawComment) => new Date(c.createdAt ?? 0).getTime()
   const docs = (res.docs as unknown as RawComment[])
     .filter((c) => c.rating != null)
     .sort((a, b) => {
@@ -811,7 +809,7 @@ async function fetchPageReviewsUncached(pageId: number): Promise<{ reviews: Revi
     authorName: c.authorName,
     body: c.body,
     rating: c.rating!,
-    reviewedAt: c.commentedAt ?? c.createdAt ?? null,
+    reviewedAt: c.createdAt ?? null,
     authorUsername: c.authorPublic?.username ?? null,
     avatarUrl: c.authorPublic?.avatar?.url ?? null,
   }))
@@ -1125,7 +1123,6 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
         type: true,
         rating: true,
         body: true,
-        commentedAt: true,
         createdAt: true,
         relatedTo: true,
       },
@@ -1295,8 +1292,7 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
     return null
   }
 
-  const commentTime = (c: RawProfileComment) =>
-    new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
+  const commentTime = (c: RawProfileComment) => new Date(c.createdAt ?? 0).getTime()
   const sortedComments = rawComments
     .slice()
     .sort((x, y) => commentTime(y) - commentTime(x) || y.id - x.id)
@@ -1323,7 +1319,7 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
         targetHref: target.href,
         rating: c.rating,
         body: trimBody(c.body),
-        reviewedAt: c.commentedAt ?? c.createdAt ?? null,
+        reviewedAt: c.createdAt ?? null,
       })
     } else if (c.type === 'comment') {
       comments.push({
@@ -1331,7 +1327,7 @@ async function fetchUserProfileUncached(username: string): Promise<UserProfileDa
         targetTitle: target.title,
         targetHref: target.href,
         body: trimBody(c.body),
-        commentedAt: c.commentedAt ?? c.createdAt ?? null,
+        commentedAt: c.createdAt ?? null,
       })
     }
   }
@@ -1674,7 +1670,6 @@ const ACTIVITY_COMMENT_SELECT = {
   type: true,
   rating: true,
   body: true,
-  commentedAt: true,
   createdAt: true,
   authorName: true,
   relatedTo: true,
@@ -1702,7 +1697,6 @@ type RawActivityComment = {
   type?: string
   rating?: number | null
   body: string
-  commentedAt?: string | null
   createdAt?: string | null
   authorName?: string | null
   relatedTo?: { relationTo?: string; value?: number | { id: number } | null } | null
@@ -1757,13 +1751,13 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
       },
     }),
     // overrideAccess: false → anonymní pravidlo kolekce skryje spam i recenze
-    // na nepublikovaných stránkách. commentedAt je vyplněné VŽDY (migrace
-    // i nové vklady), takže DB sort je bezpečný.
+    // na nepublikovaných stránkách. createdAt = datum vložení (u migrovaných
+    // doplněno ze staré DB), takže DB sort je bezpečný.
     payload.find({
       collection: 'comments',
       overrideAccess: false,
       where: { type: { equals: 'review' } },
-      sort: '-commentedAt',
+      sort: '-createdAt',
       limit: ACTIVITY_PER_KIND,
       depth: 0,
       // `joins: false` tu na rozdíl od pages není (ani nejde) — komentáře
@@ -1774,7 +1768,7 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
       collection: 'comments',
       overrideAccess: false,
       where: { type: { equals: 'comment' } },
-      sort: '-commentedAt',
+      sort: '-createdAt',
       limit: ACTIVITY_PER_KIND,
       depth: 0,
       select: ACTIVITY_COMMENT_SELECT,
@@ -1923,7 +1917,7 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
         key: `comment-${c.id}`,
         title: target.title,
         href: target.href,
-        date: c.commentedAt ?? c.createdAt ?? null,
+        date: c.createdAt ?? null,
         authorName: c.authorName?.trim() || c.authorPublic?.username || null,
         authorUsername: c.authorPublic?.username ?? null,
         avatarUrl: c.authorPublic?.avatar?.url ?? null,

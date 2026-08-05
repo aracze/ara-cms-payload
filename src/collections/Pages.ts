@@ -238,9 +238,9 @@ export const Pages: CollectionConfig = {
               type: 'join',
               collection: 'comments',
               on: 'relatedTo',
-              defaultSort: '-commentedAt',
+              defaultSort: '-createdAt',
               admin: {
-                defaultColumns: ['authorName', 'rating', 'body', 'commentedAt', 'status'],
+                defaultColumns: ['authorName', 'rating', 'body', 'createdAt', 'status'],
                 allowCreate: false,
               },
             },

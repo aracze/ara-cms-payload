@@ -59,7 +59,6 @@ type CommentDoc = {
   id: number
   authorName: string
   type: string
-  commentedAt?: string | null
   createdAt?: string | null
   relatedTo?: { relationTo?: string; value?: unknown } | null
   parentComment?: unknown
@@ -82,7 +81,7 @@ async function run() {
     }
   }
 
-  const ts = (c: CommentDoc) => new Date(c.commentedAt ?? c.createdAt ?? 0).getTime()
+  const ts = (c: CommentDoc) => new Date(c.createdAt ?? 0).getTime()
 
   const valid: Array<{ child: number; parent: number; note: string }> = []
 

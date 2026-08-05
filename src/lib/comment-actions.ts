@@ -159,7 +159,7 @@ export async function createComment(
         relatedTo: { relationTo: 'articles', value: articleId },
         parentComment,
         status,
-        commentedAt: new Date(now).toISOString(),
+        // Datum vložení = systémové createdAt (Payload nastaví při insertu).
       },
     })
   } catch (err) {

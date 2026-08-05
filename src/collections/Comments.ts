@@ -15,7 +15,7 @@ export const Comments: CollectionConfig = {
   slug: 'comments',
   admin: {
     useAsTitle: 'label',
-    defaultColumns: ['relatedTo', 'authorName', 'type', 'rating', 'status', 'commentedAt'],
+    defaultColumns: ['relatedTo', 'authorName', 'type', 'rating', 'status', 'createdAt'],
   },
   access: {
     // Anonym: skrýt spam + recenze na NEpublikované stránky. Články jsou vždy veřejné
@@ -282,16 +282,10 @@ export const Comments: CollectionConfig = {
         description: 'Vše se publikuje; spam se označí (skryje z veřejnosti).',
       },
     },
-    {
-      name: 'commentedAt',
-      label: 'Datum vložení',
-      type: 'date',
-      admin: {
-        position: 'sidebar',
-        date: { pickerAppearance: 'dayAndTime' },
-        description: 'Původní datum z legacy webu (u migrovaných dat).',
-      },
-    },
+    // Datum vložení = systémové createdAt (u migrovaných doplněno ze staré DB
+    // jednorázovým SQL — viz scripts/prod-comment-created-dates.sql). Vlastní
+    // pole tu na rozdíl od článků (publishedAt) nedává smysl: komentář nemá
+    // redakční důvod, proč by se datum lišilo od vzniku záznamu.
     {
       name: 'legacyCommentId',
       label: 'Legacy Comment ID',

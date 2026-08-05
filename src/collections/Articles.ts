@@ -115,9 +115,9 @@ export const Articles: CollectionConfig = {
               type: 'join',
               collection: 'comments',
               on: 'relatedTo',
-              defaultSort: '-commentedAt',
+              defaultSort: '-createdAt',
               admin: {
-                defaultColumns: ['authorName', 'body', 'commentedAt', 'status'],
+                defaultColumns: ['authorName', 'body', 'createdAt', 'status'],
                 allowCreate: false,
               },
             },
