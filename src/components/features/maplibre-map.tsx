@@ -192,12 +192,50 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
 
         // Jedno sdílené okno s kartičkou místa (stejné HTML jako mělo Google okno).
+        // Kotva se NEURČUJE napevno: bez ní si ji MapLibre volí podle volného
+        // místa, takže kartička u okraje mapy se otevře dovnitř a neořízne se
+        // (Google to řešil autopanem; tohle je klidnější). Offsety posouvají
+        // kartičku mimo pin (44 px, ukotvený dolním středem) pro každou stranu.
         const popup = new maplibregl.Popup({
-          offset: [0, -(MARKER_SIZE + 6)],
-          anchor: 'bottom',
+          offset: {
+            center: [0, 0],
+            bottom: [0, -(MARKER_SIZE + 6)],
+            'bottom-left': [0, -(MARKER_SIZE + 6)],
+            'bottom-right': [0, -(MARKER_SIZE + 6)],
+            top: [0, 10],
+            'top-left': [0, 10],
+            'top-right': [0, 10],
+            left: [MARKER_SIZE / 2 + 8, -(MARKER_SIZE / 2 + 3)],
+            right: [-(MARKER_SIZE / 2 + 8), -(MARKER_SIZE / 2 + 3)],
+          },
           maxWidth: '224px',
           closeButton: true,
         })
+
+        // Otevření kartičky (klik na pin i hover z výpisu). Pin mimo aktuální
+        // výřez mapu přisune do středu; pin u okraje řeší automatická kotva
+        // kartičky a zbylý drobný přesah dorovná panBy o změřený rozdíl —
+        // dohromady stejné chování jako autopan Google InfoWindow.
+        const openPopup = (m: MapMarker) => {
+          const outOfView = !map.getBounds().contains([m.lng, m.lat])
+          if (outOfView) map.easeTo({ center: [m.lng, m.lat], duration: 350 })
+          popup.setLngLat([m.lng, m.lat]).setHTML(buildInfoWindowContent(m)).addTo(map)
+          if (outOfView) return // po vycentrování se kartička vejde vždy
+          requestAnimationFrame(() => {
+            if (cancelled || !mapInstanceRef.current) return
+            const okraj = 8
+            const pr = popup.getElement()?.getBoundingClientRect()
+            const cr = map.getContainer().getBoundingClientRect()
+            if (!pr) return
+            let dx = 0
+            let dy = 0
+            if (pr.left < cr.left + okraj) dx = pr.left - (cr.left + okraj)
+            else if (pr.right > cr.right - okraj) dx = pr.right - (cr.right - okraj)
+            if (pr.top < cr.top + okraj) dy = pr.top - (cr.top + okraj)
+            else if (pr.bottom > cr.bottom - okraj) dy = pr.bottom - (cr.bottom - okraj)
+            if (dx || dy) map.panBy([dx, dy], { duration: 250 })
+          })
+        }
 
         const bounds = new maplibregl.LngLatBounds()
         for (const m of markers) {
@@ -222,7 +260,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           }
           el.addEventListener('click', (e) => {
             e.stopPropagation()
-            popup.setLngLat([m.lng, m.lat]).setHTML(buildInfoWindowContent(m)).addTo(map)
+            openPopup(m)
           })
 
           new maplibregl.Marker({ element: el, anchor: 'bottom' })
@@ -239,8 +277,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           const poiId = (item as HTMLElement).dataset.poiid
           const m = poiId ? markerById.get(poiId) : undefined
           if (!m) return
-          const show = () =>
-            popup.setLngLat([m.lng, m.lat]).setHTML(buildInfoWindowContent(m)).addTo(map)
+          const show = () => openPopup(m)
           const hide = () => popup.remove()
           item.addEventListener('mouseover', show)
           item.addEventListener('mouseout', hide)
