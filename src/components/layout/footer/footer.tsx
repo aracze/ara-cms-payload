@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { fetchFooter } from '@/lib/payload'
-import { ImageLink } from '@/types/payload'
+import { FooterContact, ImageLink } from '@/types/payload'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { isCloudinary } from '@/lib/cloudinary-loader'
 
@@ -16,11 +16,13 @@ function FooterLogo({ logo }: { logo: ImageLink }) {
     return (
       <Link
         href={logo.link?.href ?? '/'}
-        className="flex items-center shrink-0"
+        className="flex items-center shrink-0 text-[#005580] hover:text-[#215491] transition-colors"
         aria-label="Ara.cz – Cestovní průvodce po světě"
       >
+        {/* Logo je jednobarevná křivka s natvrdo bílým `fill` — přebarvíme ho
+            na firemní modrou, aby fungovalo na světlém podkladu patičky. */}
         <div
-          className="h-[23px] w-auto flex items-center [&_svg]:h-[23px] [&_svg]:w-auto"
+          className="h-[22px] w-auto flex items-center [&_svg]:h-[22px] [&_svg]:w-auto [&_path]:fill-current"
           dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
         />
       </Link>
@@ -41,9 +43,9 @@ function FooterLogo({ logo }: { logo: ImageLink }) {
         <Image
           src={logoUrl}
           alt={logo.image.alternativeText ?? 'Ara.cz – Cestovní průvodce po světě'}
-          height={23}
-          width={80}
-          className="h-[23px] w-auto object-contain"
+          height={22}
+          width={76}
+          className="h-[22px] w-auto object-contain"
           unoptimized={!isCloudinary(logoUrl)}
         />
       </Link>
@@ -53,57 +55,104 @@ function FooterLogo({ logo }: { logo: ImageLink }) {
   return null
 }
 
+function FooterContactBlock({ contact }: { contact: FooterContact }) {
+  if (!contact.email && !contact.personName) return null
+
+  return (
+    <div className="shrink-0 md:ml-auto md:text-right">
+      {contact.email ? (
+        <a
+          href={`mailto:${contact.email}`}
+          className="font-heading text-base font-semibold tracking-tight text-[#005580] no-underline hover:text-[#215491] hover:underline underline-offset-4"
+        >
+          {contact.email}
+        </a>
+      ) : null}
+      {contact.personName ? (
+        <p className="mt-1 text-sm text-[#6e757b]">
+          Kontaktní osoba{' '}
+          {contact.personHref ? (
+            <Link
+              href={contact.personHref}
+              className="text-[#353535] no-underline border-b border-[#d8dcdf] hover:text-[#005580] hover:border-current transition-colors"
+            >
+              {contact.personName}
+            </Link>
+          ) : (
+            contact.personName
+          )}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export async function Footer() {
   const footer = await fetchFooter()
 
   const navItems = footer?.navItems ?? []
   const copyrightHtml = footer?.copyrightText ? richTextToHtml(footer.copyrightText) : ''
   const logo = footer?.logo ?? null
+  const lede = footer?.lede?.trim() || null
+  const contact = footer?.contact ?? { email: null, personName: null, personHref: null }
 
   return (
-    <footer className="bg-[#dddddd] w-full z-10">
+    <footer className="bg-[#f4f5f6] border-t border-[#d8dcdf] w-full z-10">
       <div className="max-w-7xl mx-auto px-4 md:px-12">
-        <div className="flex flex-wrap pt-5 mb-5 border-b border-[#eef1f3] text-sm text-[#1f1f1f]">
-          <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 list-none p-0 m-0 font-bold">
-            {logo ? (
-              <li>
-                <FooterLogo logo={logo} />
-              </li>
-            ) : (
-              <li>
-                <Link
-                  href="/"
-                  aria-label="Ara.cz – Cestovní průvodce po světě"
-                  className="text-[#1f1f1f] no-underline"
-                >
-                  <Image
-                    src="/assets/logo-ara.png"
-                    alt="Ara.cz – Cestovní průvodce po světě"
-                    height={23}
-                    width={80}
-                    className="h-[23px] w-auto object-contain"
-                    unoptimized
-                  />
-                </Link>
-              </li>
-            )}
-            {navItems.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="text-[#1f1f1f] hover:text-[#215491] no-underline transition-colors"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+        {/* Horní řada: logo · výzva · kontakt. Na mobilu se skládá pod sebe. */}
+        <div className="flex flex-wrap items-center gap-x-10 gap-y-5 pt-6 pb-5">
+          {logo ? (
+            <FooterLogo logo={logo} />
+          ) : (
+            <Link
+              href="/"
+              aria-label="Ara.cz – Cestovní průvodce po světě"
+              className="flex items-center shrink-0"
+            >
+              <Image
+                src="/assets/logo-ara.png"
+                alt="Ara.cz – Cestovní průvodce po světě"
+                height={22}
+                width={76}
+                className="h-[22px] w-auto object-contain"
+                unoptimized
+              />
+            </Link>
+          )}
+
+          {lede ? (
+            // Bez horní meze šířky — v řadě je na větu dost místa a umělý
+            // ořez na „hezkou" délku ji zbytečně lámal na dva řádky.
+            <p className="flex-1 min-w-[280px] m-0 text-sm leading-relaxed text-[#353535] text-pretty">
+              {lede}
+            </p>
+          ) : null}
+
+          <FooterContactBlock contact={contact} />
         </div>
 
-        <div
-          className="py-3 text-xs leading-[18px] text-[rgb(61,61,61)] [&_a]:text-[#1f1f1f] [&_p]:m-0"
-          dangerouslySetInnerHTML={{ __html: copyrightHtml }}
-        />
+        {/* Spodní lišta: právní odkazy + copyright. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-7 gap-y-2 pt-3.5 pb-4 border-t border-[#d8dcdf]">
+          {navItems.length > 0 ? (
+            <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 list-none p-0 m-0">
+              {navItems.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-[13px] text-[#353535] no-underline hover:text-[#005580] hover:underline underline-offset-4 transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <div
+            className="text-xs leading-[18px] text-[#6e757b] [&_a]:text-[#353535] [&_a]:no-underline hover:[&_a]:text-[#005580] [&_p]:m-0"
+            dangerouslySetInnerHTML={{ __html: copyrightHtml }}
+          />
+        </div>
       </div>
     </footer>
   )

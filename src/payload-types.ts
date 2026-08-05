@@ -955,6 +955,21 @@ export interface Footer {
     image?: (number | null) | Media;
     svgCode?: string | null;
   };
+  /**
+   * Krátká výzva vedle loga — např. „Rádi uslyšíme tvůj názor na naše stránky."
+   */
+  lede?: string | null;
+  contact?: {
+    email?: string | null;
+    /**
+     * Jméno pod e-mailem. Prázdné = řádek se nezobrazí.
+     */
+    personName?: string | null;
+    /**
+     * Např. /profil/jankonas. Prázdné = jméno se vypíše bez odkazu.
+     */
+    personHref?: string | null;
+  };
   navItems?:
     | {
         label: string;
@@ -1038,6 +1053,14 @@ export interface FooterSelect<T extends boolean = true> {
             };
         image?: T;
         svgCode?: T;
+      };
+  lede?: T;
+  contact?:
+    | T
+    | {
+        email?: T;
+        personName?: T;
+        personHref?: T;
       };
   navItems?:
     | T

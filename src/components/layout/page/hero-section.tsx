@@ -14,6 +14,11 @@ interface HeroSectionProps {
   breadcrumbs?: Breadcrumb[]
   /** Souhrn recenzí (turistické cíle) — hvězdičky + počet pod názvem, odkaz na #recenze. */
   rating?: { avg: number; count: number } | null
+  /**
+   * Rozmazaný náhled (data URI). Fotky z CMS ho nemají — plní ho jen výchozí
+   * obálka statických stránek, u které náhled známe (viz lib/default-cover).
+   */
+  blurDataURL?: string
 }
 
 export const HeroSection = ({
@@ -23,12 +28,13 @@ export const HeroSection = ({
   filterId,
   breadcrumbs,
   rating = null,
+  blurDataURL,
 }: HeroSectionProps) => {
   return (
     <section className="relative w-full h-[315px] bg-[#3b444f]">
       {/* Cover Image Background with its own overflow clipping */}
       <div className="absolute inset-0 overflow-hidden">
-        <StaticHeroImage imageUrl={imageUrl} styleCss={styleCss} />
+        <StaticHeroImage imageUrl={imageUrl} styleCss={styleCss} blurDataURL={blurDataURL} />
       </div>
 
       {/* Title Content - Overlaid like in Grails */}
