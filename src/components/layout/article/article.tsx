@@ -38,9 +38,16 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   // kterým visí (např. San Francisco), ne zemi z prvního segmentu URL.
   const placePage = await resolvePlacePage(contextPage, rootPage)
 
+  // Kontext ale nemusí být místo — články visí i pod rubrikami („Rady na
+  // cestu"). Stránka rubriky JE sama výpis článků (a kotvy #mista/#clanky na ní
+  // nejsou), takže menu tvoří jen název rubriky jako aktivní odkaz zpět — parita
+  // se starým webem.
+  const placeIsMenuOwner = !!placePage?.category && menuOwnerCategories.includes(placePage.category)
+
   // Má kontextové místo články? Levný count (přes FK mainPage) místo tahání
   // celého pole článků těžkým fetchem — rozhoduje jen o záložce „Články".
-  const placeHasArticles = placePage ? await pageHasArticles(placePage.id) : false
+  const placeHasArticles =
+    placePage && placeIsMenuOwner ? await pageHasArticles(placePage.id) : false
 
   // Drobečky článku jdou po hierarchii v CMS a končí místem, pod kterým článek
   // visí (proto `includeSelf`) — u článku pod San Franciscem tedy
@@ -101,16 +108,19 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
         <Subnavigation
           contextTitle={placePage.title}
           contextFullSlug={placePage.fullSlug}
-          pageChildren={placePage.children?.docs ?? []}
+          // U rubriky žádné další položky — menu je jen aktivní odkaz zpět na výpis.
+          pageChildren={placeIsMenuOwner ? (placePage.children?.docs ?? []) : []}
           // Sbalený odkaz „Praktické informace" bere z kořenové stránky (země) —
           // stejně jako podstránky a cíle pod nadřazeným místem.
           rootChildren={rootPage?.children?.docs ?? []}
           currentPageFullSlug={placePage.fullSlug}
           currentPageCategory={contextPage?.category}
           isSubPlace={!!rootPage && placePage.fullSlug !== rootPage.fullSlug}
-          hasPlaces={(placePage.children?.docs?.length ?? 0) > 0}
+          hasPlaces={placeIsMenuOwner && (placePage.children?.docs?.length ?? 0) > 0}
           hasArticles={placeHasArticles}
-          activeSection="clanky"
+          // Bez activeSection se zvýrazní samotný kontext (rubrika) — u místa
+          // zůstává aktivní záložka „Články".
+          activeSection={placeIsMenuOwner ? 'clanky' : undefined}
         />
       )}
 
