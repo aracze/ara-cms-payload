@@ -255,7 +255,8 @@ async function reconcilePendingBackups(payload: Payload): Promise<void> {
 // („File size too large. Got 11212782. Maximum is 10485760."), plugin z toho
 // udělá výjimku a admin ukáže jen nicneříkající „Something went wrong". Proto to
 // řešíme dřív, než se soubor k nahrání vůbec dostane.
-const CLOUDINARY_MAX_BYTES = 10 * 1024 * 1024
+// Exportované kvůli regresnímu testu (tests/int/media-shrink.int.spec.ts).
+export const CLOUDINARY_MAX_BYTES = 10 * 1024 * 1024
 
 // Cíl zmenšení držíme pod stropem s rezervou: JPEG encoder výslednou velikost
 // dopředu nezná, takže mířit přesně na hranici by znamenalo občas přestřelit.
@@ -289,9 +290,14 @@ function encodeSameFormat(pipeline: sharp.Sharp, mimetype: string): Promise<Buff
  * v plném rozlišení, a teprve když to nestačí, zmenšování rozměrů. Ani to není
  * vidět — web plné rozlišení nikdy neservíruje, varianty dělá Cloudinary přes URL.
  * Mutuje `file` na místě, stejně jako sanitizace názvu výš.
+ *
+ * Bere jen `logger`, ne celý `Payload`: nic jiného z něj nepotřebuje a díky tomu
+ * se dá otestovat bez databáze i bez Cloudinary (viz regresní test). Testy jinak
+ * sdílejí `.env` s vývojovou databází, takže inicializace Payloadu v testu je
+ * v tomhle projektu nežádoucí.
  */
-async function shrinkToFitCloudinary(
-  payload: Payload,
+export async function shrinkToFitCloudinary(
+  logger: { info: (msg: string) => void },
   file: { data: Buffer; mimetype: string; name: string; size: number },
 ): Promise<void> {
   const originalMb = formatMb(file.size)
@@ -344,7 +350,7 @@ async function shrinkToFitCloudinary(
     if (buffer.length <= DOWNSCALE_TARGET_BYTES) {
       file.data = buffer
       file.size = buffer.length
-      payload.logger.info(
+      logger.info(
         `Obrázek „${file.name}" (${originalMb} MB) přesahoval limit Cloudinary, zmenšen na ${formatMb(buffer.length)} MB — ${
           attempt === 1
             ? `rozlišení zachováno (${width}x${height})`
@@ -384,7 +390,7 @@ export const Media: CollectionConfig = {
           // Až po sanitizaci, ať případná chyba i log zmiňují ten název, který
           // opravdu půjde do Cloudinary.
           if (args.req.file.size > CLOUDINARY_MAX_BYTES) {
-            await shrinkToFitCloudinary(args.req.payload, args.req.file)
+            await shrinkToFitCloudinary(args.req.payload.logger, args.req.file)
           }
         }
         return args
