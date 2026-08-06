@@ -283,7 +283,7 @@ export const Comments: CollectionConfig = {
       },
     },
     // Datum vložení = systémové createdAt (u migrovaných doplněno ze staré DB
-    // jednorázovým SQL — viz scripts/prod-comment-created-dates.sql). Vlastní
+    // jednorázovým SQL, dnes už odstraněným — viz git historie). Vlastní
     // pole tu na rozdíl od článků (publishedAt) nedává smysl: komentář nemá
     // redakční důvod, proč by se datum lišilo od vzniku záznamu.
     {
