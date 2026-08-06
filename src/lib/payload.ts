@@ -18,6 +18,7 @@ import {
   ProfileMapPin,
   ActivityItem,
   HomepageInspiration,
+  HomepageHeroPlace,
   InspirationLink,
   PracticalInfoSection,
   TeamSectionData,
@@ -30,7 +31,7 @@ import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
-import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
+import { and, asc, count, eq, inArray, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
 import {
   getArticleImageUrl,
@@ -2546,6 +2547,96 @@ export const fetchHomepageInspiration = async (): Promise<HomepageInspiration | 
   } catch (err) {
     // Homepage nesmí spadnout kvůli inspiraci — bez dat se sekce nevykreslí.
     console.error('[inspiration] load failed:', err)
+    return null
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Homepage: denní výběr místa pro hero fotku v headeru + placeholder
+// vyhledávání ("Najdi si svůj cíl — třeba X"). Stejný princip jako denní výběr
+// míst v sekci Inspirace (seed = dnešní datum, cached() s revalidate pojistkou
+// 300 s), ale VLASTNÍ posun seedu (+3), ať los hero fotky nezávisí na losu
+// dlaždic Inspirace.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** ID kandidátů pro denní výběr hero místa — přímý SQL dotaz, viz komentář
+ * u fetchPlaceCandidateIds (populace přes payload.find by byla zbytečně
+ * drahá, tady stačí ID). Zahrnuje všechny kategorie míst (jako fetchLatestActivity),
+ * ne jen „Místo k navštívení" — hero fotka může být z libovolného místa/cíle. */
+async function fetchHeroPlaceCandidateIds(payload: Payload): Promise<number[]> {
+  const db = payload.db as unknown as PostgresAdapter
+  const pages = db.tables.pages
+  const rows = await db.drizzle
+    .select({ id: pages.id })
+    .from(pages)
+    .where(
+      and(
+        eq(pages._status, 'published'),
+        inArray(pages.category, [
+          PageCategory.Misto_k_navstiveni,
+          PageCategory.Turisticky_cil,
+          PageCategory.Mista,
+        ]),
+        isNotNull(pages.featuredImage_image),
+      ),
+    )
+    .orderBy(asc(pages.id))
+  return rows.map((r) => Number(r.id))
+}
+
+async function fetchHomepageHeroPlaceUncached(): Promise<HomepageHeroPlace | null> {
+  const payload = await getDb()
+  const candidateIds = await fetchHeroPlaceCandidateIds(payload)
+  const [chosenId] = seededPick(candidateIds, 1, mulberry32(todaySeed() + 3))
+  if (chosenId == null) return null
+
+  const res = await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: { id: { equals: chosenId } },
+    limit: 1,
+    depth: 0,
+    joins: false,
+    select: { title: true, featuredImage: true },
+  })
+  const [doc] = await enrichFeaturedImages(
+    res.docs as unknown as Array<{
+      id: number
+      title: string
+      featuredImage?: { image?: unknown; featureImageStyleCss?: string | null } | null
+    }>,
+  )
+  if (!doc) return null
+
+  // Kandidát prošel SQL filtrem na `featuredImage_image IS NOT NULL` (id
+  // relace na Media existuje), ale samotný Media dokument může být osamocený
+  // (smazaný) nebo bez URL — pak by šel fallback obrázek s title/zarovnáním
+  // z JINÉHO místa. Bez URL proto vracíme null, ať volající použije fallback
+  // pro všechny tři hodnoty najednou, ne jen pro obrázek.
+  const imageUrl = featuredImageUrl(doc)
+  if (!imageUrl) return null
+
+  return {
+    title: doc.title,
+    imageUrl,
+    styleCss: doc.featuredImage?.featureImageStyleCss ?? null,
+  }
+}
+
+// Denní rotaci zajišťuje revalidate pojistka v cached() (max 5 min po půlnoci
+// se přepočítá) — stejný princip jako u fetchHomepageInspirationCached.
+const fetchHomepageHeroPlaceCached = cached(
+  fetchHomepageHeroPlaceUncached,
+  'homepage-hero-place',
+  () => ['homepage-hero-place', 'pages'],
+)
+
+export const fetchHomepageHeroPlace = async (): Promise<HomepageHeroPlace | null> => {
+  try {
+    return await fetchHomepageHeroPlaceCached()
+  } catch (err) {
+    // Homepage nesmí spadnout kvůli hero fotce — zavolající má statický fallback.
+    console.error('[hero-place] load failed:', err)
     return null
   }
 }

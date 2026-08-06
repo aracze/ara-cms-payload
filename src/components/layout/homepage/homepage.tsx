@@ -7,19 +7,24 @@ import { WhatsNewSection } from './whats-new-section'
 import { InspirationSection } from './inspiration-section'
 import { InspirationPlacesSection } from './inspiration-places-section'
 import { ReadingTopicsSection } from './reading-topics-section'
-import { fetchLatestActivity, fetchHomepageInspiration } from '@/lib/payload'
+import {
+  fetchLatestActivity,
+  fetchHomepageInspiration,
+  fetchHomepageHeroPlace,
+} from '@/lib/payload'
 
-// Konfigurovatelné přes env (fallback zachovává původní chování), ať URL není
-// natvrdo v kódu.
-const HOMEPAGE_HERO_IMAGE =
+// Fallback, když se nepodaří vylosovat denní místo (např. žádné publikované
+// místo s fotkou) — konfigurovatelné přes env, ať URL není natvrdo v kódu.
+const HOMEPAGE_HERO_IMAGE_FALLBACK =
   process.env.NEXT_PUBLIC_HOMEPAGE_HERO_IMAGE ||
   'https://res.cloudinary.com/ara/image/upload/homepage.jpg'
 
 export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
-  // Obě sekce nezávisle — pomalejší z nich nesmí blokovat začátek té druhé.
-  const [activity, inspiration] = await Promise.all([
+  // Všechny tři nezávisle — pomalejší nesmí blokovat začátek ostatních.
+  const [activity, inspiration, heroPlace] = await Promise.all([
     fetchLatestActivity(),
     fetchHomepageInspiration(),
+    fetchHomepageHeroPlace(),
   ])
 
   return (
@@ -29,14 +34,20 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
             nesmí být na sekci a vlna nesmí být nad titulkem, jinak ořízne/překreslí
             rozbalený našeptávač, který přesahuje pod hero. */}
         <div className="absolute inset-0 overflow-hidden">
-          <StaticHeroImage imageUrl={HOMEPAGE_HERO_IMAGE} />
+          <StaticHeroImage
+            imageUrl={heroPlace?.imageUrl ?? HOMEPAGE_HERO_IMAGE_FALLBACK}
+            styleCss={heroPlace?.styleCss ?? undefined}
+          />
 
           <StaticHeroOverlay filterId="blurFilterHome" />
 
           <StaticHeroWave />
         </div>
 
-        <StaticHeroTitle title={'Najdi si svůj cíl'} />
+        <StaticHeroTitle
+          title={'Najdi si svůj cíl'}
+          placeholderExample={heroPlace?.title ?? null}
+        />
       </section>
 
       <main
