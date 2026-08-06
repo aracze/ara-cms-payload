@@ -26,8 +26,11 @@ export const SITE_LAUNCH_YEAR = 2013
 export const CONTRIBUTOR_FACES_LIMIT = 10
 
 /**
- * Účty, které nejsou konkrétní lidé (technický admin, redakční účet z migrace).
- * Do řady tváří ani do počtu přispěvatelů nepatří — jinak by web děkoval
- * „adminovi".
+ * Účty, které nejsou konkrétní lidé. Do řady tváří ani do počtu přispěvatelů
+ * nepatří — jinak by web děkoval „adminovi".
+ *
+ * Býval tu i redakční účet `TravelPortal.cz`; ten se ale přejmenoval na
+ * skutečného člověka (Ondřej Kuděla, `kudela`), takže do poděkování naopak
+ * patří — 26 míst a 24 turistických cílů. Zpátky ho nepřidávej.
  */
-export const NON_PERSON_USERNAMES = ['admin', 'TravelPortal.cz']
+export const NON_PERSON_USERNAMES = ['admin']
