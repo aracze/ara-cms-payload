@@ -343,6 +343,14 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
   - **Veřejný přístup**: Kolekce je nastavena tak, aby byly nahrané soubory veřejně čitelné.
   - **Zpracování obrázků**: Podporuje automatické generování náhledů, ořezy a optimalizaci (poháněno knihovnou Sharp).
   - Podporuje definici fokusu (focal point) pro inteligentní ořezy.
+  - **Limit 10 MB (Cloudinary) se řeší automaticky.** Cloudinary odmítne soubor nad 10 MiB
+    a admin z toho dřív ukázal jen nicneříkající „Something went wrong" (HTTP 500). Hook
+    `beforeOperation` v `src/collections/Media.ts` proto větší obrázek sám zmenší, a to od
+    nejmenší ztráty k největší: nejdřív úspornější překódování v plném rozlišení, a teprve
+    když to nestačí, zmenšování rozměrů (JPEG/PNG/WebP, typ souboru se nemění). Co se stalo,
+    najdeš v logu serveru. **Soubory pod limitem se nepřekódovávají vůbec** — jdou na
+    Cloudinary bit v bit, protože `media: true` originály schválně uchovává. Když zmenšit
+    nelze (PDF, SVG), vrátí se česká chyba 400 místo 500.
 
 - **Avatars (Profilové fotky uživatelů)**:
   - ZÁMĚRNĚ mimo `media`: do redakční knihovny (~3300 souborů) smí vkládat jen redakce, kdežto

@@ -1,5 +1,7 @@
 import type { CollectionConfig, Payload } from 'payload'
+import { APIError } from 'payload'
 import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import sharp from 'sharp'
 import { isAdmin } from '../access/isAdmin'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
 
@@ -249,6 +251,143 @@ async function reconcilePendingBackups(payload: Payload): Promise<void> {
   }
 }
 
+// Cloudinary odmítne soubor nad 10 MiB — limit našeho tarifu. Vrátí 400
+// („File size too large. Got 11212782. Maximum is 10485760."), plugin z toho
+// udělá výjimku a admin ukáže jen nicneříkající „Something went wrong". Proto to
+// řešíme dřív, než se soubor k nahrání vůbec dostane.
+// Exportované kvůli regresnímu testu (tests/int/media-shrink.int.spec.ts).
+export const CLOUDINARY_MAX_BYTES = 10 * 1024 * 1024
+
+// Cíl zmenšení držíme pod stropem s rezervou: JPEG encoder výslednou velikost
+// dopředu nezná, takže mířit přesně na hranici by znamenalo občas přestřelit.
+const DOWNSCALE_TARGET_BYTES = Math.floor(CLOUDINARY_MAX_BYTES * 0.92)
+
+// Formáty, které umíme zmenšit BEZ změny typu souboru. SVG schválně chybí —
+// rasterizací by přišlo o to, čím je (vektor), a SVG nad 10 MB je stejně
+// patologie, ne běžný případ.
+const DOWNSCALABLE_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp']
+
+// Kolik pokusů na zmenšení. První jen překóduje, další korigují rozměry podle
+// toho, o kolik předchozí výsledek přestřelil — dvě tři iterace stačí i na extrémy.
+const DOWNSCALE_MAX_ATTEMPTS = 5
+
+const formatMb = (bytes: number): string => (bytes / 1024 / 1024).toFixed(1)
+
+/** Zakóduje zmenšený obrázek ZPĚT do původního formátu (typ souboru se nemění). */
+function encodeSameFormat(pipeline: sharp.Sharp, mimetype: string): Promise<Buffer> {
+  if (mimetype === 'image/png') return pipeline.png({ compressionLevel: 9 }).toBuffer()
+  if (mimetype === 'image/webp') return pipeline.webp({ quality: 88 }).toBuffer()
+  return pipeline.jpeg({ quality: 88 }).toBuffer()
+}
+
+/**
+ * Zmenší PŘÍLIŠ VELKÝ obrázek tak, aby ho Cloudinary přijalo — a jen takový.
+ * Soubory pod limitem se touhle cestou vůbec nevydají a jdou nahoru bit v bit,
+ * protože `media: true` v payload.config.ts drží originály schválně (smazaný
+ * záznam nesmí znamenat ztrátu originálu).
+ *
+ * Postup je od nejmenší ztráty k největší: nejdřív úspornější překódování
+ * v plném rozlišení, a teprve když to nestačí, zmenšování rozměrů. Ani to není
+ * vidět — web plné rozlišení nikdy neservíruje, varianty dělá Cloudinary přes URL.
+ * Mutuje `file` na místě, stejně jako sanitizace názvu výš.
+ *
+ * Bere jen `logger`, ne celý `Payload`: nic jiného z něj nepotřebuje a díky tomu
+ * se dá otestovat bez databáze i bez Cloudinary (viz regresní test). Testy jinak
+ * sdílejí `.env` s vývojovou databází, takže inicializace Payloadu v testu je
+ * v tomhle projektu nežádoucí.
+ */
+export async function shrinkToFitCloudinary(
+  logger: { info: (msg: string) => void },
+  file: { data: Buffer; mimetype: string; name: string; size: number },
+): Promise<void> {
+  const originalMb = formatMb(file.size)
+
+  if (!DOWNSCALABLE_MIME.includes(file.mimetype)) {
+    // `APIError` s kódem 400, ne obyčejná výjimka — ta by z API vypadla jako
+    // chyba serveru (500), i když je to chyba na straně volajícího.
+    throw new APIError(
+      `Soubor „${file.name}" je příliš velký (${originalMb} MB). Nahrát lze nejvýš 10 MB a tenhle typ souboru za vás zmenšit neumíme — zmenšete ho prosím ručně.`,
+      400,
+    )
+  }
+
+  // Chybu sharpu MUSÍME přeložit na 400. MIME typ posílá prohlížeč podle
+  // přípony, takže přejmenovaný nebo nedotažený soubor kontrolu typu výš projde
+  // a spadne až tady — a neošetřená výjimka by z API vypadla jako 500, tedy zas
+  // ta „Something went wrong", kterou tímhle celým odstraňujeme.
+  const unprocessable = () =>
+    new APIError(
+      `Soubor „${file.name}" je příliš velký (${originalMb} MB) a nepodařilo se ho zpracovat jako obrázek — může být poškozený nebo mít jinou příponu, než čemu odpovídá obsah. Zmenšete ho prosím ručně na méně než 10 MB.`,
+      400,
+    )
+
+  let width: number | undefined
+  let height: number | undefined
+  try {
+    ;({ width, height } = await sharp(file.data).metadata())
+  } catch {
+    throw unprocessable()
+  }
+  if (!width || !height) throw unprocessable()
+
+  const longestEdge = Math.max(width, height)
+  let scale = 1
+  let buffer = file.data
+
+  for (let attempt = 1; attempt <= DOWNSCALE_MAX_ATTEMPTS; attempt++) {
+    // První pokus zkusí JEN překódovat, v původním rozlišení. Fotky z fotoaparátu
+    // bývají uložené v maximální kvalitě, takže úspornější překódování je často
+    // dostane pod limit samo — a rozlišení pak zůstane plné. Teprve když to
+    // nestačí, jdeme na rozměry.
+    if (attempt > 1) {
+      // Odmocnina, protože bajty rostou s PLOCHOU, ne s délkou hrany. Koeficient
+      // 0,98 je rezerva, ať se netrefujeme těsně nad cíl a nemusíme iterovat zbytečně.
+      scale *= Math.sqrt(DOWNSCALE_TARGET_BYTES / buffer.length) * 0.98
+    }
+    const maxEdge = Math.max(1, Math.round(longestEdge * scale))
+
+    // Zmenšujeme vždy z PŮVODNÍHO souboru (`file.data`), ne z výsledku
+    // předchozího pokusu — jinak by se generační ztráta kvality sčítala.
+    // `.rotate()` musí být před `resize`: zapeče orientaci z EXIFu do pixelů.
+    // Bez toho by se u fotek z mobilu ztratila (sharp metadata při re-enkódu
+    // zahazuje) a obrázek by se zobrazoval otočený.
+    try {
+      buffer = await encodeSameFormat(
+        sharp(file.data)
+          .rotate()
+          .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true }),
+        file.mimetype,
+      )
+    } catch {
+      // Hlavička se přečetla, ale dekódování pixelů selhalo (typicky nedotažený
+      // soubor). Zase 400, ne 500.
+      throw unprocessable()
+    }
+
+    // Přijímáme na SKUTEČNÉM limitu, ne na cíli s rezervou. Kdyby překódování
+    // vyšlo třeba na 9,8 MB, Cloudinary to bez řečí vezme — a jít do další
+    // iterace by znamenalo obětovat rozlišení úplně zbytečně. Rezerva
+    // (DOWNSCALE_TARGET_BYTES) slouží jen k MÍŘENÍ při výpočtu měřítka.
+    if (buffer.length <= CLOUDINARY_MAX_BYTES) {
+      file.data = buffer
+      file.size = buffer.length
+      logger.info(
+        `Obrázek „${file.name}" (${originalMb} MB) přesahoval limit Cloudinary, zmenšen na ${formatMb(buffer.length)} MB — ${
+          attempt === 1
+            ? `rozlišení zachováno (${width}x${height})`
+            : `nejdelší hrana ${maxEdge} px, ${attempt}. pokus`
+        }.`,
+      )
+      return
+    }
+  }
+
+  throw new APIError(
+    `Soubor „${file.name}" (${originalMb} MB) se nepodařilo zmenšit pod limit 10 MB. Zmenšete ho prosím ručně.`,
+    400,
+  )
+}
+
 export const Media: CollectionConfig = {
   slug: 'media',
   access: {
@@ -267,6 +406,12 @@ export const Media: CollectionConfig = {
           const sanitized = sanitizeFilename(original)
           if (sanitized !== original) {
             args.req.file.name = sanitized
+          }
+
+          // Až po sanitizaci, ať případná chyba i log zmiňují ten název, který
+          // opravdu půjde do Cloudinary.
+          if (args.req.file.size > CLOUDINARY_MAX_BYTES) {
+            await shrinkToFitCloudinary(args.req.payload.logger, args.req.file)
           }
         }
         return args
