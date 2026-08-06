@@ -114,6 +114,28 @@ To build and run the production-optimized Docker image:
 > [!TIP]
 > This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
 
+### Ochrana e-mailu proti robotům — nastavuje se v Cloudflare, ne v kódu
+
+⚠️ **Až budou stránky jet přes Cloudflare proxy, zapni Scrape Shield → Email Address
+Obfuscation** (dashboard → daná zóna → Scrape Shield). Cloudflare pak sám přepíše každý
+`mailto:` odkaz na `/cdn-cgi/l/email-protection#<hex>` a rozkóduje ho vlastním
+JavaScriptem, takže se adresa v HTML vůbec neobjeví. Dokud jde web na IP napřímo (testovací
+provoz), se nic nedeje.
+
+**Proč to neřešíme v kódu:** adresa je kromě patičky i ve **rich textu** stránek Reklama
+a Podmínky užívání webu (dvakrát na každé), takže by obfuskace musela zasáhnout
+`richTextToHtml`, ne jen jednu komponentu. A všechny kódové triky mají cenu, kterou platí
+lidé, ne roboti: starý web měl `mailto:infoATaraDOTcz` + `onclick`, který `AT`/`DOT`
+přepisoval na znaky, a ve viditelném textu past `<span id="dummy">remove</span>`. Po
+zkopírování z toho vyšlo `inforemove@ara.cz`, bez JavaScriptu odkaz nefungoval a čtečka
+obrazovky přečetla i tu past — přitom `AT`/`DOT` obejde každý harvester, který si stránku
+otevře v bezhlavém prohlížeči. Cloudflare dělá totéž bez těchto následků a na všech
+stránkách naráz.
+
+**Kdyby to nestačilo**, další úroveň není lepší obfuskace, ale kontaktní formulář — Turnstile,
+rate limit a heuristika odkazů (`src/lib/comment-spam.ts`) i odesílání e-mailů přes SMTP
+už v projektu jsou, takže by adresa nemusela být na webu vůbec.
+
 ---
 
 ## Environment Variables
