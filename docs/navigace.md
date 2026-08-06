@@ -140,9 +140,7 @@ jména měst („do Košic", „v Košicích"). Starý web měl v prohlížeči 
 vzorů, a i tak si držel uložené tvary a používal je jako první — pole je tedy zdroj pravdy
 a v administraci se dá kdykoli přepsat.
 
-Hromadné doplnění dělá seed + skript, ne ruční práce v adminu:
-
-Tvary ~80 míst doplnil jednorázový doběh z ručně sestaveného seznamu
+Tvary ~80 míst doplnil hromadně jednorázový doběh z ručně sestaveného seznamu
 (`scripts/fix-declension.ts` + `scripts/data/place-declension.json`); oboje je
 **odstraněné** a najdeš to v git historii. Doplňoval jen prázdná pole a kontroloval `title`,
 aby po přejmenování stránky nepřepsal cizí záznam.
@@ -185,7 +183,6 @@ se titulky podstránek skládají z názvu v prvním pádě („Ubytování Koda
 | `src/components/layout/article/article.tsx`    | drobečky a kontext menu pro články                                 |
 | `src/components/layout/page/hero-section.tsx`  | vykreslení drobečků                                                |
 | `src/components/layout/page/subnavigation.tsx` | vykreslení sekundárního menu                                       |
-| `src/lib/page-ancestors.ts`                    | dohledání předků (drobečky, kontext menu)                          |
 | `src/lib/page-title.ts`                        | skládání titulků podstránek z pádů kontextového místa              |
 
 ## 5. Známé odchylky od starého webu

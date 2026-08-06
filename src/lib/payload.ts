@@ -698,8 +698,8 @@ async function fetchArticleCommentsUncached(
     pagination: false,
   })
 
-  // Řadíme podle createdAt (u migrovaných = původní datum ze staré DB, viz
-  // prod-comment-created-dates.sql) s `id` jako rozhodčím — chronologie nese
+  // Řadíme podle createdAt (u migrovaných = původní datum ze staré DB, doplněné
+  // jednorázovým SQL, dnes odstraněným) s `id` jako rozhodčím — chronologie nese
   // sestavení vláken níže.
   const effectiveTime = (c: RawComment) => new Date(c.createdAt ?? 0).getTime()
   const docs = (res.docs as unknown as RawComment[]).slice().sort((a, b) => {
