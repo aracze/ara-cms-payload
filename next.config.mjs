@@ -80,6 +80,16 @@ const nextConfig = {
         destination: '/usa/san-francisco/:slug',
         permanent: true,
       },
+      // Legacy podstránka profilu (/profil/<user>/clanky/...) NENÍ článek -
+      // "clanky" tu značí sekci profilu, řeší ji už
+      // src/app/(frontend)/profil/[username]/[...rest]/page.tsx (přesměruje
+      // na /profil/<user>#clanky). MUSÍ být před obecným pravidlem níže,
+      // jinak by ho to obecné pravidlo předběhlo a smazalo kotvu na sekci.
+      {
+        source: '/profil/:username/clanky/:rest*',
+        destination: '/profil/:username#clanky',
+        permanent: true,
+      },
       // Staré URL článků měly vždy segment "clanky" mezi rodičovskou stránkou
       // a slugem článku (`{rodic}/clanky/{slug}`), nový web ho v URL nemá
       // (`{rodic}/{slug}`) - viz src/app/(frontend)/[...slug]. Zahrnuje i
