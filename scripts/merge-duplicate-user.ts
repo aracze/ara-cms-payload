@@ -1,10 +1,15 @@
 /**
  * Sloučení dvou účtů JEDNOHO člověka do jednoho.
  *
- * PROČ: Lojza měl na webu dva účty — `lojzatran` (starší, z legacy migrace,
- * e-mail lojzatran@gmail.com) a `lojza.ibg` (novější, s vyplněným jménem,
- * medailonkem a fotkou). Jeho práce se tím dělila na dvě hromádky, takže
- * v medailonku na stránce O nás vypadal jako někdo, kdo skoro nic nenapsal.
+ * PROČ: jeden ze spoluautorů měl na webu dva účty — starší z legacy migrace
+ * a novější s vyplněným jménem, medailonkem a fotkou. Jeho práce se tím dělila
+ * na dvě hromádky, takže v sekci „Náš tým" na stránce O nás vypadal jako někdo,
+ * kdo skoro nic nenapsal.
+ *
+ * Do KOMENTÁŘŮ ANI DO KÓDU nepiš e-mailové adresy účtů — repozitář je veřejný.
+ * Který účet se ponechává, říkají `KEEP_USERNAME`/`DROP_USERNAME` níž
+ * (uživatelská jména jsou veřejná, jsou z nich adresy profilů), e-maily si
+ * skript sám vypíše z databáze při běhu.
  *
  * CO DĚLÁ:
  *  1. do PONECHANÉHO účtu doplní jméno, medailonek a avatar ze RUŠENÉHO
@@ -57,6 +62,19 @@ const AUTHORSHIP_COLUMNS: { table: string; column: string; label: string }[] = [
   { table: 'avatars', column: 'owner_id', label: 'vlastnictví avataru' },
 ]
 
+/**
+ * Sloupce, které nejsou odkazem na uživatele „zvenčí", ale ČÁSTÍ jeho účtu —
+ * role, přihlášená sezení a interní stav administrace. Ty se nepřepisují;
+ * zmizí s účtem (mají `ON DELETE cascade`). Přepsat je by ponechanému účtu
+ * duplikovalo role a přenášelo cizí sezení.
+ */
+const ACCOUNT_OWNED_COLUMNS: { table: string; column: string }[] = [
+  { table: 'users_roles', column: 'parent_id' },
+  { table: 'users_sessions', column: '_parent_id' },
+  { table: 'payload_locked_documents_rels', column: 'users_id' },
+  { table: 'payload_preferences_rels', column: 'users_id' },
+]
+
 type UserRow = {
   id: number
   username: string
@@ -96,15 +114,20 @@ if (!drop) {
 }
 
 /**
- * Pojistka: každý cizí klíč na `users` s pravidlem SET NULL je odkaz na
- * uživatele „zvenčí" (autorství, vlastnictví), takže musí být v seznamu výše.
- * Klíče s CASCADE (users_roles, users_sessions, preference) jsou naopak ČÁSTI
- * účtu — ty se nepřepisují, zmizí s ním.
+ * Pojistka: KAŽDÝ cizí klíč na `users` musí být zařazený — buď jako autorství
+ * (přepíše se), nebo jako část účtu (zmizí s ním). Cokoli nezařazeného skript
+ * zastaví.
+ *
+ * ZÁMĚRNĚ se nefiltruje podle `delete_rule`. Dnes platí, že autorství má
+ * SET NULL a části účtu CASCADE, ale spoléhat na to je past: kdyby nová kolekce
+ * dostala `createdBy` s `ON DELETE cascade`, filtr na SET NULL by ji přeskočil,
+ * skript by ji nepřepsal — a mazání účtu na konci by ten obsah smazalo s ním.
+ * Pravidlo se proto jen vypisuje pro kontrolu, nerozhoduje.
  */
 async function assertCoversAllReferences(): Promise<void> {
   const fks = (
     await drizzle.execute(sql`
-      select tc.table_name, kcu.column_name
+      select tc.table_name, kcu.column_name, rc.delete_rule
       from information_schema.table_constraints tc
       join information_schema.key_column_usage kcu
         on kcu.constraint_name = tc.constraint_name
@@ -114,20 +137,24 @@ async function assertCoversAllReferences(): Promise<void> {
         on rc.constraint_name = tc.constraint_name
       where tc.constraint_type = 'FOREIGN KEY'
         and ccu.table_name = 'users'
-        and rc.delete_rule = 'SET NULL'
     `)
-  ).rows as unknown as { table_name: string; column_name: string }[]
+  ).rows as unknown as { table_name: string; column_name: string; delete_rule: string }[]
 
-  const known = new Set(AUTHORSHIP_COLUMNS.map((c) => `${c.table}.${c.column}`))
-  const missing = fks
-    .map((fk) => `${fk.table_name}.${fk.column_name}`)
-    .filter((key) => !known.has(key))
+  const classified = new Set(
+    [...AUTHORSHIP_COLUMNS, ...ACCOUNT_OWNED_COLUMNS].map((c) => `${c.table}.${c.column}`),
+  )
+  const unknown = fks.filter((fk) => !classified.has(`${fk.table_name}.${fk.column_name}`))
 
-  if (missing.length > 0) {
+  if (unknown.length > 0) {
     console.error(
-      'CHYBA: databáze odkazuje na uživatele i odjinud, než skript umí přepsat:\n  ' +
-        missing.join('\n  ') +
-        '\nDoplň sloupce do AUTHORSHIP_COLUMNS a spusť znovu.',
+      'CHYBA: na uživatele odkazují sloupce, které skript nezná:\n' +
+        unknown
+          .map((fk) => `  ${fk.table_name}.${fk.column_name} (ON DELETE ${fk.delete_rule})`)
+          .join('\n') +
+        '\n\nZařaď každý z nich a spusť znovu:\n' +
+        '  · drží autorství nebo vlastnictví obsahu → AUTHORSHIP_COLUMNS (přepíše se)\n' +
+        '  · je součástí účtu (role, sezení, stav adminu) → ACCOUNT_OWNED_COLUMNS (zmizí s účtem)\n' +
+        'Nezařazený sloupec by se při mazání účtu buď vynuloval, nebo smazal spolu s ním.',
     )
     process.exit(1)
   }
@@ -174,9 +201,42 @@ if (!apply) {
 // ── Provedení ───────────────────────────────────────────────────────────────
 
 await drizzle.transaction(async (tx) => {
+  // Oba účty načteme ZNOVU a se zámkem. Plán výše se čte mimo transakci, takže
+  // mezi výpisem a zápisem může kdokoli v adminu účet upravit nebo smazat —
+  // pak by se přenesla stará hodnota jména či avataru a skript by přesto
+  // ohlásil úspěch. `FOR UPDATE` řádky do konce transakce zamkne a hodnoty pro
+  // sloučení se berou až z nich.
+  const locked = (
+    await tx.execute(sql`
+      select id, username, email, name, description, avatar_id
+      from users
+      where username in (${KEEP_USERNAME}, ${DROP_USERNAME})
+      order by id
+      for update
+    `)
+  ).rows as unknown as UserRow[]
+
+  const keepLocked = locked.find((r) => r.username === KEEP_USERNAME)
+  const dropLocked = locked.find((r) => r.username === DROP_USERNAME)
+
+  // Vyhozená chyba transakci vrátí zpět, takže se nezapíše nic.
+  if (!keepLocked || !dropLocked) {
+    throw new Error(
+      'Účty se mezitím změnily: ' +
+        (!keepLocked ? `„${KEEP_USERNAME}" už neexistuje. ` : '') +
+        (!dropLocked ? `„${DROP_USERNAME}" už neexistuje. ` : '') +
+        'Nic se nezměnilo — spusť skript znovu a zkontroluj plán.',
+    )
+  }
+  if (keepLocked.id !== keep.id || dropLocked.id !== drop.id) {
+    throw new Error(
+      'Účty se mezitím změnily (jiná ID než ve vypsaném plánu). Nic se nezměnilo — spusť skript znovu.',
+    )
+  }
+
   for (const { table, column } of AUTHORSHIP_COLUMNS) {
     await tx.execute(
-      sql`update ${sql.identifier(table)} set ${sql.identifier(column)} = ${keep.id} where ${sql.identifier(column)} = ${drop.id}`,
+      sql`update ${sql.identifier(table)} set ${sql.identifier(column)} = ${keepLocked.id} where ${sql.identifier(column)} = ${dropLocked.id}`,
     )
   }
 
@@ -184,14 +244,14 @@ await drizzle.transaction(async (tx) => {
   // by ponechanému účtu nemělo přepsat to, co už má.
   await tx.execute(sql`
     update users set
-      name = coalesce(nullif(${drop.name ?? null}, ''), name),
-      description = coalesce(nullif(${drop.description ?? null}, ''), description),
-      avatar_id = coalesce(${drop.avatar_id ?? null}, avatar_id),
+      name = coalesce(nullif(${dropLocked.name ?? null}, ''), name),
+      description = coalesce(nullif(${dropLocked.description ?? null}, ''), description),
+      avatar_id = coalesce(${dropLocked.avatar_id ?? null}, avatar_id),
       updated_at = now()
-    where id = ${keep.id}
+    where id = ${keepLocked.id}
   `)
 
-  await tx.execute(sql`delete from users where id = ${drop.id}`)
+  await tx.execute(sql`delete from users where id = ${dropLocked.id}`)
 })
 
 console.log(`\nHOTOVO: účet #${drop.id} ${drop.username} sloučen do #${keep.id} ${keep.username}.`)
