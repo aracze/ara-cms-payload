@@ -63,6 +63,8 @@ export const MainContent = ({
   genitive,
   createdByPublic,
   touristPointInfo = null,
+  belowText = null,
+  centerColumn = false,
 }: {
   text: string | RichTextRoot
   pageChildren: PageChild[]
@@ -79,6 +81,19 @@ export const MainContent = ({
   } | null
   /** Karta Praktické informace (jen turistické cíle) — adresa, web, mapa, autor. */
   touristPointInfo?: TouristPointInfo | null
+  /**
+   * Obsah, který navazuje HNED ZA textem stránky uvnitř čtecího sloupce (dnes
+   * sekce „Náš tým" na stránce O nás). Samostatná sekce pod `<main>` by se
+   * musela znovu zarovnávat na šířku sloupce a oddělilo by ji spodní odsazení
+   * obsahu — takhle plyne dál ve stejném rytmu jako odstavce.
+   */
+  belowText?: React.ReactNode
+  /**
+   * Postavit čtecí sloupec na osu stránky, i když vedle sebe nemá boční panel.
+   * Zapíná se na statických stránkách — pod nimi nezačíná žádná sekce přes
+   * celou šířku, ke které by se text měl zarovnat vlevo (viz `justify` níž).
+   */
+  centerColumn?: boolean
 }) => {
   const placeCategories: PageCategory[] = [
     PageCategory.Misto_k_navstiveni,
@@ -129,13 +144,38 @@ export const MainContent = ({
       }
     : null
 
+  // Bloky bočního panelu — každý má svou podmínku, protože panel se skládá
+  // podle typu stránky (karta cíle / čas s kurzem / obsah s reklamou).
+  const showTouristPointCard = Boolean(
+    touristPointInfo &&
+    (touristPointInfo.address ||
+      touristPointInfo.websiteUrl ||
+      touristPointInfo.mapCenter ||
+      contributor),
+  )
+  const showAktualniInfoPanel = Boolean(
+    showAktualniInfo && (timezone || exchangeRate || practicalInfoChild),
+  )
+  // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
+  // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
+  // nevznikne.
+  const hasSidebar = showTouristPointCard || showAktualniInfoPanel || showTableOfContents
+  // Kam se čtecí sloupec postaví, když vedle sebe nemá panel:
+  //  · statická stránka (`centerColumn`) → na OSU stránky. Zaparkovaný vlevo
+  //    ležel ~190 px od středu a vpravo zela díra po panelu.
+  //  · rubrika → zůstává vlevo, protože pod textem začíná mřížka článků přes
+  //    celou šířku a vystředěný úvod by proti ní byl odsazený doprava.
+  // Šířku ani vnitřní odsazení sloupce neměníme — text má pořád stejnou míru
+  // řádku, mění se jen jeho poloha.
+  const justify = hasSidebar || centerColumn ? 'lg:justify-center' : 'lg:justify-start'
+
   return (
     <main
       id="obsah"
       tabIndex={-1}
       // Turistický cíl: menší spodní odsazení — hned pod obsahem navazuje
       // sekce recenzí a plných 80 px by mezi nimi dělalo zbytečnou díru.
-      className={`max-w-7xl mx-auto px-4 pt-12 ${touristPointInfo ? 'pb-6 md:pb-8' : 'pb-12 md:pb-20'} flex flex-col items-stretch lg:flex-row lg:justify-center gap-8 lg:gap-10 focus:outline-none`}
+      className={`max-w-7xl mx-auto px-4 pt-12 ${touristPointInfo ? 'pb-6 md:pb-8' : 'pb-12 md:pb-20'} flex flex-col items-stretch lg:flex-row ${justify} gap-8 lg:gap-10 focus:outline-none`}
     >
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
@@ -155,19 +195,17 @@ export const MainContent = ({
           // informace: posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose).
           proseClassName={touristPointInfo ? 'poi-prose' : isPracticalInfo ? 'pi-prose' : undefined}
         />
+        {belowText}
       </div>
 
-      {/* Sidebar / Info Column */}
-      <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-12 relative">
-        {/* Praktické informace turistického cíle — adresa, web, mapa, autor.
+      {/* Sidebar / Info Column — vznikne jen když má co ukázat (viz hasSidebar) */}
+      {hasSidebar && (
+        <aside className="w-full lg:w-[340px] shrink-0 flex flex-col gap-12 relative">
+          {/* Praktické informace turistického cíle — adresa, web, mapa, autor.
             Vzdušné legacy rozložení: bez rámečku, přes celou šířku sloupce,
             větší modré ikony a velká mapa; autor ve standardní podobě
             (avatar + jméno + „Cestovní průvodce"). */}
-        {touristPointInfo &&
-          (touristPointInfo.address ||
-            touristPointInfo.websiteUrl ||
-            touristPointInfo.mapCenter ||
-            contributor) && (
+          {showTouristPointCard && touristPointInfo && (
             <div className="relative">
               <div className="flex flex-col gap-5">
                 {/* Stejná velikost písma jako běžný text stránky (prose 18 px;
@@ -260,99 +298,100 @@ export const MainContent = ({
               </div>
             </div>
           )}
-        {/* Time, Exchange & Practical Info — for place-type pages */}
-        {showAktualniInfo && (timezone || exchangeRate || practicalInfoChild) && (
-          <div className="relative">
-            {/* Vertical line (shortened) — mezi textem a panelem */}
-            <div className="absolute -left-[30px] top-[20%] h-[70%] w-px bg-[#e4e4e4]" />
+          {/* Time, Exchange & Practical Info — for place-type pages */}
+          {showAktualniInfoPanel && (
+            <div className="relative">
+              {/* Vertical line (shortened) — mezi textem a panelem */}
+              <div className="absolute -left-[30px] top-[20%] h-[70%] w-px bg-[#e4e4e4]" />
 
-            <div className="text-center bg-white py-4 px-0">
-              {/* Section 1: Time and Exchange Rate */}
-              {(timezone || exchangeRate) && (
-                <div className="mb-6">
-                  <h2 className="text-[20px] font-bold text-[#1a3f6c] mb-4">
-                    {timezone && exchangeRate
-                      ? 'Aktuální čas a kurz měny'
-                      : exchangeRate
-                        ? 'Aktuální měnový kurz'
-                        : 'Aktuální čas'}
-                  </h2>
-                  {timezone && (
-                    <>
-                      <LocalTime timezone={timezone} />
-                      {exchangeRate && (
-                        <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mt-4 mb-4" />
-                      )}
-                    </>
-                  )}
-                  {exchangeRate && currencyCode && (
-                    <div className="block text-[26px] tracking-[0.01rem] text-[#333] mt-4">
-                      {practicalInfoChild ? (
-                        <Link
-                          href={`${practicalInfoChild.fullSlug}#mena-a-ceny`}
-                          className="hover:no-underline"
-                        >
-                          1 {currencyCode} ={' '}
-                          {exchangeRate.toLocaleString('cs-CZ', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}{' '}
-                          CZK
-                        </Link>
-                      ) : (
-                        <span>
-                          1 {currencyCode} ={' '}
-                          {exchangeRate.toLocaleString('cs-CZ', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}{' '}
-                          CZK
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Section 2: Practical Info */}
-              {practicalInfoChild && pageTitle && (
-                <Link
-                  href={practicalInfoChild.fullSlug}
-                  className="block hover:no-underline group relative mt-6 pt-4"
-                >
-                  <h2 className="text-[22px] font-bold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
-                    Praktické informace <br />
-                    do {displayName}
-                  </h2>
-                  <div className="relative inline-block w-full">
-                    <div className="absolute top-1/2 -translate-y-1/2 left-[calc(50%+70px)] w-[55px] h-[55px] bg-[url('/assets/information/essentials-gray.gif')] bg-no-repeat bg-contain opacity-20 z-0" />
-                    <div className="relative z-10 text-[18px] text-[#888] leading-[1.5]">
-                      <p className="m-0">
-                        Praktické cestovní informace <br />
-                        při cestě do {displayName}
-                      </p>
-                    </div>
+              <div className="text-center bg-white py-4 px-0">
+                {/* Section 1: Time and Exchange Rate */}
+                {(timezone || exchangeRate) && (
+                  <div className="mb-6">
+                    <h2 className="text-[20px] font-bold text-[#1a3f6c] mb-4">
+                      {timezone && exchangeRate
+                        ? 'Aktuální čas a kurz měny'
+                        : exchangeRate
+                          ? 'Aktuální měnový kurz'
+                          : 'Aktuální čas'}
+                    </h2>
+                    {timezone && (
+                      <>
+                        <LocalTime timezone={timezone} />
+                        {exchangeRate && (
+                          <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mt-4 mb-4" />
+                        )}
+                      </>
+                    )}
+                    {exchangeRate && currencyCode && (
+                      <div className="block text-[26px] tracking-[0.01rem] text-[#333] mt-4">
+                        {practicalInfoChild ? (
+                          <Link
+                            href={`${practicalInfoChild.fullSlug}#mena-a-ceny`}
+                            className="hover:no-underline"
+                          >
+                            1 {currencyCode} ={' '}
+                            {exchangeRate.toLocaleString('cs-CZ', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            CZK
+                          </Link>
+                        ) : (
+                          <span>
+                            1 {currencyCode} ={' '}
+                            {exchangeRate.toLocaleString('cs-CZ', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{' '}
+                            CZK
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
+                )}
 
-        {/* Obsah (TOC) + reklama ve společném sticky bloku (jako u článku) —
+                {/* Section 2: Practical Info */}
+                {practicalInfoChild && pageTitle && (
+                  <Link
+                    href={practicalInfoChild.fullSlug}
+                    className="block hover:no-underline group relative mt-6 pt-4"
+                  >
+                    <h2 className="text-[22px] font-bold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
+                      Praktické informace <br />
+                      do {displayName}
+                    </h2>
+                    <div className="relative inline-block w-full">
+                      <div className="absolute top-1/2 -translate-y-1/2 left-[calc(50%+70px)] w-[55px] h-[55px] bg-[url('/assets/information/essentials-gray.gif')] bg-no-repeat bg-contain opacity-20 z-0" />
+                      <div className="relative z-10 text-[18px] text-[#888] leading-[1.5]">
+                        <p className="m-0">
+                          Praktické cestovní informace <br />
+                          při cestě do {displayName}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Obsah (TOC) + reklama ve společném sticky bloku (jako u článku) —
             jen na informačních podstránkách. Panel má scrollspy (zvýrazňuje
             čtenou sekci a posouvá se za ní) a vnitřní posuvník — dlouhý obsah
             složených Praktických informací by jinak přerostl obrazovku.
             Reklama jde dovnitř jako children (zůstává server-side). */}
-        {showTableOfContents && (
-          <TocSidebar items={headings} practicalInfo={isPracticalInfo}>
-            <div className={headings.length > 0 ? 'mt-12' : ''}>
-              <AdSenseScript />
-              <ArticleAd variant="primary" />
-            </div>
-          </TocSidebar>
-        )}
-      </aside>
+          {showTableOfContents && (
+            <TocSidebar items={headings} practicalInfo={isPracticalInfo}>
+              <div className={headings.length > 0 ? 'mt-12' : ''}>
+                <AdSenseScript />
+                <ArticleAd variant="primary" />
+              </div>
+            </TocSidebar>
+          )}
+        </aside>
+      )}
     </main>
   )
 }

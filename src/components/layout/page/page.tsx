@@ -15,7 +15,10 @@ import {
   fetchTouristPointSiblings,
   pageHasArticlesBySlug,
   fetchPracticalInfoSections,
+  fetchTeamSection,
 } from '@/lib/payload'
+import { TeamSection } from './team-section'
+import { ABOUT_PAGE_SLUG } from '@/lib/team'
 import { composePracticalInfoHtml } from '@/lib/practical-info'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
@@ -27,6 +30,7 @@ import {
 } from '@/lib/page-hierarchy'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
+import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import type { ReviewPublic } from '@/types/payload'
 
 const exchangeRateCategories: PageCategory[] = [
@@ -109,7 +113,16 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const contextPlace = menuContext.contextPage
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
   // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
-  const imageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
+  const cmsImageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
+  // Statická stránka nemá nad sebou žádné místo, ze kterého by fotku podědila,
+  // takže bez vyplněného obrázku v CMS zůstal v heru holý tmavý pruh. Spadneme
+  // proto na sdílenou výchozí obálku (stejnou, jakou mají profily) — jakmile se
+  // v adminu vyplní vlastní fotka, má přednost.
+  const isStaticPage = page.category === PageCategory.Staticka_stranka
+  const useDefaultCover = isStaticPage && !cmsImageUrl
+  // Sekce „Náš tým" patří jen na O nás (kdo web píše), ne na Reklamu ani Podmínky.
+  const isAboutPage = isStaticPage && page.fullSlug === `/${ABOUT_PAGE_SLUG}`
+  const imageUrl = useDefaultCover ? DEFAULT_COVER_URL : cmsImageUrl
   const pageTitle = buildPageTitle(page, contextPlace)
 
   // Sekundární menu se nezobrazuje na rubrikách ani statických stránkách.
@@ -127,6 +140,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     reviewStats,
     siblings,
     practicalInfoSections,
+    teamSection,
   ] = await Promise.all([
     fetchPracticalInfoSourceChildren(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -160,6 +174,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     page.category === PageCategory.Prakticke_informace
       ? fetchPracticalInfoSections(menuContext.contextFullSlug)
       : Promise.resolve([]),
+    // Sekce „Náš tým" — jen na stránce O nás, jinde by šlo o dotaz nazdařbůh.
+    isAboutPage ? fetchTeamSection() : Promise.resolve(null),
   ])
   const contextHasPlaces = contextFlags.hasPlaces
   const contextHasArticles = contextFlags.hasArticles
@@ -285,7 +301,12 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <HeroSection
           title={pageTitle}
           imageUrl={imageUrl}
-          styleCss={page.featuredImage?.featureImageStyleCss || undefined}
+          styleCss={
+            useDefaultCover
+              ? DEFAULT_COVER_POSITION
+              : page.featuredImage?.featureImageStyleCss || undefined
+          }
+          blurDataURL={useDefaultCover ? DEFAULT_COVER_BLUR : undefined}
           filterId={`blurFilter-${page.id}`}
           breadcrumbs={breadcrumbs}
           rating={heroRating}
@@ -322,6 +343,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           genitive={page.detail?.genitive}
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
+          belowText={teamSection ? <TeamSection {...teamSection} /> : null}
+          centerColumn={isStaticPage}
         />
 
         {/* Recenze — jen turistické cíle (parita s legacy webem) */}

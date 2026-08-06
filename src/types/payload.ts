@@ -378,13 +378,60 @@ export interface UserProfileData {
   mapPins: ProfileMapPin[]
 }
 
+/** Počty příspěvků v medailonku — stejné kategorie jako čísla na profilu. */
+export interface TeamMemberCounts {
+  places: number
+  touristPoints: number
+  articles: number
+  reviews: number
+}
+
+/**
+ * Člen týmu v sekci „Náš tým" na stránce O nás (jen veřejná pole profilu).
+ * Medailonek „o mně" se ZÁMĚRNĚ nenačítá — karta ho nezobrazuje, viz
+ * team-section.tsx.
+ */
+export interface TeamMemberPublic {
+  username: string
+  /** Celé jméno; když ho autor nevyplnil, zbývá uživatelské jméno. */
+  name: string | null
+  avatarUrl: string | null
+  counts: TeamMemberCounts
+}
+
+/** Tvář v řadě dřívějších přispěvatelů pod týmem (odkaz na profil). */
+export interface ContributorFace {
+  username: string
+  name: string | null
+  avatarUrl: string
+}
+
+export interface TeamSectionData {
+  /** Členové v pořadí, v jakém je vyjmenovává TEAM_USERNAMES. */
+  members: TeamMemberPublic[]
+  faces: ContributorFace[]
+  /** Kolik dalších přispěvatelů se do řady tváří nevešlo (0 = řada je celá). */
+  remainingContributors: number
+}
+
 export interface FooterNavItem {
   label: string
   href: string
 }
 
+/** Kontaktní blok patičky — e-mail a osoba, která na něj odpovídá. */
+export interface FooterContact {
+  email: string | null
+  personName: string | null
+  /** Profil kontaktní osoby (/profil/<username>), jinak null = jméno bez odkazu. */
+  personHref: string | null
+}
+
 export interface GlobalFooter {
   logo?: ImageLink | null
+  /** Krátká výzva vedle loga; prázdná = řádek se nevykreslí. */
+  lede: string | null
+  contact: FooterContact
   navItems: FooterNavItem[]
   copyrightText: RichTextRoot | null
 }

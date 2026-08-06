@@ -20,13 +20,17 @@ import {
   HomepageInspiration,
   InspirationLink,
   PracticalInfoSection,
+  TeamSectionData,
+  TeamMemberPublic,
+  ContributorFace,
 } from '@/types/payload'
+import { CONTRIBUTOR_FACES_LIMIT, NON_PERSON_USERNAMES, TEAM_USERNAMES } from './team'
 import { practicalInfoSectionCategories } from './practical-info'
 import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
-import { and, asc, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
+import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
 import {
   getArticleImageUrl,
@@ -1367,6 +1371,194 @@ export const fetchUserProfile = cache((username: string): Promise<UserProfileDat
   fetchUserProfileCached(username),
 )
 
+// ————————————————————————————————————————————————————————————————
+// Sekce „Náš tým" na stránce O nás
+// ————————————————————————————————————————————————————————————————
+
+/** URL avataru z populovaného (depth 1) pole `avatar`; číslo = nepopulováno. */
+function avatarUrlOf(avatar: RawProfileUser['avatar']): string | null {
+  return avatar && typeof avatar === 'object' ? (avatar.url ?? null) : null
+}
+
+/**
+ * Tváře dřívějších přispěvatelů pod týmem + kolik dalších se do řady nevešlo.
+ *
+ * Řazení podle objemu příspěvků zjišťuje ZÁMĚRNĚ přímý SQL dotaz přes drizzle
+ * (dvě agregace GROUP BY), ne payload.find: Local API žene každý vrácený
+ * dokument přes afterRead pipeline, takže „posbírej autory 2 400 stránek" stálo
+ * v dev serveru ~0,8 s na request (viz fetchPlaceCandidateIds). Tady stačí
+ * dvojice (autor, počet).
+ *
+ * Práva se tím neobcházejí: `_status = published` odpovídá anonymnímu pravidlu
+ * čtení stránek a jména s avatary se stejně dotahují běžným payload.find
+ * s přísným selectem veřejných polí.
+ */
+async function fetchContributorFaces(
+  payload: Payload,
+  teamUserIds: number[],
+): Promise<{ faces: ContributorFace[]; remainingContributors: number }> {
+  const db = payload.db as unknown as PostgresAdapter
+  const pagesTable = db.tables.pages
+  const articlesTable = db.tables.articles
+
+  const [pageRows, articleRows] = await Promise.all([
+    db.drizzle
+      .select({ userId: pagesTable.createdBy, total: count() })
+      .from(pagesTable)
+      .where(and(eq(pagesTable._status, 'published'), isNotNull(pagesTable.createdBy)))
+      .groupBy(pagesTable.createdBy),
+    // Články nemají koncept (v tabulce není `_status`), takže se nefiltrují.
+    db.drizzle
+      .select({ userId: articlesTable.createdBy, total: count() })
+      .from(articlesTable)
+      .where(isNotNull(articlesTable.createdBy))
+      .groupBy(articlesTable.createdBy),
+  ])
+
+  // Součet je jen VÁHA pro řazení („kdo přispěl nejvíc"), ne číslo na obrazovku
+  // — počítá i podstránky míst (Počasí, Doprava…), které se nikde nevypisují.
+  const weights = new Map<number, number>()
+  for (const row of [...pageRows, ...articleRows]) {
+    const id = Number(row.userId)
+    if (!Number.isInteger(id) || teamUserIds.includes(id)) continue
+    weights.set(id, (weights.get(id) ?? 0) + Number(row.total))
+  }
+  if (weights.size === 0) return { faces: [], remainingContributors: 0 }
+
+  const candidateIds = [...weights.keys()].sort(
+    (a, b) => (weights.get(b) ?? 0) - (weights.get(a) ?? 0),
+  )
+
+  // Jména a avatary přispěvatelů — stejný přísný select jako u profilu
+  // (nikdy e-mail, role ani hash hesla).
+  const usersRes = (await payload.find({
+    collection: 'users',
+    overrideAccess: true,
+    where: { id: { in: candidateIds } },
+    limit: candidateIds.length,
+    depth: 1,
+    select: { username: true, name: true, avatar: true },
+  })) as unknown as PayloadDocsResponse<RawProfileUser>
+
+  const byId = new Map((usersRes.docs ?? []).map((u) => [u.id, u]))
+  // Skuteční lidé v pořadí podle objemu příspěvků; technické účty ven.
+  const people = candidateIds.flatMap((id) => {
+    const user = byId.get(id)
+    if (!user?.username) return []
+    if (NON_PERSON_USERNAMES.includes(user.username)) return []
+    return [user]
+  })
+
+  // Do řady jdou jen ti s fotkou — mezi tvářemi by zastupující papoušci
+  // vypadali jako chybějící obrázky, ne jako lidé bez avataru.
+  const faces: ContributorFace[] = []
+  for (const user of people) {
+    if (faces.length >= CONTRIBUTOR_FACES_LIMIT) break
+    const avatarUrl = avatarUrlOf(user.avatar)
+    if (!avatarUrl) continue
+    faces.push({ username: user.username!, name: user.name ?? null, avatarUrl })
+  }
+
+  return { faces, remainingContributors: Math.max(0, people.length - faces.length) }
+}
+
+async function fetchTeamSectionUncached(usernames: string[]): Promise<TeamSectionData> {
+  const payload = await getDb()
+
+  // Členové týmu. Users.read = isAdminOrSelf a web čte anonymně, proto
+  // overrideAccess: true + PŘÍSNÝ select jen veřejných polí — stejný princip
+  // jako u fetchUserProfile a virtuálního createdByPublic.
+  const usersRes = (await payload.find({
+    collection: 'users',
+    overrideAccess: true,
+    where: { username: { in: usernames } },
+    limit: usernames.length,
+    // depth 1 populuje avatar; media dokument se NEOŘEZÁVÁ (viz hlavička souboru).
+    depth: 1,
+    // `description` tu ZÁMĚRNĚ není — karta medailonek nezobrazuje.
+    select: { username: true, name: true, avatar: true },
+  })) as unknown as PayloadDocsResponse<RawProfileUser>
+
+  const found = usersRes.docs ?? []
+  // Pořadí drží TEAM_USERNAMES, ne databáze. Účet, který neexistuje (překlep
+  // v seznamu, smazaný profil), se vynechá — sekce se nesmí kvůli tomu rozbít.
+  const team = usernames.flatMap((username) => {
+    const doc = found.find((d) => d.username === username)
+    return doc?.username ? [doc] : []
+  })
+  if (team.length === 0) return { members: [], faces: [], remainingContributors: 0 }
+
+  const countPagesOf = (userId: number, category: PageCategory) =>
+    payload
+      .count({
+        collection: 'pages',
+        // overrideAccess: false → anonymní práva, tedy jen publikované stránky
+        // (stejné číslo, jaké autor vidí na svém profilu).
+        overrideAccess: false,
+        where: { and: [{ createdBy: { equals: userId } }, { category: { equals: category } }] },
+      })
+      .then((res) => res.totalDocs ?? 0)
+
+  const [members, contributors] = await Promise.all([
+    Promise.all(
+      team.map(async (user) => {
+        // Čtyři levné COUNTy souběžně — čísla do medailonku, žádný obsah.
+        const [places, touristPoints, articles, reviews] = await Promise.all([
+          countPagesOf(user.id, PageCategory.Misto_k_navstiveni),
+          countPagesOf(user.id, PageCategory.Turisticky_cil),
+          payload
+            .count({
+              collection: 'articles',
+              overrideAccess: false,
+              where: { createdBy: { equals: user.id } },
+            })
+            .then((res) => res.totalDocs ?? 0),
+          // Recenze: jako u profilu overrideAccess: true + ruční odfiltrování spamu.
+          payload
+            .count({
+              collection: 'comments',
+              overrideAccess: true,
+              where: {
+                and: [
+                  { author: { equals: user.id } },
+                  { type: { equals: 'review' } },
+                  { status: { not_equals: 'spam' } },
+                ],
+              },
+            })
+            .then((res) => res.totalDocs ?? 0),
+        ])
+
+        return {
+          username: user.username!,
+          name: user.name ?? null,
+          avatarUrl: avatarUrlOf(user.avatar),
+          counts: { places, touristPoints, articles, reviews },
+        } satisfies TeamMemberPublic
+      }),
+    ),
+    fetchContributorFaces(
+      payload,
+      team.map((u) => u.id),
+    ),
+  ])
+
+  return { members, ...contributors }
+}
+
+const fetchTeamSectionCached = cached(
+  fetchTeamSectionUncached,
+  'team-section',
+  // Změna profilu (users), nová stránka/článek i nová recenze mění čísla
+  // v medailonku — všechny tři tagy revalidují stávající hooky.
+  () => ['users', 'pages', 'articles', 'comments'],
+)
+
+/** Data sekce „Náš tým" na stránce O nás — medailonky a tváře přispěvatelů. */
+export const fetchTeamSection = cache((): Promise<TeamSectionData> =>
+  fetchTeamSectionCached([...TEAM_USERNAMES]),
+)
+
 const fetchPageByFullSlugCached = cached(
   fetchPageByFullSlugUncached,
   'page-detail',
@@ -1548,8 +1740,15 @@ async function fetchFooterUncached(): Promise<GlobalFooter | null> {
     slug: 'footer',
     overrideAccess: false,
   })) as unknown as Record<string, unknown>
+  const contact = (data.contact ?? {}) as Record<string, unknown>
   return {
     logo: (data.logo as GlobalFooter['logo']) ?? null,
+    lede: (data.lede as string | null) ?? null,
+    contact: {
+      email: (contact.email as string | null) ?? null,
+      personName: (contact.personName as string | null) ?? null,
+      personHref: (contact.personHref as string | null) ?? null,
+    },
     navItems: (data.navItems as GlobalFooter['navItems']) ?? [],
     copyrightText: (data.copyrightText as GlobalFooter['copyrightText']) ?? null,
   }

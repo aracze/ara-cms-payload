@@ -14,6 +14,7 @@ import {
   ProfileReviewCard,
 } from '@/components/layout/profile/profile-cards'
 import { pluralCs, websiteHref, websiteLabel } from '@/lib/utils'
+import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import { MAX_DESCRIPTION, MAX_NAME, MAX_URL } from '@/lib/profile-limits'
 import type { UserProfileData } from '@/types/payload'
 
@@ -28,33 +29,6 @@ import type { UserProfileData } from '@/types/payload'
  * od sebe opticky oddělené. Prázdné sekce se nevykreslují.
  * Data skládá fetchUserProfile výhradně z veřejných polí.
  */
-
-/**
- * Výchozí úvodní fotka profilů — klidná, mlhavá krajina (Toskánsko).
- *
- * Záměrně „tichá" fotka: profil má v hlavičce avatar a jméno, takže rušný
- * snímek (města, zvířata, památky) by o pozornost soupeřil a text by se v něm
- * ztrácel — ověřeno srovnáním variant. Neukazuje konkrétní poznatelné místo,
- * takže u žádného autora netvrdí „tady jsem byl".
- *
- * Fotku lze vyměnit přepsáním této jedné adresy (Cloudinary URL bez parametrů
- * za `?`). Zmenšení a formát řeší `next/image` přes cloudinary-loader.
- * POZOR: s fotkou je nutné vyměnit i `PROFILE_COVER_BLUR` níže.
- */
-const PROFILE_COVER_URL =
-  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg'
-
-/**
- * Rozmazaný náhled TÉŽE fotky (20 × 13 px, ~340 B) vložený přímo do HTML.
- * Překryje pozadí sekce od první vteřiny, takže při načítání není vidět holá
- * barva — dřív tu problikávala nejprve pestrá barva podle jména, pak tmavá
- * z ostatních hlaviček; obojí bylo proti bílému obsahu pod vlnkou nápadné.
- *
- * Vygenerování po výměně fotky (z projektu, sharp je v závislostech):
- *   node -e "const s=require('sharp');(async()=>{const b=await s(await (await fetch(URL)).arrayBuffer().then(Buffer.from)).resize(20,13,{fit:'cover'}).blur(1.2).jpeg({quality:45}).toBuffer();console.log('data:image/jpeg;base64,'+b.toString('base64'))})()"
- */
-const PROFILE_COVER_BLUR =
-  'data:image/jpeg;base64,/9j/2wBDABIMDRANCxIQDhAUExIVGywdGxgYGzYnKSAsQDlEQz85Pj1HUGZXR0thTT0+WXlaYWltcnNyRVV9hnxvhWZwcm7/2wBDARMUFBsXGzQdHTRuST5Jbm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubm7/wAARCAANABQDASIAAhEBAxEB/8QAGQAAAgMBAAAAAAAAAAAAAAAAAAMCBAUG/8QAHhAAAgICAgMAAAAAAAAAAAAAAQIAAwQRBRIxYZH/xAAVAQEBAAAAAAAAAAAAAAAAAAACA//EABsRAAIBBQAAAAAAAAAAAAAAAAABEQIDEhMx/9oADAMBAAIRAxEAPwDqsi9SpI0RMDOy6SxUqNymvKWMo2o+yFypkDuy6PoyCvR1AdMirDT2O0hFlBvyYSm9AwP/2Q=='
 
 /** Výška mapy pod statistikami — nižší, než mají mapy u výpisů míst. */
 const MAP_HEIGHT = '360px'
@@ -146,14 +120,14 @@ export function UserProfile({
     <>
       {/* Hero s vlnkou — stejná výška, podklad i rytmus jako HeroSection
           ostatních stránek. Barvu pozadí ale při načítání skoro nikdo neuvidí:
-          překryje ji rozmazaný náhled fotky (viz PROFILE_COVER_BLUR), takže
+          překryje ji rozmazaný náhled fotky (viz DEFAULT_COVER_BLUR), takže
           přechod na ostrou fotku je plynulý a neproblikne holá barva. */}
       <section className="relative w-full h-[315px] bg-[#3b444f]">
         <div className="absolute inset-0 overflow-hidden">
           <StaticHeroImage
-            imageUrl={PROFILE_COVER_URL}
-            styleCss="object-position: 50% 42%"
-            blurDataURL={PROFILE_COVER_BLUR}
+            imageUrl={DEFAULT_COVER_URL}
+            styleCss={DEFAULT_COVER_POSITION}
+            blurDataURL={DEFAULT_COVER_BLUR}
           />
         </div>
 

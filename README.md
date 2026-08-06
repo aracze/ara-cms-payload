@@ -114,6 +114,40 @@ To build and run the production-optimized Docker image:
 > [!TIP]
 > This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
 
+### Ochrana e-mailu proti robotům — řeší Cloudflare, ne kód
+
+**Na zóně `ara.cz` je Scrape Shield → Email Address Obfuscation už ZAPNUTÝ** (ověřeno 6. 8. 2026: `https://ara.cz/kontakt` nemá v HTML `mailto:` ani samotnou adresu, odkaz vede na
+`/cdn-cgi/l/email-protection#<hex>`). Cloudflare přepisuje `mailto:` odkazy na hraně sítě
+a rozkóduje je až vlastním JavaScriptem v prohlížeči, takže se adresa do zdroje stránky
+vůbec nedostane. **Pro nový web to znamená, že není co dělat** — jakmile pojede na proxovaném
+záznamu téže zóny (oranžový obláček v DNS), platí to samo pro patičku i pro adresy v rich
+textu Reklamy a Podmínek.
+
+Tři věci, které je dobré vědět:
+
+- Testovací provoz jde na IP napřímo, mimo proxy, takže tam se nic nepřepisuje — to je
+  očekávané, ne rozbité.
+- Cloudflare přepisuje HTML **dokumenty**. Když návštěvník proklikává web (Next.js přechází
+  na klientu), přijde text Reklamy a Podmínek jako RSC payload a adresa se v DOM objeví
+  nezakódovaná. Pro účel „aby ji nesbírali roboti" to nevadí — harvestery si stahují
+  dokumenty, neproklikávají SPA.
+- Návštěvník s vypnutým JavaScriptem uvidí místo adresy `[email protected]`. To je cena
+  Cloudflare řešení; kdo chce psát, musí mít JS.
+
+**Proč to neřešíme v kódu:** adresa je kromě patičky i ve **rich textu** stránek Reklama
+a Podmínky užívání webu (dvakrát na každé), takže by obfuskace musela zasáhnout
+`richTextToHtml`, ne jen jednu komponentu. A všechny kódové triky mají cenu, kterou platí
+lidé, ne roboti: starý web měl `mailto:infoATaraDOTcz` + `onclick`, který `AT`/`DOT`
+přepisoval na znaky, a ve viditelném textu past `<span id="dummy">remove</span>`. Po
+zkopírování z toho vyšlo `inforemove@ara.cz`, bez JavaScriptu odkaz nefungoval a čtečka
+obrazovky přečetla i tu past — přitom `AT`/`DOT` obejde každý harvester, který si stránku
+otevře v bezhlavém prohlížeči. Cloudflare dělá totéž bez těchto následků a na všech
+stránkách naráz.
+
+**Kdyby to nestačilo**, další úroveň není lepší obfuskace, ale kontaktní formulář — Turnstile,
+rate limit a heuristika odkazů (`src/lib/comment-spam.ts`) i odesílání e-mailů přes SMTP
+už v projektu jsou, takže by adresa nemusela být na webu vůbec.
+
 ---
 
 ## Environment Variables
@@ -271,14 +305,15 @@ přepočet adres přes `pnpm fix:page-urls` a skloňování názvů míst přes
     účty za ověřené. (Ověřeno, že Payload staré účty bez příznaku neblokoval, ale příznak má být
     explicitní; skript je idempotentní.)
   - **Veřejný profil** (`/profil/<username>`, stejná adresa jako legacy web): hero s vlnkou
-    jako každá jiná stránka — výchozí **klidná mlhavá fotka** (konstanta `PROFILE_COVER_URL`
-    v `src/components/layout/profile/user-profile.tsx`; výměna = přepsání jedné Cloudinary
-    adresy) s dvojím jemným ztmavením (do středu kvůli jménu + shora pod hlavičku webu, jinak
+    jako každá jiná stránka — výchozí **klidná mlhavá fotka** (konstanta `DEFAULT_COVER_URL`
+    v `src/lib/default-cover.ts`; výměna = přepsání jedné Cloudinary adresy) s dvojím jemným
+    ztmavením (do středu kvůli jménu + shora pod hlavičku webu, jinak
     bílé menu leželo na světlé obloze). Než se fotka načte, překryje pozadí **rozmazaný náhled
-    téže fotky** (`PROFILE_COVER_BLUR`, 20 × 13 px, ~340 B přímo v HTML, přes `placeholder="blur"`
+    téže fotky** (`DEFAULT_COVER_BLUR`, 20 × 13 px, ~340 B přímo v HTML, přes `placeholder="blur"`
     v `StaticHeroImage`) — proto při načítání neproblikne holá barva; po výměně fotky je nutné
     náhled přegenerovat (příkaz je v komentáři u konstanty). Pod ním zůstává `bg-[#3b444f]`
-    jako u všech ostatních hlaviček.
+    jako u všech ostatních hlaviček. **Tutéž obálku dědí i statické stránky**, které v CMS
+    nemají vlastní obrázek (jinak by v heru zůstal holý tmavý pruh).
   - Identitu v hlavičce drží **jeden blok na ose stránky**: avatar (84 px), pod ním jméno
     a `@username`. Když uživatel nemá vyplněné jméno a příjmení, je jméno = uživatelské jméno
     (např. „TravelPortal.cz") a místo `@username` se vykreslí **tenká linka** jako u titulků
@@ -407,8 +442,41 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   - **Vlákna**: sebe-referenční pole `parentComment` (odpověď na jiný komentář). Zobrazují se s jednou úrovní odsazení + spojovací linkou; odpověď na odpověď spadne také pod kořen. Autor článku (shoda `author` s `createdBy`) má u svých komentářů štítek „autor".
   - **Vkládání z webu**: běží přes Server Action (`src/lib/comment-actions.ts`) a Local API s `overrideAccess: true` — kolekce má `create: isAdmin`, takže bezpečná pole (typ, stav, cíl, `parentComment`) vynucuje action. Tlačítko „Odpovědět" předá cíl → nové odpovědi mají skutečnou vazbu. Autor je anonymní (jen jméno); registrovaní autoři migrovaných komentářů se zobrazují přes virtuální `authorPublic` (bezpečná podmnožina — username + avatar).
   - **Anti-spam**: honeypot + rate-limit + heuristika odkazů, volitelně Cloudflare Turnstile (`src/lib/comment-spam.ts`, viz `TURNSTILE_*` proměnné výše).
-  - **Recenze na webu**: na stránkách kategorie **Turistický cíl** se pod obsahem zobrazuje sekce recenzí: lišta „Byl jsi zde? Ohodnoť to!" s hvězdičkovým vstupem a sbaleným formulářem, výpis recenzí (**nejnovější nahoře**, hvězdičky + „Recenzováno: dd.MM.yyyy", mikrodata schema.org/Review). Detail cíle má navíc **hodnocení v hero vedle názvu** (na mobilu pod ním; odkaz na `#recenze`), v pravém sloupci **praktické informace** (adresa, oficiální web, mapa s pinem cíle přes `MapLibreMap height`, autor — vzdušné legacy rozložení bez rámečku), pod recenzemi pás **„Co dalšího vidět…"** se sousedními cíli (`fetchTouristPointSiblings`, zobrazuje se při více než 2 sousedech) a vydává **JSON-LD `TouristAttraction` s `AggregateRating`** a recenzemi (hvězdičky ve výsledcích vyhledávání). Fotky v textu cíle mají stropovanou výšku (`poi-prose`). Spodní responzivní reklamní pruh (`LeaderboardAd`, legacy slot) se vykresluje na všech stránkách a článcích kromě homepage. Data načítá `fetchPageReviews` (`src/lib/payload.ts`, cache tag `page_reviews_<id>`), vkládání řeší Server Action `src/lib/review-actions.ts` (stejné anti-spam vrstvy jako komentáře; hodnocení 1–5 povinné), komponenty jsou v `src/components/features/reviews/`. Reklamní sloupec vpravo přepíná 300×250 / 300×600 podle počtu recenzí (jako legacy). Ve výpisu cílů na stránce místa („Co vidět…") se u každého cíle zobrazují vpravo vedle názvu hvězdičky (průměr zaokrouhlený na půl hvězdičky) s počtem recenzí — data dodává `fetchPageReviewStats` (jeden hromadný dotaz pro všechny cíle) — a pod názvem řádek s adresou (`detail.googleMapsAddress`) a oficiálním webem (`detail.website`); po rozbalení se vpravo u „Zobrazit méně" ukáže autor cíle (avatar + jméno z virtuálního `createdByPublic`, které se pro děti stránky tahá přes `PAGE_CHILDREN_SELECT`). Rozbalení cíle („Zobrazit více", klik na hodnocení, nebo kotva `#slug` v URL) ukáže pod textem i recenze cíle s formulářem přímo na stránce místa (`InlineReviews`): načítají se líně přes server action `getPageReviews` až po rozbalení, zobrazují se první 3 + „Zobrazit další" a formulář (vč. Turnstile) se otevírá až na kliknutí. Hvězdičky v liště „Byl jsi zde?" i u cílů bez recenzí („Ohodnoť jako první" vedle názvu) fungují jako přímý vstup — kliknutí otevře formulář s předvyplněným počtem hvězd (sdílená komponenta `StarInput`; plné šedé hvězdičky `StarRating` naopak jen zobrazují průměr).
+  - **Recenze na webu**: na stránkách kategorie **Turistický cíl** se pod obsahem zobrazuje sekce recenzí: lišta „Byl jsi zde? Ohodnoť to!" s hvězdičkovým vstupem a sbaleným formulářem, výpis recenzí (**nejnovější nahoře**, hvězdičky + „Recenzováno: dd.MM.yyyy", mikrodata schema.org/Review). Detail cíle má navíc **hodnocení v hero vedle názvu** (na mobilu pod ním; odkaz na `#recenze`), v pravém sloupci **praktické informace** (adresa, oficiální web, mapa s pinem cíle přes `MapLibreMap height`, autor — vzdušné legacy rozložení bez rámečku), pod recenzemi pás **„Co dalšího vidět…"** se sousedními cíli (`fetchTouristPointSiblings`, zobrazuje se při více než 2 sousedech) a vydává **JSON-LD `TouristAttraction` s `AggregateRating`** a recenzemi (hvězdičky ve výsledcích vyhledávání). Fotky v textu cíle mají stropovanou výšku (`poi-prose`). Spodní responzivní reklamní pruh (`LeaderboardAd`, legacy slot) se vykresluje na všech stránkách a článcích kromě homepage a statických stránek (viz Pages níže). Data načítá `fetchPageReviews` (`src/lib/payload.ts`, cache tag `page_reviews_<id>`), vkládání řeší Server Action `src/lib/review-actions.ts` (stejné anti-spam vrstvy jako komentáře; hodnocení 1–5 povinné), komponenty jsou v `src/components/features/reviews/`. Reklamní sloupec vpravo přepíná 300×250 / 300×600 podle počtu recenzí (jako legacy). Ve výpisu cílů na stránce místa („Co vidět…") se u každého cíle zobrazují vpravo vedle názvu hvězdičky (průměr zaokrouhlený na půl hvězdičky) s počtem recenzí — data dodává `fetchPageReviewStats` (jeden hromadný dotaz pro všechny cíle) — a pod názvem řádek s adresou (`detail.googleMapsAddress`) a oficiálním webem (`detail.website`); po rozbalení se vpravo u „Zobrazit méně" ukáže autor cíle (avatar + jméno z virtuálního `createdByPublic`, které se pro děti stránky tahá přes `PAGE_CHILDREN_SELECT`). Rozbalení cíle („Zobrazit více", klik na hodnocení, nebo kotva `#slug` v URL) ukáže pod textem i recenze cíle s formulářem přímo na stránce místa (`InlineReviews`): načítají se líně přes server action `getPageReviews` až po rozbalení, zobrazují se první 3 + „Zobrazit další" a formulář (vč. Turnstile) se otevírá až na kliknutí. Hvězdičky v liště „Byl jsi zde?" i u cílů bez recenzí („Ohodnoť jako první" vedle názvu) fungují jako přímý vstup — kliknutí otevře formulář s předvyplněným počtem hvězd (sdílená komponenta `StarInput`; plné šedé hvězdičky `StarRating` naopak jen zobrazují průměr).
   - Data se plní jednorázovým migračním skriptem `pnpm migrate:comments` z legacy MySQL databáze. Legacy web vlákna neměl — vazby odpovědí dopočítal `pnpm infer:replies` (kontextová analýza textů, `--apply` zapíše; ověřená mapa v `scripts/infer-comment-replies.ts`). V adminu lze `parentComment` kdykoliv ručně upravit.
+
+- **Pages — statické stránky** (`O nás`, `Reklama`, `Podmínky užívání webu`; kategorie
+  `Statická stránka`, odkazy z patičky):
+  - Zakládá je idempotentní `pnpm seed:footer` (`scripts/seed-footer-and-static-pages.ts`)
+    spolu s obsahem patičky.
+  - **Čtecí sloupec stojí na ose stránky.** Ostatní stránky mají vedle textu panel 340 px
+    (čas, kurz, obsah, reklama); statická stránka do něj nedává nic, takže se `<aside>` vůbec
+    nevykreslí a sloupec se vystředí (`centerColumn` v `MainContent`). **Rubriky zůstávají
+    vlevo** — pod textem jim začíná mřížka článků přes celou šířku, ke které se úvod zarovnává.
+  - Bez vlastní fotky v CMS hero dědí sdílenou **výchozí obálku** (viz `DEFAULT_COVER_URL`
+    u profilů výše) — dřív tam zůstával holý tmavý pruh.
+  - **Bez spodního reklamního pruhu.** Stránky jsou krátké, takže by `LeaderboardAd` skončil
+    jako nejvýraznější prvek pod pár odstavci — a na „Reklamě" by to byla reklama na stránce,
+    která reklamu prodává (výjimka je v `src/app/(frontend)/[...slug]/page.tsx`).
+  - **Sekce „Náš tým"** na `/o-nas` (`src/components/layout/page/team-section.tsx`) není
+    v textu stránky, ale skládá se z **živých dat profilů**: karta = fotka, jméno, `@username`
+    a tři počty příspěvků pod sebou, které vedou na kotvy profilu. Medailonek „o mně" na kartě
+    ZÁMĚRNĚ není (tři odstavce textu daly pod dvouvětý úvod blok vyšší než celá stránka)
+    a počty mají kratší popisky než profil („cílů" místo „turistických cílů"), protože tři
+    karty na řádku mají po ~210 px.
+    Pod tím řada tváří dřívějších přispěvatelů s odkazy na jejich profily. Kdo je „tým",
+    říká `TEAM_USERNAMES` v `src/lib/team.ts` (v kódu ZÁMĚRNĚ — sestava se mění raz za pár
+    let, zatímco obsah medailonku si každý autor spravuje sám ve svém profilu). Data dodává
+    `fetchTeamSection` (`src/lib/payload.ts`): počty jsou levné `payload.count`, řazení tváří
+    dvě agregace `GROUP BY` přes drizzle (payload.find by pro totéž prohnal afterRead
+    pipeline přes 2 400 stránek). Technické účty (`NON_PERSON_USERNAMES`) do poděkování
+    nepatří a do řady jdou jen lidé s fotkou.
+  - **Sloučení duplicitních účtů**: `pnpm merge:duplicate-user` (bez `--apply` jen vypíše plán)
+    přepíše autorství veškerého obsahu na ponechaný účet, doplní mu jméno/medailonek/avatar
+    z rušeného a rušený smaže. Přímým SQL v jedné transakci — `payload.update` nad
+    publikovanou stránkou by zakládal novou verzi a posunul `updatedAt`. Seznam sloupců
+    s autorstvím si skript ověřuje proti cizím klíčům, takže nová kolekce s `createdBy`
+    ho zastaví s chybou místo tichého osiření dat.
 
 - **Transactions (Feather transakce)**:
   - Interní účetní záznamy „pírek" (feather) přenesené z původního webu — čtení i správa jsou omezené pouze na administrátory.

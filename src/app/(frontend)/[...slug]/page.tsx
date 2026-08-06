@@ -8,6 +8,7 @@ import {
   pageHasArticlesBySlug,
 } from '@/lib/payload'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
+import { PageCategory } from '@/types/payload'
 import { isValidArticleParent } from '@/lib/utils'
 import { resolveSlugRoute } from '@/lib/resolve-route'
 import { Metadata } from 'next'
@@ -106,13 +107,18 @@ export default async function PageRoute({ params }: Props) {
   // NAD loading kostrou; tady jen vykreslíme obsah (notFound() zůstává jako
   // pojistka, kdyby se sem 404 dostal).
   const resolution = await resolveSlugRoute(fullSlug)
-  // Spodní reklamní pruh (legacy bottomAds) — na všech stránkách i článcích;
+  // Spodní reklamní pruh (legacy bottomAds) — na stránkách míst i článcích;
   // homepage je samostatná route, tam pruh záměrně není.
+  //
+  // VÝJIMKA: statické stránky (O nás, Reklama, Podmínky). Jsou krátké, takže
+  // pruh na nich končí jako nejvýraznější prvek pod pár odstavci — a na
+  // „Reklamě" by to byla reklama na stránce, která reklamu prodává. Na
+  // návštěvnosti těchto stránek se ztráta zobrazení neprojeví.
   if (resolution.kind === 'page')
     return (
       <>
         <Page page={resolution.page} />
-        <BottomAdStrip />
+        {resolution.page.category !== PageCategory.Staticka_stranka && <BottomAdStrip />}
       </>
     )
   if (resolution.kind === 'article')
