@@ -360,6 +360,14 @@ export interface HomepageInspiration {
   rubriky: InspirationLink[]
 }
 
+/** Denní výběr místa pro hero fotku a placeholder vyhledávání na homepage. */
+export interface HomepageHeroPlace {
+  title: string
+  imageUrl: string | null
+  /** Zarovnání hero fotky (CSS `object-position`), viz `featureImageStyleCss`. */
+  styleCss: string | null
+}
+
 export interface UserProfileData {
   /** ID účtu — potřebné jen k rozpoznání „tohle je můj profil" (tlačítko Upravit). */
   id: number

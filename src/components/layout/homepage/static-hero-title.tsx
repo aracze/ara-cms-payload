@@ -9,7 +9,15 @@ const POPULAR_DESTINATIONS = [
   { title: 'USA', href: '/usa' },
 ]
 
-export const StaticHeroTitle = ({ title }: { title: string }) => {
+export const StaticHeroTitle = ({
+  title,
+  placeholderExample,
+}: {
+  title: string
+  /** Název denně vylosovaného místa z hero fotky — nápověda v poli hledání
+   *  („Najdi si svůj cíl — třeba X…"). Bez místa se použije statický fallback. */
+  placeholderExample?: string | null
+}) => {
   return (
     <div className="relative z-[101] h-full flex flex-col items-center justify-center px-4">
       {/* Nadpis zůstává kvůli SEO a čtečkám obrazovky — vizuálně ho nese
@@ -28,7 +36,7 @@ export const StaticHeroTitle = ({ title }: { title: string }) => {
         />
 
         <div className="relative w-full">
-          <Search variant="homepage" />
+          <Search variant="homepage" placeholderExample={placeholderExample} />
         </div>
 
         <div className="relative mt-4 flex flex-wrap items-center justify-center gap-2">

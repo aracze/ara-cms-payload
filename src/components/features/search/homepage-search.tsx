@@ -5,10 +5,17 @@ import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
 
-export function HomepageSearch() {
+interface HomepageSearchProps {
+  /** Název denně vylosovaného místa z hero fotky — bez něj zůstává statický
+   *  fallback „Chorvatsko". */
+  placeholderExample?: string | null
+}
+
+export function HomepageSearch({ placeholderExample }: HomepageSearchProps = {}) {
   const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const placeholder = `Najdi si svůj cíl — třeba ${placeholderExample?.trim() || 'Chorvatsko'}…`
 
   const handleClear = () => {
     clearSearch()
@@ -42,7 +49,7 @@ export function HomepageSearch() {
         )}
         <input
           aria-label="Hledat na webu"
-          placeholder="Najdi si svůj cíl — třeba Chorvatsko…"
+          placeholder={placeholder}
           value={query}
           autoFocus={false}
           onChange={(e) => {
