@@ -2608,9 +2608,17 @@ async function fetchHomepageHeroPlaceUncached(): Promise<HomepageHeroPlace | nul
   )
   if (!doc) return null
 
+  // Kandidát prošel SQL filtrem na `featuredImage_image IS NOT NULL` (id
+  // relace na Media existuje), ale samotný Media dokument může být osamocený
+  // (smazaný) nebo bez URL — pak by šel fallback obrázek s title/zarovnáním
+  // z JINÉHO místa. Bez URL proto vracíme null, ať volající použije fallback
+  // pro všechny tři hodnoty najednou, ne jen pro obrázek.
+  const imageUrl = featuredImageUrl(doc)
+  if (!imageUrl) return null
+
   return {
     title: doc.title,
-    imageUrl: featuredImageUrl(doc),
+    imageUrl,
     styleCss: doc.featuredImage?.featureImageStyleCss ?? null,
   }
 }
