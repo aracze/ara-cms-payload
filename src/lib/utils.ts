@@ -69,7 +69,10 @@ export function getPayloadURL() {
  * URLs in the sitemap, canonical links, etc. Nastav `NEXT_PUBLIC_SITE_URL` v env.
  */
 export function getSiteURL() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.ara.cz').replace(/\/$/, '')
+  // Bez www — kanonická podoba webu je holá doména. Fallback se uplatní jen
+  // když proměnná chybí, ale i tak musí ukazovat tam co zbytek webu, jinak by
+  // sitemapa a kanonické odkazy tvrdily každý něco jiného.
+  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://ara.cz').replace(/\/$/, '')
 }
 
 export function richTextToPlainText(value: unknown): string {

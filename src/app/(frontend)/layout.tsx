@@ -14,6 +14,7 @@ import { sanitizeHeaderLogoSvg } from '@/lib/rich-text-html'
 import { Footer } from '@/components/layout/footer/footer'
 import { NavigationProgress } from '@/components/layout/navigation-progress'
 import { WebVitals } from '@/components/features/web-vitals'
+import { Analytics } from '@/components/features/analytics'
 import { fetchRootPages } from '@/lib/payload'
 import { getCurrentUser } from '@/lib/auth'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
@@ -90,6 +91,10 @@ export default async function RootLayout({
       className={`${openSans.variable} ${poppins.variable}`}
     >
       <body className="antialiased">
+        {/* Měření návštěvnosti se souhlasem. Jen v produkci — jinak by si vývoj
+            zanášel statistiky vlastními průchody. */}
+        {isProduction() && <Analytics />}
+
         {/* Skip link pro klávesnici/čtečky — skrytý, dokud nedostane fokus (Tab). */}
         <a
           href="#obsah"

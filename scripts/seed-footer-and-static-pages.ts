@@ -123,7 +123,7 @@ const O_NAS = doc([
     'Nápad na cestovatelský portál přišel už v roce 2011 a o dva roky později web Ara.cz vzlétl. Papoušek ara v sobě nese volnost, exotiku i dobrodružství — přesně jako cestování.',
   ),
   p(
-    'Od začátku chceme jedno: inspirovat a psát o cestování přehledně a čtivě, aby si každý odnesl z cest ten nejlepší zážitek.',
+    'Od začátku chceme inspirovat a psát o cestování čtivě a přehledně, aby si každý mohl odnést z cest ten nejlepší zážitek.',
   ),
 ])
 
@@ -257,11 +257,11 @@ const PODMINKY = doc([
 
   heading('Cookies a reklama'),
   p(
-    'Nezbytná cookie drží tvoje přihlášení; bez ní by přihlášení nefungovalo a souhlas pro ni zákon nevyžaduje. Provoz webu financujeme reklamou Google AdSense, která ukládá vlastní cookies a vyhodnocuje chování na webu. Ty se nastaví jen tehdy, když k nim dáš souhlas v liště při první návštěvě; souhlas můžeš kdykoli odvolat a bez něj se reklama zobrazuje neprofilovaná.',
+    'Nezbytná cookie drží tvoje přihlášení; bez ní by přihlášení nefungovalo a souhlas pro ni zákon nevyžaduje. Provoz webu financujeme reklamou Google AdSense, která ukládá vlastní cookies a vyhodnocuje chování na webu. Návštěvnost měříme přes Google Analytics, které si rovněž ukládá cookies. Reklamní ani analytické cookies se nenastaví dřív, než k nim dáš souhlas v liště při první návštěvě; souhlas můžeš kdykoli odvolat a bez něj se reklama zobrazuje neprofilovaná a návštěvnost se počítá jen anonymně, bez rozpoznání zařízení.',
   ),
   paragraph([
     textNode(
-      'Dáš-li souhlas, stává se Google Ireland Limited samostatným správcem takto získaných údajů a může je zpracovávat i mimo EU; podrobnosti jsou v jeho ',
+      'U reklamy i měření návštěvnosti se Google Ireland Limited stává samostatným správcem takto získaných údajů a může je zpracovávat i mimo EU; podrobnosti jsou v jeho ',
     ),
     linkNode('zásadách ochrany soukromí', 'https://policies.google.com/technologies/partner-sites'),
     textNode('.'),
