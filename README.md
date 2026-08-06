@@ -114,13 +114,25 @@ To build and run the production-optimized Docker image:
 > [!TIP]
 > This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
 
-### Ochrana e-mailu proti robotům — nastavuje se v Cloudflare, ne v kódu
+### Ochrana e-mailu proti robotům — řeší Cloudflare, ne kód
 
-⚠️ **Až budou stránky jet přes Cloudflare proxy, zapni Scrape Shield → Email Address
-Obfuscation** (dashboard → daná zóna → Scrape Shield). Cloudflare pak sám přepíše každý
-`mailto:` odkaz na `/cdn-cgi/l/email-protection#<hex>` a rozkóduje ho vlastním
-JavaScriptem, takže se adresa v HTML vůbec neobjeví. Dokud jde web na IP napřímo (testovací
-provoz), se nic nedeje.
+**Na zóně `ara.cz` je Scrape Shield → Email Address Obfuscation už ZAPNUTÝ** (ověřeno 6. 8. 2026: `https://ara.cz/kontakt` nemá v HTML `mailto:` ani samotnou adresu, odkaz vede na
+`/cdn-cgi/l/email-protection#<hex>`). Cloudflare přepisuje `mailto:` odkazy na hraně sítě
+a rozkóduje je až vlastním JavaScriptem v prohlížeči, takže se adresa do zdroje stránky
+vůbec nedostane. **Pro nový web to znamená, že není co dělat** — jakmile pojede na proxovaném
+záznamu téže zóny (oranžový obláček v DNS), platí to samo pro patičku i pro adresy v rich
+textu Reklamy a Podmínek.
+
+Tři věci, které je dobré vědět:
+
+- Testovací provoz jde na IP napřímo, mimo proxy, takže tam se nic nepřepisuje — to je
+  očekávané, ne rozbité.
+- Cloudflare přepisuje HTML **dokumenty**. Když návštěvník proklikává web (Next.js přechází
+  na klientu), přijde text Reklamy a Podmínek jako RSC payload a adresa se v DOM objeví
+  nezakódovaná. Pro účel „aby ji nesbírali roboti" to nevadí — harvestery si stahují
+  dokumenty, neproklikávají SPA.
+- Návštěvník s vypnutým JavaScriptem uvidí místo adresy `[email protected]`. To je cena
+  Cloudflare řešení; kdo chce psát, musí mít JS.
 
 **Proč to neřešíme v kódu:** adresa je kromě patičky i ve **rich textu** stránek Reklama
 a Podmínky užívání webu (dvakrát na každé), takže by obfuskace musela zasáhnout
