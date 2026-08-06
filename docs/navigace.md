@@ -142,15 +142,14 @@ a v administraci se dá kdykoli přepsat.
 
 Hromadné doplnění dělá seed + skript, ne ruční práce v adminu:
 
-```bash
-pnpm fix:declension -- --dry-run   # jen vypíše, co by se změnilo
-pnpm fix:declension               # ostrý běh
-```
+Tvary ~80 míst doplnil jednorázový doběh z ručně sestaveného seznamu
+(`scripts/fix-declension.ts` + `scripts/data/place-declension.json`); oboje je
+**odstraněné** a najdeš to v git historii. Doplňoval jen prázdná pole a kontroloval `title`,
+aby po přejmenování stránky nepřepsal cizí záznam.
 
-Tvary jsou v `scripts/data/place-declension.json` (v gitu, takže projdou review v PR).
-Skript doplní **jen prázdná pole**; existující hodnotu přepíše pouze u záznamu s
-`"overwrite": true`. Kontroluje i `title` — když se název stránky rozejde s seedem
-(např. po přejmenování), záznam přeskočí a nahlásí to. Je idempotentní.
+**U nových míst vyplň oba tvary v adminu** (`detail.genitive`, `detail.locative`) — bez nich
+se titulky podstránek skládají z názvu v prvním pádě („Ubytování Kodaň" místo
+„Ubytování v Kodani").
 
 ### Co je v menu (v tomto pořadí)
 
@@ -186,8 +185,7 @@ Skript doplní **jen prázdná pole**; existující hodnotu přepíše pouze u z
 | `src/components/layout/article/article.tsx`    | drobečky a kontext menu pro články                                 |
 | `src/components/layout/page/hero-section.tsx`  | vykreslení drobečků                                                |
 | `src/components/layout/page/subnavigation.tsx` | vykreslení sekundárního menu                                       |
-| `scripts/fix-page-urls.ts`                     | přepočet adres po změně pravidla                                   |
-| `scripts/fix-declension.ts` + `scripts/data/`  | hromadné doplnění skloňovaných tvarů názvů míst                    |
+| `src/lib/page-ancestors.ts`                    | dohledání předků (drobečky, kontext menu)                          |
 | `src/lib/page-title.ts`                        | skládání titulků podstránek z pádů kontextového místa              |
 
 ## 5. Známé odchylky od starého webu
