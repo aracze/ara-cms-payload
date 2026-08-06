@@ -97,6 +97,17 @@ export const Pages: CollectionConfig = {
           },
           fields: [
             {
+              name: 'stopChildPlacesHere',
+              label: 'Nerozbalovat podřazená místa (např. ostrov)',
+              type: 'checkbox',
+              defaultValue: false,
+              admin: {
+                condition: (data) => data?.category === 'Místo k navštívení',
+                description:
+                  'Když je zaškrtnuto, tahle stránka se u SVÉHO rodiče zobrazí jako jedna dlaždice v sekci „Co vidět", i když má vlastní podřazená místa (typicky ostrov).',
+              },
+            },
+            {
               type: 'row',
               fields: [
                 {
@@ -261,6 +272,17 @@ export const Pages: CollectionConfig = {
       },
       access: {
         update: ({ req: { user } }) => Boolean(user?.roles?.includes('admin')),
+      },
+    },
+    {
+      name: 'analyticsPageViews',
+      label: 'Zobrazení za 12 měsíců (GA4)',
+      type: 'number',
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description:
+          'Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".',
       },
     },
     {

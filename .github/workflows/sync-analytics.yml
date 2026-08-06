@@ -1,0 +1,19 @@
+name: Sync analytics
+
+# Denní sync návštěvnosti z Google Analytics 4 do pole `analyticsPageViews`
+# (endpoint /api/sync-analytics, viz src/endpoints/syncAnalytics.ts) — používá
+# se pro řazení v sekci „Co vidět". Žádné SSH/Docker — jde o prostý
+# autentizovaný HTTP požadavek na běžící produkci.
+on:
+  schedule:
+    - cron: '17 3 * * *' # denně ve 3:17 UTC, mimo špičku
+  workflow_dispatch: {} # umožní ruční spuštění z webu GitHubu
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zavolat /api/sync-analytics
+        run: |
+          curl -fsS -X POST "${{ secrets.SYNC_ANALYTICS_URL }}/api/sync-analytics" \
+            -H "X-Sync-Secret: ${{ secrets.ANALYTICS_SYNC_SECRET }}"

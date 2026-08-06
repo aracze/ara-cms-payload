@@ -16,6 +16,9 @@ const nextConfig = {
     '@payloadcms/db-postgres',
     'drizzle-orm',
     'pg',
+    // GA4 sync endpoint (gRPC/protobuf) — zabalené bundlerem stejně extrémně
+    // pomalé/zamrzávající jako jsdom výše.
+    '@google-analytics/data',
   ],
   experimental: {
     serverActions: {

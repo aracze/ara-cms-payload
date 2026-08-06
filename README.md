@@ -22,10 +22,7 @@ To spin up this project locally, follow these steps:
    ```
    > **Historický obsah** (místa, cíle, články, komentáře, avatary, pírka) je do databáze
    > přenesený ze starého Grails webu nad MySQL. Migrace je **dokončená a její skripty byly
-   > odstraněné** — čerstvý klon si data stáhne dumpem, ne doběhem. Kdyby bylo někdy nutné
-   > doběh zopakovat, skripty (`migrate:*`, `fix:*`, `backfill:*`, `infer:replies`) i proměnné
-   > `OLD_DB_*` najdeš v git historii; naposledy existovaly před větví
-   > `chore/uklid-migracnich-skriptu`.
+   > odstraněné** — čerstvý klon si data stáhne dumpem, ne doběhem. Viz „Stará databáze“ níž.
 5. **Access Admin**: Open `http://localhost:3000/admin` to create your first admin user.
 6. **Promote Admin (Required for DB dumps)**:
    ```bash
@@ -46,6 +43,39 @@ To spin up this project locally, follow these steps:
    - Upload a `pg_dump` custom-format file (the same format downloaded by the dump action).
    - The import uses `pg_restore` with `--clean --if-exists` and overwrites all existing data.
    - Requires the same Docker Compose access as the dump action.
+
+---
+
+## Stará databáze (Grails + MySQL) — co z ní zbývá vědět
+
+Migrace obsahu je dokončená a doběhy odstraněné, ale **stará databáze pořád existuje** a je
+jediný zdroj věcí, které se do nového webu nepřenesly: pírka a spolupráce jako systém,
+hodnocení afiliací, statistiky návštěv. Proto se hodí vědět, kudy se k ní dostat.
+
+**Připojení** — proměnné `OLD_DB_HOST` / `OLD_DB_PORT` / `OLD_DB_USER` / `OLD_DB_PASSWORD` /
+`OLD_DB_NAME`, popsané (zakomentované) v `.env.example`.
+
+**Znalost starého schématu** je na dvou místech a ani jedno není samozřejmé:
+
+| kde                             | co tam je                                                                                | pozor                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `grails/AI_MIGRATION_SOURCE.md` | architektura, doménový model, routování, chování avatarů (~290 řádků)                    | **v repu je** (výjimka v `.gitignore`); zbytek `grails/` zůstává jen lokálně |
+| git historie                    | smazané skripty se skutečnými dotazy: názvy tabulek, mapování polí, ošetření zvláštností | smazal je commit `b745d2c`                                                   |
+
+Konkrétní dotaz do historie:
+
+```bash
+git log --diff-filter=D --name-only -- 'scripts/*'   # co a kdy zmizelo
+git show b745d2c^:scripts/migrate-pages.ts           # přečíst kterýkoli skript
+git show b745d2c^:scripts/migrate-comments.ts
+```
+
+> **Znalostní báze je od 6. 8. 2026 součástí repa**, protože ležet na jednom disku bylo
+> riziko — je to jediný souvislý popis toho, jak starý web fungoval. Tajemství neobsahuje
+> (zkontrolováno). **Sám legacy kód v repu ale není**: `.gitignore` vylučuje `/grails/*`
+> a vyjímá z toho jen ten jeden soubor. Pozor na tvar toho pravidla — vyjmout soubor
+> z ignorované složky jde jen tak, že se ignoruje její OBSAH (`/grails/*`), ne složka
+> samotná (`/grails/`); do vyloučené složky git vůbec nekoukne a výjimku by přeskočil.
 
 ---
 

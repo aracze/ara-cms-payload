@@ -303,6 +303,10 @@ export interface Page {
     [k: string]: unknown;
   } | null;
   detail?: {
+    /**
+     * Když je zaškrtnuto, tahle stránka se u SVÉHO rodiče zobrazí jako jedna dlaždice v sekci „Co vidět", i když má vlastní podřazená místa (typicky ostrov).
+     */
+    stopChildPlacesHere?: boolean | null;
     googleMapsAddress?: string | null;
     latitude?: string | null;
     longitude?: string | null;
@@ -334,6 +338,10 @@ export interface Page {
   };
   slug?: string | null;
   legacyPageId?: number | null;
+  /**
+   * Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".
+   */
+  analyticsPageViews?: number | null;
   createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
@@ -744,6 +752,7 @@ export interface PagesSelect<T extends boolean = true> {
   detail?:
     | T
     | {
+        stopChildPlacesHere?: T;
         googleMapsAddress?: T;
         latitude?: T;
         longitude?: T;
@@ -772,6 +781,7 @@ export interface PagesSelect<T extends boolean = true> {
   comments?: T;
   slug?: T;
   legacyPageId?: T;
+  analyticsPageViews?: T;
   createdBy?: T;
   parent?: T;
   fullSlug?: T;
