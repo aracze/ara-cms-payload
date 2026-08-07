@@ -60,8 +60,14 @@ node_modules/
 # database & sessions
 *.session.sql
 
-# legacy Grails project (jen podklad pro migraci, nenasazuje se)
-/grails/
+# legacy Grails project (jen podklad pro migraci, nenasazuje se).
+# Výjimka: znalostní bázi o starém webu chceme v repu — je to jediný souvislý
+# popis toho, jak Grails web fungoval, a ležet na jednom disku je riziko.
+# POZOR na tvar: vyjmout jde jen soubor z ignorované SLOŽKY, ne ze složky samotné
+# — proto `/grails/*` (obsah), ne `/grails/`. S druhým tvarem git tu výjimku
+# ignoruje, protože do vyloučené složky vůbec nekoukne.
+/grails/*
+!/grails/AI_MIGRATION_SOURCE.md
 
 
 # Databázové dumpy (obsahují produkční data) — nikdy necommitovat

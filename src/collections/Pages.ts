@@ -264,6 +264,24 @@ export const Pages: CollectionConfig = {
       },
     },
     {
+      name: 'analyticsPageViews',
+      label: 'Zobrazení za 12 měsíců (GA4)',
+      type: 'number',
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description:
+          'Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".',
+      },
+      // admin.readOnly chrání jen formulář v adminu, ne API — bez field-level
+      // access by editor mohl hodnotu přepsat přes REST/Local API a ovlivnit
+      // řazení. Sync endpoint (syncAnalytics.ts) píše přímo SQL, obchází
+      // Payload access stejně jako ostatní hooky, takže mu tohle nevadí.
+      access: {
+        update: ({ req: { user } }) => Boolean(user?.roles?.includes('admin')),
+      },
+    },
+    {
       name: 'createdBy',
       label: 'Autor',
       type: 'relationship',
@@ -328,6 +346,18 @@ export const Pages: CollectionConfig = {
       defaultValue: true,
       admin: {
         position: 'sidebar',
+      },
+    },
+    {
+      name: 'stopDisplayingChildPlaces',
+      label: 'Stop Displaying Child Places',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        condition: (data) => data?.category === 'Místo k navštívení',
+        description:
+          'Pro zobrazení vyššího rodiče, než je ten nejmenší. Například ostrov Zakynthos se zobrazí pro Řecko, ačkoliv existují ještě na ostrově další místa a cíle.',
       },
     },
     {

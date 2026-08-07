@@ -66,6 +66,12 @@ export interface PageChild {
   detail?: GeneratedPage['detail']
   /** Bezpečný veřejný autor (virtuální pole) — výpis cílů zobrazuje avatar + jméno. */
   createdByPublic?: Page['createdByPublic']
+  /** Zobrazení za 12 měsíců (GA4) — řazení v sekci „Co vidět" (resolvePlacesToVisit). */
+  analyticsPageViews?: number | null
+  /** Ostrov apod. — u rodiče se nerozbaluje na vlastní podřazená místa (resolvePlacesToVisit). */
+  stopDisplayingChildPlaces?: boolean | null
+  /** Jen pro seskupení podle rodiče v resolvePlacesToVisit (dávkové BFS). */
+  parent?: number | { id: number } | null
 }
 
 export interface RichTextRoot {
@@ -132,6 +138,12 @@ export interface Page {
   children: {
     docs: PageChild[]
   }
+  /**
+   * Sekce „Co vidět" — rekurzivně vyřešený seznam míst a cílů (viz
+   * `resolvePlacesToVisitUncached` v `src/lib/payload.ts`), NE prosté přímé
+   * děti (`children`). Ty zůstávají pro menu/taby s ostatními kategoriemi.
+   */
+  resolvedPlacesToVisit?: PageChild[]
   articles: Article[]
   /**
    * Řetězec předků z CMS (pole `breadcrumbs` pluginu nested-docs) — od nejvyšší
@@ -157,6 +169,8 @@ export interface Page {
     name?: string | null
     avatar?: StrapiMedia | null
   } | null
+  /** Bez rodiče = kontinent (root „Místo k navštívení") — viz resolvePlacesToVisit. */
+  parent?: number | { id: number } | null
 }
 
 export interface PagesResponse {

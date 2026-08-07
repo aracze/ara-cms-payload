@@ -133,6 +133,9 @@ const PAGE_SCALAR_SELECT = {
   // overrideAccess: true). Stejný vzor jako u článků. Ruční dohled přes
   // findByID by tu selhal — web čte anonymně a Users.read = isAdminOrSelf.
   createdByPublic: true,
+  // Bez rodiče = kontinent (root „Místo k navštívení") → resolvePlacesToVisit
+  // pro něj ukáže jen přímé děti, nesestupuje do hloubky (viz níže).
+  parent: true,
 } as const
 
 const PAGE_CHILDREN_SELECT = {
@@ -147,6 +150,12 @@ const PAGE_CHILDREN_SELECT = {
   // Virtuální createdByPublic potřebuje createdBy v datech, jinak vrací null.
   createdBy: true,
   createdByPublic: true,
+  // Řazení v sekci „Co vidět" (resolvePlacesToVisit) — sync z GA4, viz endpoints/syncAnalytics.ts.
+  analyticsPageViews: true,
+  // Ostrov apod. — nerozbalovat vlastní podřazená místa u rodiče (resolvePlacesToVisit).
+  stopDisplayingChildPlaces: true,
+  // Potřeba jen v resolvePlacesToVisit (dávkové BFS) pro seskupení dětí podle rodiče.
+  parent: true,
 } as const
 
 const PAGE_ARTICLES_SELECT = {
@@ -392,6 +401,112 @@ function relationId(value: unknown): number | string | null {
   return null
 }
 
+const isTouristPointCategory = (category: string | undefined) =>
+  category?.trim() === PageCategory.Turisticky_cil
+
+const isPlaceListingCategory = (category: string | undefined) => {
+  const trimmed = category?.trim()
+  return trimmed === PageCategory.Misto_k_navstiveni || trimmed === PageCategory.Mista
+}
+
+// Pojistka proti chybě v datech (např. rodičovský cyklus) — v praxi nejhlubší
+// zjištěná hierarchie „Místo k navštívení" má ~6 úrovní.
+const MAX_PLACES_TO_VISIT_DEPTH = 10
+
+/**
+ * Sekce „Co vidět" nezobrazuje jen přímé děti stránky, ale rekurzivně sestupuje
+ * až k nejbližším místům, která už sama nemají další podřazená místa (San
+ * Francisco pod USA, ne Kalifornie) — legacy `PageService.findDestinationPages`.
+ * Turistické cíle přiřazené přímo pod „průchozí" místo (má vlastní podřazená
+ * místa) se do stejného seznamu přimíchají (bublají).
+ *
+ * Dávkové BFS po úrovních (ne dotaz na stránku jako legacy rekurze) — každá
+ * úroveň stromu = jeden dotaz `parent IN [...]`.
+ *
+ * `page` samo o sobě se v seznamu nikdy neobjeví: jeho vlastní turistické cíle
+ * bublají VŽDY (bez ohledu na to, jestli má i další místa), jeho vlastní místa
+ * jsou startovní frontier k rozbalení — přesně jako u kterékoli jiné „průchozí"
+ * úrovně o patro níž.
+ *
+ * Kontinent (`!page.parent`, root „Místo k navštívení") je výjimka: zobrazí jen
+ * přímé děti, bez sestupu do hloubky (u kontinentu nedává smysl skákat na města).
+ */
+// Řazení podle návštěvnosti (GA4, klouzavých 12 měsíců) — sync viz
+// endpoints/syncAnalytics.ts. Stránky bez dat (nové/neaktualizované) na konec,
+// mezi sebou abecedně.
+function sortByAnalyticsPageViews(pages: PageChild[]): PageChild[] {
+  return pages.sort((a, b) => {
+    const viewsDiff = (b.analyticsPageViews ?? 0) - (a.analyticsPageViews ?? 0)
+    if (viewsDiff !== 0) return viewsDiff
+    return a.title.localeCompare(b.title, 'cs')
+  })
+}
+
+async function resolvePlacesToVisitUncached(
+  payload: Payload,
+  page: { id: RawPayloadPage['id']; parent?: unknown },
+  directChildren: PageChild[],
+): Promise<PageChild[]> {
+  if (!page.parent) {
+    return sortByAnalyticsPageViews(
+      directChildren.filter(
+        (c) => isPlaceListingCategory(c.category) || isTouristPointCategory(c.category),
+      ),
+    )
+  }
+
+  const result: PageChild[] = []
+  result.push(...directChildren.filter((c) => isTouristPointCategory(c.category)))
+  let frontier: PageChild[] = directChildren.filter((c) => isPlaceListingCategory(c.category))
+
+  for (let depth = 0; frontier.length > 0 && depth < MAX_PLACES_TO_VISIT_DEPTH; depth++) {
+    const res = (await payload.find({
+      overrideAccess: false,
+      collection: 'pages',
+      where: { parent: { in: frontier.map((n) => n.id) } },
+      limit: 0,
+      pagination: false,
+      depth: 0,
+      select: PAGE_CHILDREN_SELECT,
+      joins: false,
+    })) as unknown as PayloadDocsResponse<PageChild & { parent?: unknown }>
+
+    const childrenByParentId = new Map<string, PageChild[]>()
+    for (const child of res.docs || []) {
+      const parentId = String(relationId(child.parent))
+      const list = childrenByParentId.get(parentId) ?? []
+      list.push(child)
+      childrenByParentId.set(parentId, list)
+    }
+
+    const nextFrontier: PageChild[] = []
+    for (const node of frontier) {
+      const children = childrenByParentId.get(String(node.id)) ?? []
+      const placeChildren = children.filter((c) => isPlaceListingCategory(c.category))
+
+      if (node.stopDisplayingChildPlaces) {
+        result.push(node)
+        continue
+      }
+      if (placeChildren.length === 0) {
+        result.push(node)
+        continue
+      }
+      nextFrontier.push(...placeChildren)
+      result.push(...children.filter((c) => isTouristPointCategory(c.category)))
+    }
+    frontier = nextFrontier
+  }
+
+  // Bezpečnostní limit hloubky přerušil strom dřív, než se stihla vyhodnotit
+  // poslední úroveň (leaf/stop/průchozí) — nezahazovat ji, zobrazit jako
+  // dlaždice tak, jak je (v praxi se nejhlubší zjištěná hierarchie zastaví
+  // hluboko pod limitem, tohle je jen pojistka).
+  result.push(...frontier)
+
+  return sortByAnalyticsPageViews(result)
+}
+
 async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { pages: Page[] } }> {
   const payload = await getDb()
 
@@ -434,20 +549,25 @@ async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { 
     return { data: { pages: [] } }
   }
 
-  const articlesRes = (await payload.find({
-    overrideAccess: false,
-    collection: 'articles',
-    where: {
-      or: [{ mainPage: { equals: raw.id } }, { pages: { in: [raw.id] } }],
-    },
-    limit: 100,
-    // depth 0: mainPage stačí jako id (třídění přes relationId) a obrázky
-    // karet dořeší enrichFeaturedImages. depth 1 by populoval mainPage jako
-    // celé pages dokumenty VČETNĚ vyhodnocení jejich joinů (sekundy navíc).
-    depth: 0,
-    select: PAGE_ARTICLES_SELECT,
-    joins: false,
-  })) as unknown as PayloadDocsResponse<Article>
+  const [articlesRes, placesToVisit] = await Promise.all([
+    payload.find({
+      overrideAccess: false,
+      collection: 'articles',
+      where: {
+        or: [{ mainPage: { equals: raw.id } }, { pages: { in: [raw.id] } }],
+      },
+      limit: 100,
+      // depth 0: mainPage stačí jako id (třídění přes relationId) a obrázky
+      // karet dořeší enrichFeaturedImages. depth 1 by populoval mainPage jako
+      // celé pages dokumenty VČETNĚ vyhodnocení jejich joinů (sekundy navíc).
+      depth: 0,
+      select: PAGE_ARTICLES_SELECT,
+      joins: false,
+    }) as unknown as Promise<PayloadDocsResponse<Article>>,
+    // Sekce „Co vidět" — rekurzivně vyřešený seznam (místa i cíle), NE prosté
+    // přímé děti. Viz resolvePlacesToVisitUncached výše.
+    resolvePlacesToVisitUncached(payload, raw, childrenRes.docs || []),
+  ])
 
   // Roztřídění článků: primární (mainPage = tato stránka) první — stejné
   // pořadí jako primaryArticles/secondaryArticles joiny.
@@ -466,19 +586,23 @@ async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { 
     secondaryArticles: { docs: secondary },
   })
 
-  const [enrichedPageArr, enrichedArticles, enrichedChildren, enrichedText] = await Promise.all([
-    enrichFeaturedImages([match]),
-    enrichFeaturedImages(match.articles),
-    enrichFeaturedImages(match.children.docs),
-    // Obrázky v těle stránky (contentImage bloky) — depth 0 je nepopuluje.
-    enrichRichTextImages((match as { text?: unknown }).text),
-  ])
+  const [enrichedPageArr, enrichedArticles, enrichedChildren, enrichedPlacesToVisit, enrichedText] =
+    await Promise.all([
+      enrichFeaturedImages([match]),
+      enrichFeaturedImages(match.articles),
+      enrichFeaturedImages(match.children.docs),
+      // Místa/cíle „přibublaná" ze zanoření nejsou přímé děti — vlastní enrichment.
+      enrichFeaturedImages(placesToVisit),
+      // Obrázky v těle stránky (contentImage bloky) — depth 0 je nepopuluje.
+      enrichRichTextImages((match as { text?: unknown }).text),
+    ])
 
   // createdByPublic teče přímo z virtuálního pole (viz PAGE_SCALAR_SELECT) skrz
   // normalizePage → enrichFeaturedImages (obojí pole zachovává spreadem).
   const enrichedPage = enrichedPageArr[0] as Page
   enrichedPage.articles = enrichedArticles
   enrichedPage.children = { docs: enrichedChildren }
+  enrichedPage.resolvedPlacesToVisit = enrichedPlacesToVisit
   ;(enrichedPage as { text?: unknown }).text = enrichedText
 
   return {

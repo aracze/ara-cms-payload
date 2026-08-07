@@ -40,6 +40,7 @@ import { Footer } from './globals/Footer'
 import { isHttpsUrl, publicBaseUrlOptional } from './lib/public-url'
 import { dbDumpEndpoint } from './endpoints/dbDump'
 import { dbImportEndpoint } from './endpoints/dbImport'
+import { syncAnalyticsEndpoint } from './endpoints/syncAnalytics'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -156,7 +157,7 @@ export default buildConfig({
     prodMigrations: process.env.PAYLOAD_RUN_MIGRATIONS === 'true' ? migrations : undefined,
   }),
   sharp,
-  endpoints: [dbDumpEndpoint, dbImportEndpoint],
+  endpoints: [dbDumpEndpoint, dbImportEndpoint, syncAnalyticsEndpoint],
   plugins: [
     nestedDocsPlugin({
       collections: ['pages'],

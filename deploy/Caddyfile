@@ -1,0 +1,28 @@
+# Reverzní proxy před aplikací — ukončuje TLS a předává na kontejner cms.
+# Na server patří jako /opt/aracze/Caddyfile (compose ho mountuje read-only).
+#
+# PROČ TU JE: aplikace sama mluví jen HTTP. Dokud byla vystavená napřímo na
+# portu 80, musel být v Cloudflare režim Full, který se sice k originu připojí
+# přes HTTPS, ale certifikát NEOVĚŘUJE. S touhle proxy může být Full (strict),
+# který ověřuje.
+#
+# CERTIFIKÁT: Cloudflare Origin CA, vystavený v Cloudflare (SSL/TLS → Origin
+# Server), platný do roku 2041 a NEobnovuje se. Leží v /opt/aracze/certs jako
+# origin.pem + origin.key (klíč musí mít práva 600). Do gitu NEPATŘÍ.
+#
+# Důvěřuje mu POUZE Cloudflare. Když se na origin půjde přes https napřímo
+# (mimo Cloudflare), prohlížeč ohlásí neznámou autoritu — to je záměr, na
+# server se nemá chodit jinudy. Ověřit se dá proti kořenové CE Cloudflare:
+#   curl --resolve ara.cz:443:<IP> --cacert origin_ca_rsa_root.pem https://ara.cz
+
+ara.cz, www.ara.cz {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+	reverse_proxy cms:3000
+}
+
+# Přístup přes holou IP, dokud se nepřepne doména. Adresa je uvedená výslovně,
+# aby nevznikl spor s bloky výš (u nepojmenovaného :80 by Caddy nevěděl, který
+# blok použít pro ara.cz na portu 80). Po přepnutí domény lze smazat.
+http://217.154.225.117 {
+	reverse_proxy cms:3000
+}

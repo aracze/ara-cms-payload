@@ -6,6 +6,7 @@ import { richTextToHtml } from '@/lib/rich-text-html'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
 import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
 import { PlaceCardImage } from './place-card-image'
+import { AnalyticsDebugBadge } from './analytics-debug-badge'
 import type { PageReviewStats } from '@/lib/payload'
 
 /**
@@ -36,6 +37,11 @@ interface PlacesToVisitProps {
   parentLocative?: string | null
   /** Souhrny recenzí dětí (id → počet + průměr) pro hvězdičky ve výpisu cílů */
   reviewStats?: Record<number, PageReviewStats>
+  /**
+   * Jen pro přihlášeného admina (viz `currentUser?.isAdmin` v page.tsx) — ukáže
+   * počet zobrazení z GA4 na dlaždicích, ať je vidět, podle čeho se řadí.
+   */
+  showAnalyticsDebug?: boolean
 }
 
 function getFullHtml(text: string | RichTextRoot | null | undefined): string {
@@ -65,6 +71,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
   imageUrlMap,
   parentLocative,
   reviewStats,
+  showAnalyticsDebug = false,
 }) => {
   const placeCategories = [
     PageCategory.Misto_k_navstiveni,
@@ -122,13 +129,19 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
           {/* Place cards or tourist point articles */}
           <div className={hasMap ? 'w-full lg:w-[56%]' : 'w-full'}>
             {isSuperordinate ? (
-              <SuperordinateGrid places={places} imageUrlMap={imageUrlMap} hasMap={!!hasMap} />
+              <SuperordinateGrid
+                places={places}
+                imageUrlMap={imageUrlMap}
+                hasMap={!!hasMap}
+                showAnalyticsDebug={showAnalyticsDebug}
+              />
             ) : (
               <TouristPointList
                 places={places}
                 imageUrlMap={imageUrlMap}
                 reviewStats={reviewStats}
                 turnstileSiteKey={getTurnstileSiteKey()}
+                showAnalyticsDebug={showAnalyticsDebug}
               />
             )}
           </div>
@@ -161,10 +174,12 @@ function SuperordinateGrid({
   places,
   imageUrlMap,
   hasMap,
+  showAnalyticsDebug,
 }: {
   places: PageChild[]
   imageUrlMap?: Map<number | string, string>
   hasMap: boolean
+  showAnalyticsDebug?: boolean
 }) {
   return (
     <div
@@ -203,6 +218,11 @@ function SuperordinateGrid({
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
                 </svg>
               </div>
+              {showAnalyticsDebug && (
+                <div className="absolute top-3 right-3">
+                  <AnalyticsDebugBadge views={place.analyticsPageViews ?? 0} />
+                </div>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <h3 className="text-lg font-bold text-white leading-tight drop-shadow-md">
@@ -223,11 +243,13 @@ function TouristPointList({
   imageUrlMap,
   reviewStats,
   turnstileSiteKey,
+  showAnalyticsDebug,
 }: {
   places: PageChild[]
   imageUrlMap?: Map<number | string, string>
   reviewStats?: Record<number, PageReviewStats>
   turnstileSiteKey?: string | null
+  showAnalyticsDebug?: boolean
 }) {
   return (
     <div className="divide-y divide-gray-100">
@@ -256,6 +278,7 @@ function TouristPointList({
               address={place.detail?.googleMapsAddress ?? null}
               websiteUrl={place.detail?.website ?? null}
               author={touristPointAuthor(place)}
+              analyticsViews={showAnalyticsDebug ? (place.analyticsPageViews ?? 0) : null}
             />
           </div>
         )

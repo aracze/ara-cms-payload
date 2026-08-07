@@ -334,10 +334,18 @@ export interface Page {
   };
   slug?: string | null;
   legacyPageId?: number | null;
+  /**
+   * Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".
+   */
+  analyticsPageViews?: number | null;
   createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
   includeInChildUrlPaths?: boolean | null;
+  /**
+   * Pro zobrazení vyššího rodiče, než je ten nejmenší. Například ostrov Zakynthos se zobrazí pro Řecko, ačkoliv existují ještě na ostrově další místa a cíle.
+   */
+  stopDisplayingChildPlaces?: boolean | null;
   breadcrumbs?:
     | {
         doc?: (number | null) | Page;
@@ -772,10 +780,12 @@ export interface PagesSelect<T extends boolean = true> {
   comments?: T;
   slug?: T;
   legacyPageId?: T;
+  analyticsPageViews?: T;
   createdBy?: T;
   parent?: T;
   fullSlug?: T;
   includeInChildUrlPaths?: T;
+  stopDisplayingChildPlaces?: T;
   breadcrumbs?:
     | T
     | {

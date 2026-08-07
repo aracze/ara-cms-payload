@@ -29,6 +29,7 @@ import {
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
+import { getCurrentUser } from '@/lib/auth'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import type { ReviewPublic } from '@/types/payload'
@@ -44,20 +45,25 @@ const exchangeRateCategories: PageCategory[] = [
 
 export const Page = async ({ page }: { page: PayloadPage }) => {
   const pageChildren = page.children?.docs ?? []
+  // Sekce „Co vidět" — rekurzivně vyřešený seznam (místa i cíle, viz
+  // resolvePlacesToVisitUncached), NE `pageChildren` (ty zůstávají pro menu/taby
+  // s ostatními kategoriemi — Praktické informace, Doprava...).
+  const placesToVisit = page.resolvedPlacesToVisit ?? []
 
   // Nezávislé dotazy běží PARALELNĚ — sekvenční čekání (ancestors → menu →
   // kurz → obrázky) sčítalo ~0,3 s režii CMS za každý dotaz. React cache()
   // dedupuje sdílené ancestor fetche uvnitř větví.
-  const childImageIdsEarly = pageChildren
+  const childImageIdsEarly = placesToVisit
     .map<number | null>((c) => {
       const imgField = c.featuredImage?.image
       return typeof imgField === 'number' ? imgField : null
     })
     .filter((id): id is number => id !== null)
 
-  const [rootPage, imageUrlMap] = await Promise.all([
+  const [rootPage, imageUrlMap, currentUser] = await Promise.all([
     fetchRootPage(page),
     fetchMediaUrlsByIds(childImageIdsEarly),
+    getCurrentUser(),
   ])
   const safeRootPage = rootPage ?? page
 
@@ -81,8 +87,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       ? fetchPageReviews(Number(page.id))
       : Promise.resolve(null)
   // Souhrny recenzí dětí-cílů (hvězdičky + počet ve výpisu „Co vidět…") —
-  // jeden hromadný dotaz pro všechny cíle.
-  const touristPointChildIds = pageChildren
+  // jeden hromadný dotaz pro všechny cíle (vč. cílů „přibublaných" ze zanoření).
+  const touristPointChildIds = placesToVisit
     .filter((c) => c.category?.trim() === PageCategory.Turisticky_cil)
     .map((c) => Number(c.id))
     .filter((id) => Number.isInteger(id))
@@ -218,8 +224,9 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   }
 
   // Build a map from child page ID → image URL (imageUrlMap načteno paralelně výše)
+  // — jen pro PlacesToVisit, proto ze `placesToVisit`, ne `pageChildren`.
   const childImageUrlMap = new Map<number | string, string>()
-  for (const child of pageChildren) {
+  for (const child of placesToVisit) {
     const imgField = child.featuredImage?.image
     const imgId = typeof imgField === 'number' ? imgField : null
     if (imgId && imageUrlMap.has(imgId)) {
@@ -369,14 +376,15 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         )}
 
         {/* 3. PLACES TO VISIT SECTION */}
-        {pageChildren.length > 0 && (
+        {placesToVisit.length > 0 && (
           <PlacesToVisit
-            pageChildren={pageChildren}
+            pageChildren={placesToVisit}
             mapCenter={mapCenter}
             mapZoom={mapZoom}
             imageUrlMap={childImageUrlMap}
             parentLocative={page.detail?.locative ?? null}
             reviewStats={reviewStats}
+            showAnalyticsDebug={currentUser?.isAdmin ?? false}
           />
         )}
 
