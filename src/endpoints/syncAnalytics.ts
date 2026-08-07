@@ -76,6 +76,13 @@ async function writePageViews(
   const entries = [...viewsByFullSlug.entries()]
 
   return db.drizzle.transaction(async (tx) => {
+    // Serializace proti souběhu: curl v cronu má --retry, takže při timeoutu
+    // klienta (server ještě dobíhá) může dorazit druhý běh současně s prvním.
+    // Advisory lock zajistí, že druhá transakce počká, než první doběhne celá
+    // (reset i re-apply) — jinak by druhý reset mohl přepsat rozpracovaný zápis
+    // prvního běhu. Auto-uvolní se s koncem transakce.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('aracze:sync-analytics'))`)
+
     await tx.execute(sql`UPDATE pages SET analytics_page_views = 0`)
 
     for (let i = 0; i < entries.length; i += batchSize) {
