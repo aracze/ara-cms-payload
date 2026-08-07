@@ -9,11 +9,17 @@ on:
     - cron: '17 3 * * *' # denně ve 3:17 UTC, mimo špičku
   workflow_dispatch: {} # umožní ruční spuštění z webu GitHubu
 
+concurrency:
+  group: sync-analytics
+  cancel-in-progress: false # ať se souběžný ruční běh nezruší uprostřed zápisu
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Zavolat /api/sync-analytics
         run: |
           curl -fsS -X POST "${{ secrets.SYNC_ANALYTICS_URL }}/api/sync-analytics" \
-            -H "X-Sync-Secret: ${{ secrets.ANALYTICS_SYNC_SECRET }}"
+            -H "X-Sync-Secret: ${{ secrets.ANALYTICS_SYNC_SECRET }}" \
+            --connect-timeout 10 --max-time 120 --retry 2 --retry-delay 5

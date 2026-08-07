@@ -284,6 +284,13 @@ export const Pages: CollectionConfig = {
         description:
           'Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".',
       },
+      // admin.readOnly chrání jen formulář v adminu, ne API — bez field-level
+      // access by editor mohl hodnotu přepsat přes REST/Local API a ovlivnit
+      // řazení. Sync endpoint (syncAnalytics.ts) píše přímo SQL, obchází
+      // Payload access stejně jako ostatní hooky, takže mu tohle nevadí.
+      access: {
+        update: ({ req: { user } }) => Boolean(user?.roles?.includes('admin')),
+      },
     },
     {
       name: 'createdBy',

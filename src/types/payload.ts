@@ -66,8 +66,6 @@ export interface PageChild {
   detail?: GeneratedPage['detail']
   /** Bezpečný veřejný autor (virtuální pole) — výpis cílů zobrazuje avatar + jméno. */
   createdByPublic?: Page['createdByPublic']
-  /** Ostrov apod. — u rodiče se nerozbaluje na vlastní podřazená místa (resolvePlacesToVisit). */
-  stopChildPlacesHere?: boolean | null
   /** Zobrazení za 12 měsíců (GA4) — řazení v sekci „Co vidět" (resolvePlacesToVisit). */
   analyticsPageViews?: number | null
   /** Jen pro seskupení podle rodiče v resolvePlacesToVisit (dávkové BFS). */

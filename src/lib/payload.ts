@@ -150,8 +150,6 @@ const PAGE_CHILDREN_SELECT = {
   // Virtuální createdByPublic potřebuje createdBy v datech, jinak vrací null.
   createdBy: true,
   createdByPublic: true,
-  // Ostrov apod. — nerozbalovat vlastní podřazená místa u rodiče (resolvePlacesToVisit).
-  stopChildPlacesHere: true,
   // Řazení v sekci „Co vidět" (resolvePlacesToVisit) — sync z GA4, viz endpoints/syncAnalytics.ts.
   analyticsPageViews: true,
   // Potřeba jen v resolvePlacesToVisit (dávkové BFS) pro seskupení dětí podle rodiče.
@@ -431,14 +429,27 @@ const MAX_PLACES_TO_VISIT_DEPTH = 10
  * Kontinent (`!page.parent`, root „Místo k navštívení") je výjimka: zobrazí jen
  * přímé děti, bez sestupu do hloubky (u kontinentu nedává smysl skákat na města).
  */
+// Řazení podle návštěvnosti (GA4, klouzavých 12 měsíců) — sync viz
+// endpoints/syncAnalytics.ts. Stránky bez dat (nové/neaktualizované) na konec,
+// mezi sebou abecedně.
+function sortByAnalyticsPageViews(pages: PageChild[]): PageChild[] {
+  return pages.sort((a, b) => {
+    const viewsDiff = (b.analyticsPageViews ?? 0) - (a.analyticsPageViews ?? 0)
+    if (viewsDiff !== 0) return viewsDiff
+    return a.title.localeCompare(b.title, 'cs')
+  })
+}
+
 async function resolvePlacesToVisitUncached(
   payload: Payload,
   page: { id: RawPayloadPage['id']; parent?: unknown },
   directChildren: PageChild[],
 ): Promise<PageChild[]> {
   if (!page.parent) {
-    return directChildren.filter(
-      (c) => isPlaceListingCategory(c.category) || isTouristPointCategory(c.category),
+    return sortByAnalyticsPageViews(
+      directChildren.filter(
+        (c) => isPlaceListingCategory(c.category) || isTouristPointCategory(c.category),
+      ),
     )
   }
 
@@ -451,7 +462,8 @@ async function resolvePlacesToVisitUncached(
       overrideAccess: false,
       collection: 'pages',
       where: { parent: { in: frontier.map((n) => n.id) } },
-      limit: 1000,
+      limit: 0,
+      pagination: false,
       depth: 0,
       select: PAGE_CHILDREN_SELECT,
       joins: false,
@@ -470,7 +482,10 @@ async function resolvePlacesToVisitUncached(
       const children = childrenByParentId.get(String(node.id)) ?? []
       const placeChildren = children.filter((c) => isPlaceListingCategory(c.category))
 
-      if (node.stopChildPlacesHere) {
+      // Pole žije v named tabu „detail" (Pages.ts), tedy v datech pod
+      // `detail.stopChildPlacesHere` — NE top-level (viz PAGE_CHILDREN_SELECT
+      // `detail: true` výše, žádný samostatný top-level select).
+      if (node.detail?.stopChildPlacesHere) {
         result.push(node)
         continue
       }
@@ -484,14 +499,7 @@ async function resolvePlacesToVisitUncached(
     frontier = nextFrontier
   }
 
-  // Řazení podle návštěvnosti (GA4, klouzavých 12 měsíců) — sync viz
-  // endpoints/syncAnalytics.ts. Stránky bez dat (nové/neaktualizované) na konec,
-  // mezi sebou abecedně.
-  return result.sort((a, b) => {
-    const viewsDiff = (b.analyticsPageViews ?? 0) - (a.analyticsPageViews ?? 0)
-    if (viewsDiff !== 0) return viewsDiff
-    return a.title.localeCompare(b.title, 'cs')
-  })
+  return sortByAnalyticsPageViews(result)
 }
 
 async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { pages: Page[] } }> {

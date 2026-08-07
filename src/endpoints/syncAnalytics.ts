@@ -9,8 +9,8 @@ import { BetaAnalyticsDataClient } from '@google-analytics/data'
  */
 function normalizePagePath(pagePath: string): string {
   const withoutQuery = pagePath.split('?')[0]
-  const withoutTrailingSlash = withoutQuery.replace(/\/+$/, '')
-  return withoutTrailingSlash || '/'
+  const withoutTrailingSlash = withoutQuery.replace(/\/+$/, '') || '/'
+  return withoutTrailingSlash.startsWith('/') ? withoutTrailingSlash : `/${withoutTrailingSlash}`
 }
 
 export async function fetchPageViewsByFullSlug(): Promise<Map<string, number>> {
@@ -55,33 +55,50 @@ export async function fetchPageViewsByFullSlug(): Promise<Map<string, number>> {
   return viewsByFullSlug
 }
 
-// Jeden hromadný UPDATE za dávku — ne dotaz na stránku. VĎDOMĚ mimo Payload
+type DrizzleTx = { execute: (query: unknown) => Promise<unknown> }
+type DrizzleLike = DrizzleTx & {
+  transaction: <T>(fn: (tx: DrizzleTx) => Promise<T>) => Promise<T>
+}
+
+// Jeden hromadný UPDATE za dávku — ne dotaz na stránku. VĚDOMĚ mimo Payload
 // Local API (bez hooků), aby noční sync nespustil revalidateTag pro každou
 // z tisíců stránek; čerstvost čísel dorazí přes `revalidate: 300` v cached().
+//
+// Reset na 0 před zápisem: klouzavé 12měsíční okno se má samo opravit i
+// směrem DOLŮ — stránka, co přestala být populární, nesmí si držet starou
+// hodnotu navěky jen proto, že v aktuálním GA4 exportu nemá žádný řádek.
+// Celé v jedné transakci, ať reset nezůstane bez re-apply při chybě uprostřed.
 async function writePageViews(
-  db: { drizzle: { execute: (query: unknown) => Promise<unknown> } },
+  db: { drizzle: DrizzleLike },
   viewsByFullSlug: Map<string, number>,
   batchSize = 500,
 ): Promise<number> {
   const entries = [...viewsByFullSlug.entries()]
-  let updated = 0
 
-  for (let i = 0; i < entries.length; i += batchSize) {
-    const batch = entries.slice(i, i + batchSize)
-    const values = sql.join(
-      batch.map(([fullSlug, views]) => sql`(${fullSlug}::text, ${views}::int)`),
-      sql`, `,
-    )
-    const result = await db.drizzle.execute(sql`
-      UPDATE pages AS p
-      SET analytics_page_views = v.views
-      FROM (VALUES ${values}) AS v(full_slug, views)
-      WHERE p.full_slug = v.full_slug
-    `)
-    updated += (result as { rowCount?: number }).rowCount ?? batch.length
-  }
+  return db.drizzle.transaction(async (tx) => {
+    await tx.execute(sql`UPDATE pages SET analytics_page_views = 0`)
 
-  return updated
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize)
+      const values = sql.join(
+        batch.map(([fullSlug, views]) => sql`(${fullSlug}::text, ${views}::int)`),
+        sql`, `,
+      )
+      await tx.execute(sql`
+        UPDATE pages AS p
+        SET analytics_page_views = v.views
+        FROM (VALUES ${values}) AS v(full_slug, views)
+        WHERE p.full_slug = v.full_slug
+      `)
+    }
+
+    // Přesný počet stránek s nenulovou hodnotou PO zápisu — ne odhad z dávek
+    // (ne každá GA4 cesta odpovídá reálné stránce, viz `/prihlaseni`, `/login`).
+    const countResult = (await tx.execute(
+      sql`SELECT count(*)::int AS count FROM pages WHERE analytics_page_views > 0`,
+    )) as { rows: { count: number }[] }
+    return countResult.rows[0]?.count ?? 0
+  })
 }
 
 export const syncAnalyticsEndpoint: Endpoint = {
@@ -111,11 +128,9 @@ export const syncAnalyticsEndpoint: Endpoint = {
       })
     }
 
-    const db = req.payload.db as unknown as {
-      drizzle: { execute: (query: unknown) => Promise<unknown> }
-    }
-    const updated = await writePageViews(db, viewsByFullSlug)
+    const db = req.payload.db as unknown as { drizzle: DrizzleLike }
+    const pagesWithViews = await writePageViews(db, viewsByFullSlug)
 
-    return Response.json({ ok: true, matchedPaths: viewsByFullSlug.size, updated })
+    return Response.json({ ok: true, matchedPaths: viewsByFullSlug.size, pagesWithViews })
   },
 }
