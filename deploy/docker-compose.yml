@@ -64,10 +64,30 @@ services:
       GA4_PROPERTY_ID: ${GA4_PROPERTY_ID}
       GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON}
       ANALYTICS_SYNC_SECRET: ${ANALYTICS_SYNC_SECRET}
+    # Bez `ports` — appka je dostupná jen uvnitř docker sítě, zvenčí výhradně
+    # přes Caddy. Kdyby port zůstal otevřený, dal by se origin obejít přes
+    # holé http a minout tím TLS i Cloudflare.
+
+  # Reverzní proxy, která ukončuje TLS certifikátem Cloudflare Origin CA
+  # (/opt/aracze/certs, platnost do 2041, neobnovuje se). Díky ní může být
+  # v Cloudflare režim Full (strict) — ten na rozdíl od Full certifikát
+  # skutečně ověřuje. Konfigurace: deploy/Caddyfile → /opt/aracze/Caddyfile.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - cms
     ports:
-      # Sloučená appka (veřejný web i /admin) běží na portu 80 (http://<IP>/)
-      - '80:3000'
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   pgdata: # starý Alpine/musl volume — ponechán jako rollback po migraci, smazat po ověření
   pgdata_debian:
+  caddy_data:
+  caddy_config:
