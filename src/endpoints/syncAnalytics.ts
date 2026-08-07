@@ -2,6 +2,15 @@ import type { Endpoint } from 'payload'
 import { APIError } from 'payload'
 import { sql } from '@payloadcms/db-postgres'
 import { BetaAnalyticsDataClient } from '@google-analytics/data'
+import { timingSafeEqual } from 'node:crypto'
+
+/** Porovnání secretu časově konstantní — obyčejné `!==` by šlo uhodnout po znacích z doby odezvy. */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
 
 /**
  * Normalizuje GA4 `pagePath` na tvar shodný s uloženým `fullSlug` (vedoucí
@@ -123,7 +132,7 @@ export const syncAnalyticsEndpoint: Endpoint = {
     const isAdmin = Boolean(req.user) && roles.includes('admin')
     // Spouští GitHub Actions cron bez session → sdílené tajemství. Přihlášený
     // admin z prohlížeče (test z adminu) taky projde.
-    if (!isAdmin && (!secret || providedSecret !== secret)) {
+    if (!isAdmin && (!secret || !providedSecret || !safeEqual(providedSecret, secret))) {
       throw new APIError('Forbidden', 403)
     }
 
