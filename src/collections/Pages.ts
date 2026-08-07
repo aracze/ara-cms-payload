@@ -97,17 +97,6 @@ export const Pages: CollectionConfig = {
           },
           fields: [
             {
-              name: 'stopChildPlacesHere',
-              label: 'Nerozbalovat podřazená místa (např. ostrov)',
-              type: 'checkbox',
-              defaultValue: false,
-              admin: {
-                condition: (data) => data?.category === 'Místo k navštívení',
-                description:
-                  'Když je zaškrtnuto, tahle stránka se u SVÉHO rodiče zobrazí jako jedna dlaždice v sekci „Co vidět", i když má vlastní podřazená místa (typicky ostrov).',
-              },
-            },
-            {
               type: 'row',
               fields: [
                 {
@@ -357,6 +346,18 @@ export const Pages: CollectionConfig = {
       defaultValue: true,
       admin: {
         position: 'sidebar',
+      },
+    },
+    {
+      name: 'stopDisplayingChildPlaces',
+      label: 'Stop Displaying Child Places',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        position: 'sidebar',
+        condition: (data) => data?.category === 'Místo k navštívení',
+        description:
+          'Pro zobrazení vyššího rodiče, než je ten nejmenší. Například ostrov Zakynthos se zobrazí pro Řecko, ačkoliv existují ještě na ostrově další místa a cíle.',
       },
     },
     {

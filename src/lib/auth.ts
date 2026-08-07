@@ -33,6 +33,11 @@ export type CurrentUser = {
   avatarUrl: string | null
   /** Odkaz na veřejný profil; null u uživatele bez uživatelského jména (profil by neexistoval). */
   profileHref: string | null
+  /**
+   * Jediný odvozený příznak avizovaný v komentáři výše — ne celý seznam rolí.
+   * Zatím jen pro zobrazení `analyticsPageViews` na dlaždicích v „Co vidět".
+   */
+  isAdmin: boolean
 }
 
 type RawAuthUser = {
@@ -40,6 +45,7 @@ type RawAuthUser = {
   username?: string | null
   name?: string | null
   avatar?: { url?: string | null } | number | null
+  roles?: string[] | null
 }
 
 /**
@@ -75,7 +81,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       collection: 'users',
       id: user.id,
       depth: 1,
-      select: { username: true, name: true, avatar: true },
+      select: { username: true, name: true, avatar: true, roles: true },
       overrideAccess: true,
     })) as unknown as RawAuthUser
 
@@ -94,6 +100,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
       publicName: username || displayName,
       avatarUrl: doc.avatar && typeof doc.avatar === 'object' ? (doc.avatar.url ?? null) : null,
       profileHref: username ? `/profil/${encodeURIComponent(username)}` : null,
+      isAdmin: Array.isArray(doc.roles) && doc.roles.includes('admin'),
     }
   } catch (err) {
     // Neplatná/prošlá cookie ani výpadek DB nesmí shodit celou stránku —

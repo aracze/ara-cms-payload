@@ -13,6 +13,7 @@ import {
   type InlineReviewRateRequest,
 } from '@/components/features/reviews/inline-reviews'
 import { UserAvatar } from '@/components/user-avatar'
+import { AnalyticsDebugBadge } from './analytics-debug-badge'
 
 /** Autor cíle pro výpis — bezpečná mini podoba (jen avatar + jméno). */
 export interface TouristPointAuthor {
@@ -41,6 +42,8 @@ interface ExpandableTouristPointProps {
   websiteUrl?: string | null
   /** Autor cíle — po rozbalení jako podpis hned pod textem. */
   author?: TouristPointAuthor | null
+  /** Jen pro přihlášeného admina (viz `showAnalyticsDebug` v places-to-visit.tsx). */
+  analyticsViews?: number | null
 }
 
 /**
@@ -66,6 +69,7 @@ export function ExpandableTouristPoint({
   address = null,
   websiteUrl = null,
   author = null,
+  analyticsViews = null,
 }: ExpandableTouristPointProps) {
   const [expanded, setExpanded] = useState(false)
   const [rateRequest, setRateRequest] = useState<InlineReviewRateRequest | null>(null)
@@ -136,10 +140,11 @@ export function ExpandableTouristPoint({
         <div
           className={`flex flex-wrap items-center gap-x-12 gap-y-1 ${address || websiteUrl ? 'mb-2' : 'mb-2'}`}
         >
-          <Link href={fullSlug} className="block">
+          <Link href={fullSlug} className="inline-flex items-center gap-2">
             <h2 className="text-[22px] sm:text-[26px] font-bold text-[#1a3f6c] leading-snug hover:text-[#2a5a9c] transition-colors">
               {title}
             </h2>
+            {analyticsViews != null && <AnalyticsDebugBadge views={analyticsViews} />}
           </Link>
 
           {/* Hodnocení vedle názvu:

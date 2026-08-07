@@ -68,6 +68,8 @@ export interface PageChild {
   createdByPublic?: Page['createdByPublic']
   /** Zobrazení za 12 měsíců (GA4) — řazení v sekci „Co vidět" (resolvePlacesToVisit). */
   analyticsPageViews?: number | null
+  /** Ostrov apod. — u rodiče se nerozbaluje na vlastní podřazená místa (resolvePlacesToVisit). */
+  stopDisplayingChildPlaces?: boolean | null
   /** Jen pro seskupení podle rodiče v resolvePlacesToVisit (dávkové BFS). */
   parent?: number | { id: number } | null
 }

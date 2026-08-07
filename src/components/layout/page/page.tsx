@@ -29,6 +29,7 @@ import {
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
+import { getCurrentUser } from '@/lib/auth'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import type { ReviewPublic } from '@/types/payload'
@@ -59,9 +60,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     })
     .filter((id): id is number => id !== null)
 
-  const [rootPage, imageUrlMap] = await Promise.all([
+  const [rootPage, imageUrlMap, currentUser] = await Promise.all([
     fetchRootPage(page),
     fetchMediaUrlsByIds(childImageIdsEarly),
+    getCurrentUser(),
   ])
   const safeRootPage = rootPage ?? page
 
@@ -382,6 +384,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             imageUrlMap={childImageUrlMap}
             parentLocative={page.detail?.locative ?? null}
             reviewStats={reviewStats}
+            showAnalyticsDebug={currentUser?.isAdmin ?? false}
           />
         )}
 

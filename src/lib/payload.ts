@@ -152,6 +152,8 @@ const PAGE_CHILDREN_SELECT = {
   createdByPublic: true,
   // Řazení v sekci „Co vidět" (resolvePlacesToVisit) — sync z GA4, viz endpoints/syncAnalytics.ts.
   analyticsPageViews: true,
+  // Ostrov apod. — nerozbalovat vlastní podřazená místa u rodiče (resolvePlacesToVisit).
+  stopDisplayingChildPlaces: true,
   // Potřeba jen v resolvePlacesToVisit (dávkové BFS) pro seskupení dětí podle rodiče.
   parent: true,
 } as const
@@ -482,10 +484,7 @@ async function resolvePlacesToVisitUncached(
       const children = childrenByParentId.get(String(node.id)) ?? []
       const placeChildren = children.filter((c) => isPlaceListingCategory(c.category))
 
-      // Pole žije v named tabu „detail" (Pages.ts), tedy v datech pod
-      // `detail.stopChildPlacesHere` — NE top-level (viz PAGE_CHILDREN_SELECT
-      // `detail: true` výše, žádný samostatný top-level select).
-      if (node.detail?.stopChildPlacesHere) {
+      if (node.stopDisplayingChildPlaces) {
         result.push(node)
         continue
       }

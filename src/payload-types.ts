@@ -303,10 +303,6 @@ export interface Page {
     [k: string]: unknown;
   } | null;
   detail?: {
-    /**
-     * Když je zaškrtnuto, tahle stránka se u SVÉHO rodiče zobrazí jako jedna dlaždice v sekci „Co vidět", i když má vlastní podřazená místa (typicky ostrov).
-     */
-    stopChildPlacesHere?: boolean | null;
     googleMapsAddress?: string | null;
     latitude?: string | null;
     longitude?: string | null;
@@ -346,6 +342,10 @@ export interface Page {
   parent?: (number | null) | Page;
   fullSlug?: string | null;
   includeInChildUrlPaths?: boolean | null;
+  /**
+   * Pro zobrazení vyššího rodiče, než je ten nejmenší. Například ostrov Zakynthos se zobrazí pro Řecko, ačkoliv existují ještě na ostrově další místa a cíle.
+   */
+  stopDisplayingChildPlaces?: boolean | null;
   breadcrumbs?:
     | {
         doc?: (number | null) | Page;
@@ -752,7 +752,6 @@ export interface PagesSelect<T extends boolean = true> {
   detail?:
     | T
     | {
-        stopChildPlacesHere?: T;
         googleMapsAddress?: T;
         latitude?: T;
         longitude?: T;
@@ -786,6 +785,7 @@ export interface PagesSelect<T extends boolean = true> {
   parent?: T;
   fullSlug?: T;
   includeInChildUrlPaths?: T;
+  stopDisplayingChildPlaces?: T;
   breadcrumbs?:
     | T
     | {
