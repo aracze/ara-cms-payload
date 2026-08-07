@@ -4,6 +4,8 @@ import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import { MapLibreMap, MapMarker } from '@/components/features/maplibre-map'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
+import { reviewsCountLabel } from '@/lib/utils'
+import { StarRating } from '@/components/features/reviews/star-rating'
 import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
 import { PlaceCardImage } from './place-card-image'
 import { AnalyticsDebugBadge } from './analytics-debug-badge'
@@ -38,6 +40,11 @@ interface PlacesToVisitProps {
   /** Souhrny recenzí dětí (id → počet + průměr) pro hvězdičky ve výpisu cílů */
   reviewStats?: Record<number, PageReviewStats>
   /**
+   * Hodnocení na dlaždicích (id → počet + průměr): u cílů vlastní recenze,
+   * u míst odvozený průměr z recenzí jejich cílů. Co v mapě není, se nekreslí.
+   */
+  cardRatings?: Record<number, PageReviewStats>
+  /**
    * Jen pro přihlášeného admina (viz `currentUser?.isAdmin` v page.tsx) — ukáže
    * počet zobrazení z GA4 na dlaždicích, ať je vidět, podle čeho se řadí.
    */
@@ -71,6 +78,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
   imageUrlMap,
   parentLocative,
   reviewStats,
+  cardRatings,
   showAnalyticsDebug = false,
 }) => {
   const placeCategories = [
@@ -133,6 +141,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
                 places={places}
                 imageUrlMap={imageUrlMap}
                 hasMap={!!hasMap}
+                cardRatings={cardRatings}
                 showAnalyticsDebug={showAnalyticsDebug}
               />
             ) : (
@@ -174,11 +183,13 @@ function SuperordinateGrid({
   places,
   imageUrlMap,
   hasMap,
+  cardRatings,
   showAnalyticsDebug,
 }: {
   places: PageChild[]
   imageUrlMap?: Map<number | string, string>
   hasMap: boolean
+  cardRatings?: Record<number, PageReviewStats>
   showAnalyticsDebug?: boolean
 }) {
   return (
@@ -191,6 +202,10 @@ function SuperordinateGrid({
     >
       {places.map((place) => {
         const imageUrl = imageUrlMap?.get(place.id) ?? null
+        // Cíl ukazuje vlastní recenze, místo odvozený průměr z recenzí svých
+        // cílů. Filtr (nárok, minimální počet recenzí) proběhl při skládání
+        // mapy — co v ní je, se kreslí.
+        const rating = cardRatings?.[Number(place.id)]
         return (
           <Link
             key={place.id}
@@ -228,6 +243,14 @@ function SuperordinateGrid({
                 <h3 className="text-lg font-bold text-white leading-tight drop-shadow-md">
                   {place.title}
                 </h3>
+                {rating && (
+                  <span className="mt-1.5 flex items-center gap-[7px] text-[12.5px] font-semibold text-white/95 drop-shadow-md">
+                    <StarRating rating={Math.round(rating.avg * 2) / 2} size={13} />
+                    <span className="font-normal text-white/85">
+                      {rating.count} {reviewsCountLabel(rating.count)}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
           </Link>

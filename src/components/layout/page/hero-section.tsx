@@ -12,8 +12,15 @@ interface HeroSectionProps {
   styleCss?: string
   filterId?: string
   breadcrumbs?: Breadcrumb[]
-  /** Souhrn recenzí (turistické cíle) — hvězdičky + počet pod názvem, odkaz na #recenze. */
+  /**
+   * Souhrn recenzí — hvězdičky + počet u názvu. Cíl ukazuje vlastní recenze,
+   * místo odvozený průměr z recenzí svých cílů (viz `ratingCountSuffix`).
+   */
   rating?: { avg: number; count: number } | null
+  /** Kam vede klik na hvězdičky: cíl na vlastní recenze, místo na výpis cílů. */
+  ratingHref?: string
+  /** Dovětek za počtem („cílů" u místa), ať je jasné, odkud se průměr bere. */
+  ratingCountSuffix?: string
   /**
    * Rozmazaný náhled (data URI). Fotky z CMS ho nemají — plní ho jen výchozí
    * obálka statických stránek, u které náhled známe (viz lib/default-cover).
@@ -28,8 +35,14 @@ export const HeroSection = ({
   filterId,
   breadcrumbs,
   rating = null,
+  ratingHref = '#recenze',
+  ratingCountSuffix,
   blurDataURL,
 }: HeroSectionProps) => {
+  const ratingLabel = rating
+    ? [rating.count, reviewsCountLabel(rating.count), ratingCountSuffix].filter(Boolean).join(' ')
+    : null
+
   return (
     <section className="relative w-full h-[315px] bg-[#3b444f]">
       {/* Cover Image Background with its own overflow clipping */}
@@ -89,11 +102,11 @@ export const HeroSection = ({
           <div className="hidden flex-1 justify-center lg:flex">
             {rating && rating.count > 0 && (
               <a
-                href="#recenze"
+                href={ratingHref}
                 className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
               >
                 <StarRating rating={Math.round(rating.avg * 2) / 2} size={17} />
-                {rating.count} {reviewsCountLabel(rating.count)}
+                {ratingLabel}
               </a>
             )}
           </div>
@@ -102,11 +115,11 @@ export const HeroSection = ({
 
         {rating && rating.count > 0 && (
           <a
-            href="#recenze"
+            href={ratingHref}
             className="lg:hidden -translate-y-[4px] inline-flex items-center gap-2 text-[13.5px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
           >
             <StarRating rating={Math.round(rating.avg * 2) / 2} size={14} />
-            {rating.count} {reviewsCountLabel(rating.count)}
+            {ratingLabel}
           </a>
         )}
       </div>

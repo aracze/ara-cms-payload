@@ -171,6 +171,12 @@ export interface Page {
   } | null
   /** Bez rodiče = kontinent (root „Místo k navštívení") — viz resolvePlacesToVisit. */
   parent?: number | { id: number } | null
+  /**
+   * Ostrov apod. — u rodiče se nerozbaluje na vlastní podřazená místa. Zároveň
+   * rozhoduje, že místo má nárok na odvozené hodnocení z recenzí svých cílů
+   * (viz `fetchDerivedPlaceRatings` v `src/lib/payload.ts`).
+   */
+  stopDisplayingChildPlaces?: boolean | null
 }
 
 export interface PagesResponse {

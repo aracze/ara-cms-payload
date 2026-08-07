@@ -136,6 +136,9 @@ const PAGE_SCALAR_SELECT = {
   // Bez rodiče = kontinent (root „Místo k navštívení") → resolvePlacesToVisit
   // pro něj ukáže jen přímé děti, nesestupuje do hloubky (viz níže).
   parent: true,
+  // Ostrov apod. — rozhoduje o nároku na odvozené hodnocení v záhlaví
+  // (fetchDerivedPlaceRatings).
+  stopDisplayingChildPlaces: true,
 } as const
 
 const PAGE_CHILDREN_SELECT = {
@@ -404,7 +407,8 @@ function relationId(value: unknown): number | string | null {
 const isTouristPointCategory = (category: string | undefined) =>
   category?.trim() === PageCategory.Turisticky_cil
 
-const isPlaceListingCategory = (category: string | undefined) => {
+/** Kategorie „místa" (na rozdíl od turistického cíle) — dlaždice v „Co vidět". */
+export const isPlaceListingCategory = (category: string | undefined) => {
   const trimmed = category?.trim()
   return trimmed === PageCategory.Misto_k_navstiveni || trimmed === PageCategory.Mista
 }
@@ -1023,6 +1027,137 @@ const fetchPageReviewStatsCached = cached(
 export const fetchPageReviewStats = cache(
   (pageIds: number[]): Promise<Record<number, PageReviewStats>> =>
     fetchPageReviewStatsCached(pageIds),
+)
+
+// ————————————————————————————————————————————————————————————————
+// Odvozené hodnocení místa (z recenzí turistických cílů pod ním)
+// ————————————————————————————————————————————————————————————————
+
+/**
+ * Od kolika recenzí se odvozený průměr místa vůbec zobrazí. Jediná nadšená
+ * recenze by z místa udělala nejlépe hodnocenou destinaci webu.
+ */
+export const MIN_DERIVED_PLACE_REVIEWS = 3
+
+/** Místo, pro které se odvozené hodnocení počítá (id + přepínač ze sidebaru). */
+export type DerivedRatingPlace = { id: number; stopDisplayingChildPlaces?: boolean | null }
+
+/**
+ * Sesbírá turistické cíle kdekoli pod danými místy — a zároveň rozhodne, která
+ * místa na odvozené hodnocení vůbec mají nárok.
+ *
+ * Nárok má místo, které se v seznamu „Co vidět" chová jako koncová dlaždice:
+ * buď pod sebou žádná další místa nemá (Dubrovník), nebo má zapnuté
+ * `stopDisplayingChildPlaces` (ostrov Hvar → sečtou se i cíle v jeho
+ * vesnicích). Země a regiony se sem mohou poslat, ale vypadnou: průměr přes
+ * celou zemi se vždy usadí kolem 4,5 a nenese žádnou informaci.
+ *
+ * Dávkové BFS po úrovních (stejný vzor jako resolvePlacesToVisit) — jeden dotaz
+ * na úroveň stromu, ne dotaz na místo. Prefix `fullSlug` použít NELZE: místo se
+ * může z URL potomků vynechat (`includeInChildUrlPaths`, např. „Kalifornie"
+ * v /usa/san-francisco), takže cesta potomka nemusí začínat cestou předka —
+ * hierarchie se proto jde po `parent`.
+ *
+ * Vrací id cílů po místech; místa bez nároku v mapě nejsou vůbec.
+ */
+async function fetchTouristPointIdsUnderPlacesUncached(
+  places: DerivedRatingPlace[],
+): Promise<Record<number, number[]>> {
+  if (places.length === 0) return {}
+  const payload = await getDb()
+
+  const idsByPlace = new Map<number, number[]>(places.map((p) => [p.id, []]))
+  const stopsAtSelf = new Set(places.filter((p) => p.stopDisplayingChildPlaces).map((p) => p.id))
+  // Každý uzel si nese id výchozího místa, pod které se jeho cíle sčítají.
+  let frontier = places.map((p) => ({ id: p.id, rootId: p.id }))
+
+  for (let depth = 0; frontier.length > 0 && depth < MAX_PLACES_TO_VISIT_DEPTH; depth++) {
+    const res = (await payload.find({
+      overrideAccess: false,
+      collection: 'pages',
+      where: { parent: { in: frontier.map((n) => n.id) } },
+      limit: 0,
+      pagination: false,
+      depth: 0,
+      select: { category: true, parent: true },
+      joins: false,
+    })) as unknown as PayloadDocsResponse<{
+      id: number | string
+      category?: string
+      parent?: unknown
+    }>
+
+    const rootByNodeId = new Map(frontier.map((n) => [String(n.id), n.rootId]))
+    const childPlaces: { id: number; rootId: number }[] = []
+    for (const doc of res.docs || []) {
+      const rootId = rootByNodeId.get(String(relationId(doc.parent)))
+      if (rootId == null) continue
+      if (isTouristPointCategory(doc.category)) {
+        idsByPlace.get(rootId)?.push(Number(doc.id))
+      } else if (isPlaceListingCategory(doc.category)) {
+        childPlaces.push({ id: Number(doc.id), rootId })
+      }
+    }
+
+    // O nárok se rozhoduje na PRVNÍ úrovni: místo s dalšími místy pod sebou ho
+    // má jen se zapnutým `stopDisplayingChildPlaces` — jinak vypadne i s cíli,
+    // které se do něj už sečetly. Hlouběji se pak sestupuje bez podmínek.
+    if (depth === 0) {
+      for (const { rootId } of childPlaces) {
+        if (!stopsAtSelf.has(rootId)) idsByPlace.delete(rootId)
+      }
+    }
+
+    frontier = childPlaces.filter((c) => idsByPlace.has(c.rootId))
+  }
+
+  const out: Record<number, number[]> = {}
+  for (const [placeId, ids] of idsByPlace) out[placeId] = ids
+  return out
+}
+
+const fetchTouristPointIdsUnderPlacesCached = cached(
+  fetchTouristPointIdsUnderPlacesUncached,
+  'tourist-points-under-places',
+  // Přidání/přesun/smazání stránky mění strom → obecný tag stránek.
+  () => ['pages'],
+)
+
+/**
+ * Odvozené hodnocení míst: hvězdičky spočítané ze VŠECH recenzí turistických
+ * cílů kdekoli pod místem — ne průměr průměrů, takže cíl s 30 recenzemi váží
+ * víc než cíl s jedinou.
+ *
+ * Vrací jen místa s nárokem (viz výše) a aspoň `MIN_DERIVED_PLACE_REVIEWS`
+ * recenzemi; ostatní v mapě nejsou a v záhlaví ani na dlaždici se nevykreslí nic.
+ */
+export const fetchDerivedPlaceRatings = cache(
+  async (places: DerivedRatingPlace[]): Promise<Record<number, PageReviewStats>> => {
+    if (places.length === 0) return {}
+    const idsByPlace = await fetchTouristPointIdsUnderPlacesCached(places)
+
+    const allPointIds = [...new Set(Object.values(idsByPlace).flat())]
+    if (allPointIds.length === 0) return {}
+    const statsByPoint = await fetchPageReviewStats(allPointIds)
+
+    const out: Record<number, PageReviewStats> = {}
+    for (const [placeId, pointIds] of Object.entries(idsByPlace)) {
+      let count = 0
+      let total = 0
+      for (const pointId of pointIds) {
+        const stats = statsByPoint[pointId]
+        if (!stats) continue
+        // avg * count = součet hodnocení daného cíle (fetchPageReviewStats
+        // vrací jen průměr) → sečtením dostaneme průměr přes všechny recenze.
+        count += stats.count
+        total += stats.avg * stats.count
+      }
+      if (count >= MIN_DERIVED_PLACE_REVIEWS) {
+        out[Number(placeId)] = { count, avg: total / count }
+      }
+    }
+    return out
+  },
 )
 
 // ————————————————————————————————————————————————————————————————
