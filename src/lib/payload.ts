@@ -498,6 +498,12 @@ async function resolvePlacesToVisitUncached(
     frontier = nextFrontier
   }
 
+  // Bezpečnostní limit hloubky přerušil strom dřív, než se stihla vyhodnotit
+  // poslední úroveň (leaf/stop/průchozí) — nezahazovat ji, zobrazit jako
+  // dlaždice tak, jak je (v praxi se nejhlubší zjištěná hierarchie zastaví
+  // hluboko pod limitem, tohle je jen pojistka).
+  result.push(...frontier)
+
   return sortByAnalyticsPageViews(result)
 }
 
