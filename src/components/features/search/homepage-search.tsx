@@ -9,9 +9,11 @@ interface HomepageSearchProps {
   /** Název denně vylosovaného místa z hero fotky — bez něj zůstává statický
    *  fallback „Chorvatsko". */
   placeholderExample?: string | null
+  /** Pole stojí na světlém podkladu, ne na hero fotce — viz `pilulkaTridy` níž. */
+  onLightSurface?: boolean
 }
 
-export function HomepageSearch({ placeholderExample }: HomepageSearchProps = {}) {
+export function HomepageSearch({ placeholderExample, onLightSurface }: HomepageSearchProps = {}) {
   const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -39,8 +41,22 @@ export function HomepageSearch({ placeholderExample }: HomepageSearchProps = {})
 
   return (
     <div ref={containerRef} className="w-full max-w-2xl relative">
-      {/* Pilulka s kulatým tlačítkem-lupou (schválený návrh „varianta 3C"). */}
-      <div className="bg-white rounded-full shadow-xl flex items-center h-14 pl-6 pr-1.5 gap-3 border-2 border-transparent focus-within:border-[#215491]/20 transition-all">
+      {/* Pilulka s kulatým tlačítkem-lupou (schválený návrh „varianta 3C").
+          Na hero fotce ji od pozadí odděluje výrazný stín; na světlém podkladu
+          (chybové stránky) nemá stín co oddělovat, takže hranici dokreslí
+          jemný obrys a stín se ztlumí.
+
+          S viditelným obrysem je ale najednou vidět, jak těsně u kraje sedí
+          tlačítko s lupou — mezera 6 px byla vždycky, jen ji na fotce nebylo
+          poznat. Na světlém podkladu proto tlačítko o kousek zmenšíme
+          (40 px místo 44), aby kolem něj zbylo 8 px. */}
+      <div
+        className={`bg-white rounded-full flex items-center h-14 pl-6 gap-3 border-2 focus-within:border-[#215491]/20 transition-all ${
+          onLightSurface
+            ? 'border-[#d9dee3] shadow-[0_4px_12px_-4px_rgba(26,63,108,0.18)] pr-2'
+            : 'border-transparent shadow-xl pr-1.5'
+        }`}
+      >
         {/* Lupa se během hledání točí — signál „pracuju" přímo v poli. */}
         {isLoading ? (
           <Loader2 className="w-5 h-5 text-gray-400 shrink-0 animate-spin" aria-hidden="true" />
@@ -73,7 +89,9 @@ export function HomepageSearch({ placeholderExample }: HomepageSearchProps = {})
           type="button"
           onClick={() => setIsExpanded(true)}
           aria-label="Hledat"
-          className="w-11 h-11 rounded-full bg-[#215491] hover:bg-[#1a4579] flex items-center justify-center shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#215491]/50"
+          className={`rounded-full bg-[#215491] hover:bg-[#1a4579] flex items-center justify-center shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#215491]/50 ${
+            onLightSurface ? 'w-10 h-10' : 'w-11 h-11'
+          }`}
         >
           <SearchGraphic className="w-5 h-5 text-white" strokeWidth={2.5} />
         </button>
