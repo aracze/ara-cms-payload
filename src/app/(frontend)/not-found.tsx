@@ -14,8 +14,6 @@ import { ErrorHero } from '@/components/layout/error-hero'
  * kde je hlavní akcí „Zkusit znovu" — tam stránka existuje, jen se nenačetla,
  * a hledání by běželo přes tentýž backend, který zrovna neodpovídá.
  *
- * Označení „Chyba 404" na stránce záměrně není: netechnickému návštěvníkovi
- * číslo neřekne nic a titulek s větou pod ním situaci vysvětlí líp.
  */
 
 /** Pilulky „Kam dál". `mobile: false` = pod 640 px se skryje, aby řada držela na jednom řádku. */
@@ -29,7 +27,7 @@ const POPULAR_DESTINATIONS = [
 export default function NotFound() {
   return (
     <main id="obsah" tabIndex={-1} className="focus:outline-none">
-      <ErrorHero title="Ara sem nedoletěl" filterId="blur404" />
+      <ErrorHero title="Ara sem nedoletěl" kicker="Chyba 404" filterId="blur404" />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-12 md:py-14">
         <div className="mx-auto flex max-w-[36rem] flex-col items-center gap-5 text-center">

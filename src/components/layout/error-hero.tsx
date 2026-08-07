@@ -21,7 +21,16 @@ import { StaticHeroOverlay } from '@/components/features/static-hero-overlay'
  *    Proto ztmavuje jen `StaticHeroOverlay`, tedy prostředek pruhu pod
  *    titulkem; po stranách zůstává ara sytá.
  */
-export function ErrorHero({ title, filterId }: { title: string; filterId: string }) {
+export function ErrorHero({
+  title,
+  kicker,
+  filterId,
+}: {
+  title: string
+  /** Drobný popisek nad titulkem („Chyba 404"). Bez něj se řádek nevykreslí. */
+  kicker?: string
+  filterId: string
+}) {
   return (
     <section className="relative h-[315px] w-full overflow-hidden bg-[#f7f9fb]">
       {/* Kresba přiletí zleva a ustálí se — jednou, ne dokola. `motion-safe:`
@@ -62,6 +71,11 @@ export function ErrorHero({ title, filterId }: { title: string; filterId: string
           navíc pod `motion-safe:` — kdo má v systému vypnuté animace, dostane
           titulek rovnou, stejně jako kresbu výš. */}
       <div className="relative z-[102] flex h-full flex-col items-center justify-center px-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-1000">
+        {kicker && (
+          <p className="mb-2 text-[12px] font-bold uppercase tracking-[0.18em] text-white/85 [text-shadow:0_1px_2px_rgba(6,17,32,0.75),0_3px_14px_rgba(6,17,32,0.55)]">
+            {kicker}
+          </p>
+        )}
         <h1 className="text-center text-[30px] font-semibold tracking-normal text-white [text-shadow:0_1px_2px_rgba(6,17,32,0.75),0_3px_14px_rgba(6,17,32,0.55)] md:text-[40px]">
           {title}
         </h1>

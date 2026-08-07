@@ -28,7 +28,7 @@ export default function Error({
 
   return (
     <main id="obsah" tabIndex={-1} className="focus:outline-none">
-      <ErrorHero title="Něco se pokazilo" filterId="blurError" />
+      <ErrorHero title="Něco se pokazilo" kicker="Chyba" filterId="blurError" />
 
       <div className="mx-auto w-full max-w-6xl px-4 py-12 md:py-14">
         <div className="mx-auto flex max-w-[36rem] flex-col items-center gap-5 text-center">
