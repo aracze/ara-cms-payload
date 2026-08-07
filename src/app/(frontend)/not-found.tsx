@@ -35,7 +35,7 @@ export default function NotFound() {
             Taková stránka na webu není. Zkus napsat, kam se chceš podívat.
           </p>
 
-          <Search variant="homepage" />
+          <Search variant="homepage" onLightSurface />
 
           {/* „Kam dál" místo samostatného odkazu domů: úvodní stránka je prostě
               další cíl v řadě, takže spodek stránky má jeden řádek místo dvou. */}
