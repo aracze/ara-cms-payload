@@ -24,6 +24,8 @@ export const NiceToKnowBlock: Block = {
             { label: 'Měna', value: 'currency' },
             { label: 'Počasí', value: 'weather' },
             { label: 'Čas', value: 'time' },
+            { label: 'Počet obyvatel', value: 'population' },
+            { label: 'Doprava (řízení)', value: 'drivingSide' },
           ],
         },
         {

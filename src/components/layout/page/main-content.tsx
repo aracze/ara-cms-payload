@@ -1,5 +1,5 @@
 import React from 'react'
-import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
+import { PageCategory, RichTextRoot } from '@/types/payload'
 import Link from 'next/link'
 import { Globe, MapPin } from 'lucide-react'
 import { LocalTime } from '@/components/features/local-time'
@@ -27,6 +27,22 @@ interface TocItem {
   level: number
 }
 
+// TOC odkazy jdou do Reactu jako holý text (ne dangerouslySetInnerHTML), takže
+// entity z bohatého textu (typicky &nbsp; z pevné mezery) by se jinak zobrazily
+// doslova — prohlížeč je dekóduje jen při parsování HTML, ne když je JS nastaví
+// jako textContent.
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&')
+}
+
 function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   const headings: TocItem[] = []
   // Nadpisy mají po renderu atributy (např. id z richTextToHtml) — otevírací
@@ -39,7 +55,7 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   while ((match = regex.exec(html)) !== null) {
     const level = parseInt(match[1][1], 10)
     const attrs = match[2]
-    const text = match[3].replace(/<[^>]+>/g, '').trim()
+    const text = decodeHtmlEntities(match[3].replace(/<[^>]+>/g, '')).trim()
     const idMatch = attrs.match(/\sid="([^"]*)"/)
     const id =
       idMatch?.[1] ??
@@ -54,26 +70,32 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
 
 export const MainContent = ({
   text,
-  pageChildren = [],
   pageCategory,
   timezone,
   currencyCode,
   exchangeRate,
-  pageTitle,
-  genitive,
+  practicalInfo = null,
   createdByPublic,
   touristPointInfo = null,
   belowText = null,
   centerColumn = false,
 }: {
   text: string | RichTextRoot
-  pageChildren: PageChild[]
   pageCategory?: PageCategory
   timezone?: string | null
   currencyCode?: string | null
   exchangeRate?: number | null
-  pageTitle?: string | null
-  genitive?: string | null
+  /**
+   * Karta „Praktické informace" v pravém sloupci u míst — `fullSlug` může být
+   * vlastní podstránka místa, nebo (San Francisco → USA) zděděná od nejbližšího
+   * předka; `ownerTitle`/`ownerGenitive` se PRO NADPIS KARTY vždy týkají toho,
+   * čí je to podstránka (viz legacy `parentPracticalInformationPage.parent`).
+   */
+  practicalInfo?: {
+    fullSlug: string
+    ownerTitle: string
+    ownerGenitive?: string | null
+  } | null
   createdByPublic?: {
     username?: string | null
     name?: string | null
@@ -119,12 +141,10 @@ export const MainContent = ({
   const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
   const headings = showTableOfContents ? extractHeadings(textHtml, isPracticalInfo ? 4 : 3) : []
 
-  const practicalInfoChild = pageChildren.find(
-    (c) => c.title === 'Praktické informace' || c.fullSlug.includes('/prakticke-informace'),
-  )
-
-  const cleanGenitive = genitive?.replace(/^do\s+/i, '')
-  const displayName = cleanGenitive || pageTitle
+  const cleanOwnerGenitive = practicalInfo?.ownerGenitive?.replace(/^do\s+/i, '')
+  const practicalInfoOwnerName = practicalInfo
+    ? cleanOwnerGenitive || practicalInfo.ownerTitle
+    : null
   // Autora bereme VÝHRADNĚ z veřejného virtuálního pole `createdByPublic` —
   // interní `createdBy` (surová relace na uživatele) se na frontend nevystavuje.
   const author = createdByPublic ?? null
@@ -154,7 +174,7 @@ export const MainContent = ({
       contributor),
   )
   const showAktualniInfoPanel = Boolean(
-    showAktualniInfo && (timezone || exchangeRate || practicalInfoChild),
+    showAktualniInfo && (timezone || exchangeRate || practicalInfo),
   )
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
@@ -325,9 +345,9 @@ export const MainContent = ({
                     )}
                     {exchangeRate && currencyCode && (
                       <div className="block text-[26px] tracking-[0.01rem] text-[#333] mt-4">
-                        {practicalInfoChild ? (
+                        {practicalInfo ? (
                           <Link
-                            href={`${practicalInfoChild.fullSlug}#mena-a-ceny`}
+                            href={`${practicalInfo.fullSlug}#mena-a-ceny`}
                             className="hover:no-underline"
                           >
                             1 {currencyCode} ={' '}
@@ -353,21 +373,21 @@ export const MainContent = ({
                 )}
 
                 {/* Section 2: Practical Info */}
-                {practicalInfoChild && pageTitle && (
+                {practicalInfo && (
                   <Link
-                    href={practicalInfoChild.fullSlug}
+                    href={practicalInfo.fullSlug}
                     className="block hover:no-underline group relative mt-6 pt-4"
                   >
                     <h2 className="text-[22px] font-bold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
                       Praktické informace <br />
-                      do {displayName}
+                      do {practicalInfoOwnerName}
                     </h2>
                     <div className="relative inline-block w-full">
                       <div className="absolute top-1/2 -translate-y-1/2 left-[calc(50%+70px)] w-[55px] h-[55px] bg-[url('/assets/information/essentials-gray.gif')] bg-no-repeat bg-contain opacity-20 z-0" />
                       <div className="relative z-10 text-[18px] text-[#888] leading-[1.5]">
                         <p className="m-0">
                           Praktické cestovní informace <br />
-                          při cestě do {displayName}
+                          při cestě do {practicalInfoOwnerName}
                         </p>
                       </div>
                     </div>

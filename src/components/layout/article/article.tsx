@@ -110,12 +110,7 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
           contextFullSlug={placePage.fullSlug}
           // U rubriky žádné další položky — menu je jen aktivní odkaz zpět na výpis.
           pageChildren={placeIsMenuOwner ? (placePage.children?.docs ?? []) : []}
-          // Sbalený odkaz „Praktické informace" bere z kořenové stránky (země) —
-          // stejně jako podstránky a cíle pod nadřazeným místem.
-          rootChildren={rootPage?.children?.docs ?? []}
           currentPageFullSlug={placePage.fullSlug}
-          currentPageCategory={contextPage?.category}
-          isSubPlace={!!rootPage && placePage.fullSlug !== rootPage.fullSlug}
           hasPlaces={placeIsMenuOwner && (placePage.children?.docs?.length ?? 0) > 0}
           hasArticles={placeHasArticles}
           // Bez activeSection se zvýrazní samotný kontext (rubrika) — u místa
