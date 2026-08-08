@@ -15,21 +15,35 @@ import { publicBaseUrl } from './public-url'
  */
 
 export type AraEmailContent = {
-  /** Titulek pod papouškem, např. „Vítej na Ara.cz!“. Prostý text. */
+  /** Titulek pod papouškem, např. „Vítej na Ara.cz!“. Prostý text, šablona ho ošetří sama. */
   title: string
   /**
-   * Hlavní text nad tlačítkem — HTML. Dynamické vstupy (uživatelské jméno)
-   * si volající ošetří sám, stejně jako dosud.
+   * Hlavní text nad tlačítkem — HTML. Jediné pole, které se vkládá bez úprav:
+   * dynamické vstupy (uživatelské jméno) si volající ošetří přes `escapeHtml`.
    */
   bodyHtml: string
-  /** Nápis na tlačítku. Prostý text. */
+  /** Nápis na tlačítku. Prostý text, šablona ho ošetří sama. */
   buttonLabel: string
   /** Cíl tlačítka; stejná adresa se vypíše i do rámečku pod ním. */
   buttonUrl: string
-  /** Šedá poznámka pod rámečkem („Když jsi o účet nežádal…“). Prostý text. */
+  /** Šedá poznámka pod rámečkem („Když jsi o účet nežádal…“). Prostý text, šablona ho ošetří sama. */
   note: string
-  /** Patička: „Tenhle e-mail poslal web Ara.cz, protože “ + tahle věta. Prostý text. */
+  /** Patička: „Tenhle e-mail poslal web Ara.cz, protože “ + tahle věta. Prostý text, šablona ho ošetří sama. */
   reason: string
+}
+
+/**
+ * Ošetření textu do HTML. Prostotextová pole si šablona escapuje sama, aby
+ * bezpečnost nestála na kázni volajících — jen `bodyHtml` zůstává na nich
+ * (je to jediné pole, kde se formátování opravdu potřebuje).
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /** Systémové písmo — jediné, na které se dá v poště spolehnout. */
@@ -38,7 +52,14 @@ const FONT =
 
 export function renderAraEmail(content: AraEmailContent): string {
   const base = publicBaseUrl()
-  const { title, bodyHtml, buttonLabel, buttonUrl, note, reason } = content
+  const { bodyHtml } = content
+  const title = escapeHtml(content.title)
+  const buttonLabel = escapeHtml(content.buttonLabel)
+  // Adresa patří do HTML atributu i textu — escapování pokryje případný `&`
+  // mezi parametry (v atributu má správně stát `&amp;`).
+  const buttonUrl = escapeHtml(content.buttonUrl)
+  const note = escapeHtml(content.note)
+  const reason = escapeHtml(content.reason)
 
   return `<!DOCTYPE html>
 <html lang="cs">

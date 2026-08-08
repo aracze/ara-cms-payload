@@ -2,7 +2,7 @@ import type { Access, CollectionConfig, FieldAccess } from 'payload'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { SESSION_SECONDS } from '../lib/session-constants'
 import { publicBaseUrl } from '../lib/public-url'
-import { renderAraEmail } from '../lib/email-template'
+import { escapeHtml, renderAraEmail } from '../lib/email-template'
 import { revalidateUserAfterChange, revalidateUserAfterDelete } from '../hooks/revalidation'
 
 const isAdmin: Access = ({ req: { user } }) => {
@@ -30,16 +30,6 @@ const isAdminOrSelfFieldAccess: FieldAccess = ({ req: { user }, id }) => {
   if (!user) return false
   if (user.roles?.includes('admin')) return true
   return user.id === id
-}
-
-/** Text od uživatele do HTML e-mailu jen ošetřený — jméno si volí sám. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 export const Users: CollectionConfig = {
