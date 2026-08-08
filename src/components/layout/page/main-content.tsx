@@ -30,17 +30,20 @@ interface TocItem {
 // TOC odkazy jdou do Reactu jako holý text (ne dangerouslySetInnerHTML), takže
 // entity z bohatého textu (typicky &nbsp; z pevné mezery) by se jinak zobrazily
 // doslova — prohlížeč je dekóduje jen při parsování HTML, ne když je JS nastaví
-// jako textContent.
+// jako textContent. Záměrně NEDEKÓDUJE &lt;/&gt; (ani číselné ekvivalenty) —
+// výstup by pak mohl obsahovat "<"/">" a jakékoli následné ořezání tagů na
+// takovém textu je z podstaty nedokončitelné (CodeQL: incomplete
+// multi-character sanitization). Nadpis s literálním "<"/">" je natolik
+// okrajový případ, že bezpečnější je ho zobrazit jako "&lt;"/"&gt;".
 function decodeHtmlEntities(text: string): string {
-  const codePointToChar = (codePoint: number, fallback: string): string =>
-    Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
-      ? String.fromCodePoint(codePoint)
-      : fallback
+  const codePointToChar = (codePoint: number, fallback: string): string => {
+    if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return fallback
+    if (codePoint === 0x3c || codePoint === 0x3e) return fallback
+    return String.fromCodePoint(codePoint)
+  }
 
   return text
     .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#0*39;|&apos;/g, "'")
     .replace(/&#(\d+);/g, (match, dec) => codePointToChar(Number(dec), match))
@@ -60,12 +63,7 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   while ((match = regex.exec(html)) !== null) {
     const level = parseInt(match[1][1], 10)
     const attrs = match[2]
-    // Entity se dekódují PŘED odstraněním značek, ne po — jinak by text jako
-    // "&lt;script&gt;" (bezpečně zakódovaný v HTML) po dekódování protekl jako
-    // živé "<script>" bez šance na odstranění.
-    const text = decodeHtmlEntities(match[3])
-      .replace(/<[^>]+>/g, '')
-      .trim()
+    const text = decodeHtmlEntities(match[3].replace(/<[^>]+>/g, '')).trim()
     const idMatch = attrs.match(/\sid="([^"]*)"/)
     const id =
       idMatch?.[1] ??
