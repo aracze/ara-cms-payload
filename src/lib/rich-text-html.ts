@@ -316,10 +316,12 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
             // Legacy má dvě zrcadlené ikony podle strany, na které se jezdí —
             // rozpoznáme ji z textu hodnoty karty (podchytí "levé"/"levá"/
             // "vlevo" i "pravé"/"pravá"/"vpravo" jako podřetězec). Když text
-            // neříká jasně ani jedno, ikonu raději nezobrazíme, než abychom
-            // hádali špatnou stranu.
+            // neříká jasně ani jedno (nebo mluví o obou), ikonu raději
+            // nezobrazíme, než abychom hádali špatnou stranu.
             const value = String(item.value || '')
-            const side = /lev/i.test(value) ? 'left' : /prav/i.test(value) ? 'right' : null
+            const isLeft = /lev/i.test(value)
+            const isRight = /prav/i.test(value)
+            const side = isLeft !== isRight ? (isLeft ? 'left' : 'right') : null
             headerHtml = side
               ? `<div class="nice-to-know-item__content__header"><img src="/assets/driving/${side}-side.svg" width="60" height="60" alt="Řízení" /></div>`
               : ''

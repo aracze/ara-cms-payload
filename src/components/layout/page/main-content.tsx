@@ -47,7 +47,7 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#0*39;|&apos;/g, "'")
     .replace(/&#(\d+);/g, (match, dec) => codePointToChar(Number(dec), match))
-    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => codePointToChar(parseInt(hex, 16), match))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (match, hex) => codePointToChar(parseInt(hex, 16), match))
     .replace(/&amp;/g, '&')
 }
 
