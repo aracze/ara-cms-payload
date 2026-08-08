@@ -310,6 +310,21 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
             </div>`
           } else if (t === 'weather') {
             headerHtml = `<div class="nice-to-know-item__content__header"><img src="/assets/information/weather-gray.svg" width="60" height="60" alt="Počasí" /></div>`
+          } else if (t === 'population') {
+            headerHtml = `<div class="nice-to-know-item__content__header"><img src="/assets/population.svg" width="60" height="60" alt="Počet obyvatel" /></div>`
+          } else if (t === 'drivingSide') {
+            // Legacy má dvě zrcadlené ikony podle strany, na které se jezdí —
+            // rozpoznáme ji z textu hodnoty karty (podchytí "levé"/"levá"/
+            // "vlevo" i "pravé"/"pravá"/"vpravo" jako podřetězec). Když text
+            // neříká jasně ani jedno (nebo mluví o obou), ikonu raději
+            // nezobrazíme, než abychom hádali špatnou stranu.
+            const value = String(item.value || '')
+            const isLeft = /lev/i.test(value)
+            const isRight = /prav/i.test(value)
+            const side = isLeft !== isRight ? (isLeft ? 'left' : 'right') : null
+            headerHtml = side
+              ? `<div class="nice-to-know-item__content__header"><img src="/assets/driving/${side}-side.svg" width="60" height="60" alt="Řízení" /></div>`
+              : ''
           } else if (t === 'time') {
             const tz = String(item.timezone || 'Europe/Prague')
             timeData = getTimeDataForTimezone(tz)
@@ -423,13 +438,15 @@ function sanitizeSeasonalityStatus(status: unknown): 'off' | 'mid' | 'peak' {
 
 function sanitizeNiceToKnowType(
   type: unknown,
-): 'language' | 'electricity' | 'currency' | 'weather' | 'time' {
+): 'language' | 'electricity' | 'currency' | 'weather' | 'time' | 'population' | 'drivingSide' {
   if (
     type === 'language' ||
     type === 'electricity' ||
     type === 'currency' ||
     type === 'weather' ||
-    type === 'time'
+    type === 'time' ||
+    type === 'population' ||
+    type === 'drivingSide'
   ) {
     return type
   }

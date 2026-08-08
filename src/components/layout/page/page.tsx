@@ -12,6 +12,10 @@ import {
   fetchMediaUrlsByIds,
   fetchPageReviews,
   fetchPageReviewStats,
+  fetchDerivedPlaceRatings,
+  isPlaceListingCategory,
+  type DerivedRatingPlace,
+  type PageReviewStats,
   fetchTouristPointSiblings,
   pageHasArticlesBySlug,
   fetchPracticalInfoSections,
@@ -96,6 +100,29 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     touristPointChildIds.length > 0
       ? fetchPageReviewStats(touristPointChildIds)
       : Promise.resolve({})
+  // Odvozené hodnocení míst — hvězdičky spočítané z recenzí turistických cílů
+  // pod místem. Míří na dvě místa: do záhlaví TÉTO stránky (je-li místem) a na
+  // dlaždice míst v „Co vidět". Kdo na hodnocení nemá nárok (země a regiony,
+  // které se rozbalují na další místa) a co nemá dost recenzí, odfiltruje
+  // fetchDerivedPlaceRatings — jeden dotaz na úroveň stromu, ne na dlaždici.
+  // Kontinent (stránka bez rodiče) vypisuje země a ty nárok nikdy nemají — bez
+  // této zkratky by se procházely děti všech zemí kontinentu (stovky řádků)
+  // jen proto, aby se výsledek zahodil.
+  const derivedRatingPlaces: DerivedRatingPlace[] = !page.parent
+    ? []
+    : [
+        ...(isPlaceListingCategory(page.category) ? [page] : []),
+        ...placesToVisit.filter((c) => isPlaceListingCategory(c.category)),
+      ]
+        .map((p) => ({
+          id: Number(p.id),
+          stopDisplayingChildPlaces: p.stopDisplayingChildPlaces,
+        }))
+        .filter((p) => Number.isInteger(p.id))
+  const derivedPlaceRatingsPromise: Promise<Record<number, PageReviewStats>> =
+    derivedRatingPlaces.length > 0
+      ? fetchDerivedPlaceRatings(derivedRatingPlaces)
+      : Promise.resolve({})
   // Sousední cíle pro pás „Další vyhledávaná Místa…" (jen na detailu cíle).
   const siblingsParentSlug =
     page.category === PageCategory.Turisticky_cil
@@ -139,16 +166,17 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // ne aktuální podstránce (Vstupní podmínky). Data kontextové stránky načítáme jen když
   // se menu vůbec renderuje (jinak zbytečný fetch pro rubriky/statické stránky).
   const [
-    practicalInfoSourceChildren,
+    practicalInfoSource,
     contextFlags,
     exchangeData,
     reviewsData,
     reviewStats,
+    derivedPlaceRatings,
     siblings,
     practicalInfoSections,
     teamSection,
   ] = await Promise.all([
-    fetchPracticalInfoSourceChildren(page, safeRootPage, menuContext.isSubPlace),
+    fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
       if (!showSubnavigation) return { hasPlaces: false, hasArticles: false }
       if (menuContext.contextFullSlug === page.fullSlug) {
@@ -174,6 +202,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     exchangePromise,
     reviewsPromise,
     reviewStatsPromise,
+    derivedPlaceRatingsPromise,
     siblingsPromise,
     // Složená stránka „Praktické informace" — texty sousedních podstránek
     // (děti kontextového místa) v jednom dotazu; jinde prázdné pole zdarma.
@@ -262,6 +291,16 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         }
       : null
 
+  // Místo (město, ostrov) vlastní recenze nemá — v záhlaví ukazuje odvozený
+  // průměr z recenzí svých cílů. Nikdy obojí: odvozené hodnocení se počítá jen
+  // pro kategorie míst, zatímco `heroRating` patří cíli.
+  const derivedHeroRating = heroRating ? null : (derivedPlaceRatings[Number(page.id)] ?? null)
+
+  // Hodnocení na dlaždicích „Co vidět": cíl ukazuje vlastní recenze (od první,
+  // jako všude jinde na webu), místo odvozený průměr (od tří recenzí výš).
+  // Id stránek se nepřekrývají, takže obě mapy stačí sloučit.
+  const cardRatings = { ...reviewStats, ...derivedPlaceRatings }
+
   // Karta „Praktické informace" v pravém sloupci (jen turistické cíle):
   // adresa, oficiální web, mapa s pinem cíle; autora si MainContent bere
   // z createdByPublic (přesouvá se z místa pod textem).
@@ -276,6 +315,28 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           fullSlug: page.fullSlug,
         }
       : null
+
+  // Karta „Praktické informace" v pravém sloupci u míst (legacy `_pageHighlights`/
+  // `_weatherPageHighlights`): místo bez vlastní podstránky Praktické informace
+  // (San Francisco) zdědí tu nejbližšího předka (USA) — a nadpis karty se pak
+  // musí týkat TOHO předka, ne aktuální stránky, jinak by odkaz na USA nesl
+  // titulek San Francisca.
+  const ownPracticalInfoChild = pageChildren.find(
+    (child) => child.category === PageCategory.Prakticke_informace,
+  )
+  const practicalInfoChild =
+    ownPracticalInfoChild ??
+    practicalInfoSource.children.find(
+      (child) => child.category === PageCategory.Prakticke_informace,
+    )
+  const practicalInfoOwner = ownPracticalInfoChild ? page : practicalInfoSource.sourcePage
+  const practicalInfo = practicalInfoChild
+    ? {
+        fullSlug: practicalInfoChild.fullSlug,
+        ownerTitle: practicalInfoOwner.title,
+        ownerGenitive: practicalInfoOwner.detail?.genitive ?? null,
+      }
+    : null
 
   return (
     <div className="flex flex-col bg-white transition-all duration-500">
@@ -316,7 +377,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           blurDataURL={useDefaultCover ? DEFAULT_COVER_BLUR : undefined}
           filterId={`blurFilter-${page.id}`}
           breadcrumbs={breadcrumbs}
-          rating={heroRating}
+          rating={heroRating ?? derivedHeroRating}
+          // Místo posílá klik na výpis cílů — vlastní sekci recenzí nemá.
+          ratingHref={derivedHeroRating ? '#mista' : '#recenze'}
+          ratingCountSuffix={derivedHeroRating ? 'cílů' : undefined}
         />
 
         {/* Sub-navigation bar style — not shown on rubric or static content pages */}
@@ -325,10 +389,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             contextTitle={menuContext.contextTitle}
             contextFullSlug={menuContext.contextFullSlug}
             pageChildren={menuContext.menuChildren}
-            rootChildren={practicalInfoSourceChildren}
             currentPageFullSlug={page.fullSlug}
-            currentPageCategory={page.category}
-            isSubPlace={menuContext.isSubPlace}
             hasPlaces={contextHasPlaces}
             hasArticles={contextHasArticles}
             // Turistický cíl je v menu schovaný (patří pod sekci „Místa" svého
@@ -341,13 +402,11 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         {/* 2. CONTENT AREA */}
         <MainContent
           text={mainText}
-          pageChildren={pageChildren}
           pageCategory={page.category}
           timezone={page.detail?.timezone || safeRootPage?.detail?.timezone}
           currencyCode={effectiveCurrencyCode}
           exchangeRate={exchangeData?.rate}
-          pageTitle={page.title}
-          genitive={page.detail?.genitive}
+          practicalInfo={practicalInfo}
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
           belowText={teamSection ? <TeamSection {...teamSection} /> : null}
@@ -384,6 +443,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             imageUrlMap={childImageUrlMap}
             parentLocative={page.detail?.locative ?? null}
             reviewStats={reviewStats}
+            cardRatings={cardRatings}
             showAnalyticsDebug={currentUser?.isAdmin ?? false}
           />
         )}
@@ -530,15 +590,13 @@ async function fetchMenuContext(
   }
 }
 
-async function fetchPracticalInfoSourceChildren(
+async function fetchPracticalInfoSource(
   page: PayloadPage,
   rootPage: PayloadPage,
   isSubPlace: boolean,
-): Promise<PayloadPage['children']['docs']> {
-  const rootChildren = rootPage.children?.docs ?? []
-
+): Promise<{ sourcePage: PayloadPage; children: PayloadPage['children']['docs'] }> {
   if (!isSubPlace) {
-    return rootChildren
+    return { sourcePage: rootPage, children: rootPage.children?.docs ?? [] }
   }
 
   const ancestors = await fetchAncestorChain(page.fullSlug)
@@ -554,11 +612,11 @@ async function fetchPracticalInfoSourceChildren(
     )
 
     if (hasPracticalInfo) {
-      return children
+      return { sourcePage: ancestor, children }
     }
   }
 
-  return rootChildren
+  return { sourcePage: rootPage, children: rootPage.children?.docs ?? [] }
 }
 
 async function getBreadcrumbs(page: PayloadPage): Promise<Breadcrumb[]> {

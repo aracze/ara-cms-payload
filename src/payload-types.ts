@@ -1137,7 +1137,7 @@ export interface SeasonalityBlock {
 export interface NiceToKnowBlock {
   items?:
     | {
-        type: 'language' | 'electricity' | 'currency' | 'weather' | 'time';
+        type: 'language' | 'electricity' | 'currency' | 'weather' | 'time' | 'population' | 'drivingSide';
         headerText?: string | null;
         headerSubtext?: string | null;
         title: string;

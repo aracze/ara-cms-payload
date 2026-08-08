@@ -3,18 +3,6 @@ import { PageChild, PageCategory } from '@/types/payload'
 
 const hiddenCategories: string[] = [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil]
 
-// Categories considered as practical info for active-state highlighting.
-const practicalInfoCategories: string[] = [
-  PageCategory.Vstupni_podminky,
-  PageCategory.Cesta,
-  PageCategory.Doprava,
-  PageCategory.Mena_a_ceny,
-  PageCategory.Zdravi_a_bezpeci,
-  PageCategory.Jazyk_a_kultura,
-  PageCategory.Jidlo_a_pit,
-  PageCategory.Ubytovani,
-]
-
 const legacyMenuOrder: PageCategory[] = [
   PageCategory.Mista,
   PageCategory.Vstupni_podminky,
@@ -41,10 +29,7 @@ export const Subnavigation = ({
   contextTitle,
   contextFullSlug,
   pageChildren,
-  rootChildren,
   currentPageFullSlug,
-  currentPageCategory,
-  isSubPlace,
   hasPlaces,
   hasArticles,
   activeSection,
@@ -52,10 +37,7 @@ export const Subnavigation = ({
   contextTitle: string
   contextFullSlug: string
   pageChildren: PageChild[]
-  rootChildren: PageChild[]
   currentPageFullSlug: string
-  currentPageCategory?: PageCategory
-  isSubPlace: boolean
   hasPlaces?: boolean
   hasArticles?: boolean
   /** Zvýrazní kotevní položku „Místa"/„Články" místo kontextu — použito na stránce článku. */
@@ -104,26 +86,6 @@ export const Subnavigation = ({
       return a.originalIndex - b.originalIndex
     })
     .map(({ child }) => child)
-
-  // If the current menu context already has its own "Praktické informace"
-  // child page, we do not need to inject the ancestor/root fallback link.
-  const hasOwnPracticalInfoChild = (pageChildren || []).some(
-    (child) => child.category === PageCategory.Prakticke_informace,
-  )
-
-  // On sub-places (like Dubrovník), find the root's "Praktické informace" page
-  // to show as a single collapsed link instead of individual pages.
-  const practicalInfoPage =
-    isSubPlace && !hasOwnPracticalInfoChild
-      ? rootChildren?.find((child) => child.category === PageCategory.Prakticke_informace)
-      : null
-
-  // Determine if the current page falls under "practical info" (for highlighting)
-  const isCurrentPagePracticalInfo =
-    isSubPlace &&
-    currentPageCategory &&
-    (practicalInfoCategories.includes(currentPageCategory) ||
-      currentPageCategory === PageCategory.Prakticke_informace)
 
   return (
     <nav aria-label="Sekundární navigace" className="bg-white relative z-30">
@@ -176,17 +138,6 @@ export const Subnavigation = ({
               </Link>
             )
           })}
-
-          {/* On sub-places, show a single "Praktické informace" link from the root */}
-          {isSubPlace && practicalInfoPage && (
-            <Link
-              href={practicalInfoPage.fullSlug}
-              aria-current={isCurrentPagePracticalInfo ? 'page' : undefined}
-              className={itemClass(!!isCurrentPagePracticalInfo)}
-            >
-              Praktické informace
-            </Link>
-          )}
 
           {/* Anchor to the context place's "Články a cestopisy" section — always last,
               only if the context place has articles. */}
