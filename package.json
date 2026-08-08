@@ -10,6 +10,7 @@
     "devsafe": "rm -rf .next && cross-env NODE_OPTIONS=--no-deprecation next dev",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
+    "build:email-assets": "node scripts/build-email-assets.mjs",
     "build:map-style": "node scripts/build-map-style.mjs",
     "format": "prettier --write .",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation eslint .",

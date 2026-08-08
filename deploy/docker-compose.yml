@@ -64,6 +64,11 @@ services:
       GA4_PROPERTY_ID: ${GA4_PROPERTY_ID}
       GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON}
       ANALYTICS_SYNC_SECRET: ${ANALYTICS_SYNC_SECRET}
+      # Cloudflare Turnstile (ochrana registrace/obnovy hesla a komentářů proti
+      # robotům) — bez obou klíčů se v aplikaci tiše vypne a jede jen honeypot.
+      # Hodnoty do /opt/aracze/.env; widget má v CF povolené hostnames ara.cz.
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
     # Bez `ports` — appka je dostupná jen uvnitř docker sítě, zvenčí výhradně
     # přes Caddy. Kdyby port zůstal otevřený, dal by se origin obejít přes
     # holé http a minout tím TLS i Cloudflare.

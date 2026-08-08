@@ -2,6 +2,7 @@ import type { Access, CollectionConfig, FieldAccess } from 'payload'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { SESSION_SECONDS } from '../lib/session-constants'
 import { publicBaseUrl } from '../lib/public-url'
+import { escapeHtml, renderAraEmail } from '../lib/email-template'
 import { revalidateUserAfterChange, revalidateUserAfterDelete } from '../hooks/revalidation'
 
 const isAdmin: Access = ({ req: { user } }) => {
@@ -31,16 +32,6 @@ const isAdminOrSelfFieldAccess: FieldAccess = ({ req: { user }, id }) => {
   return user.id === id
 }
 
-/** Text od uživatele do HTML e-mailu jen ošetřený — jméno si volí sám. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
@@ -66,20 +57,23 @@ export const Users: CollectionConfig = {
     // stávající účty označí za ověřené. Bez něj by se nikdo (ani admin)
     // nepřihlásil.
     // Obnova hesla — odkaz vede na VEŘEJNÝ web (výchozí Payload míří do administrace,
-    // kam se běžný uživatel stejně nedostane).
+    // kam se běžný uživatel stejně nedostane). Vzhled dodává sdílená šablona
+    // v src/lib/email-template.ts.
     forgotPassword: {
       generateEmailSubject: () => 'Nastavení nového hesla na Ara.cz',
       generateEmailHTML: (args) => {
         const token = (args as { token?: string } | undefined)?.token ?? ''
         const base = publicBaseUrl()
         const url = `${base}/nove-heslo?token=${encodeURIComponent(token)}`
-        return `
-          <p>Ahoj,</p>
-          <p>někdo (snad ty) požádal o nové heslo k účtu na Ara.cz. Nastavíš si ho tímhle odkazem:</p>
-          <p><a href="${url}">Nastavit nové heslo</a></p>
-          <p>Pokud odkaz nefunguje, zkopíruj si do prohlížeče tuhle adresu:<br>${url}</p>
-          <p>O nové heslo jsi nežádal? Tenhle e-mail klidně smaž — dokud na odkaz neklikneš, staré heslo dál platí.</p>
-        `
+        return renderAraEmail({
+          title: 'Nové heslo',
+          bodyHtml:
+            'Ahoj, někdo (snad ty) požádal o nové heslo k účtu na Ara.cz. Nastavíš si ho tlačítkem:',
+          buttonLabel: 'Nastavit nové heslo',
+          buttonUrl: url,
+          note: 'O nové heslo jsi nežádal? Tenhle e-mail klidně smaž — dokud na odkaz neklikneš, staré heslo dál platí.',
+          reason: 'někdo požádal o obnovu hesla k tvému účtu.',
+        })
       },
     },
     verify: {
@@ -89,13 +83,14 @@ export const Users: CollectionConfig = {
         const base = publicBaseUrl()
         const url = `${base}/registrace/potvrzeni?token=${encodeURIComponent(token)}`
         const name = escapeHtml((user as { username?: string })?.username ?? '')
-        return `
-          <p>Ahoj${name ? ' ' + name : ''},</p>
-          <p>vítej na Ara.cz! Potvrď prosím svůj e-mail kliknutím na odkaz:</p>
-          <p><a href="${url}">Potvrdit e-mail</a></p>
-          <p>Pokud odkaz nefunguje, zkopíruj si do prohlížeče tuhle adresu:<br>${url}</p>
-          <p>Když jsi o účet nežádal, tenhle e-mail klidně smaž — bez potvrzení účet nevznikne.</p>
-        `
+        return renderAraEmail({
+          title: 'Vítej na Ara.cz!',
+          bodyHtml: `Ahoj${name ? ' <b>' + name + '</b>' : ''}, díky za registraci. Zbývá poslední krok — potvrď prosím svůj e-mail:`,
+          buttonLabel: 'Potvrdit e-mail',
+          buttonUrl: url,
+          note: 'Když jsi o účet nežádal, tenhle e-mail klidně smaž — bez potvrzení účet nevznikne.',
+          reason: 'se s tvou adresou někdo zaregistroval.',
+        })
       },
     },
   },
