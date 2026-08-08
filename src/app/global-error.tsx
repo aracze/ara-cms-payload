@@ -56,7 +56,7 @@ export default function GlobalError({
           </p>
           <h1 style={{ margin: 0, fontSize: '1.875rem', fontWeight: 700 }}>Něco se pokazilo</h1>
           <p style={{ margin: 0, maxWidth: '28rem', color: '#4b5563' }}>
-            Web se teď nepodařilo načíst. Zkuste to prosím za chvíli znovu.
+            Web se teď nepodařilo načíst. Zkus to prosím za chvíli znovu.
           </p>
           <div
             style={{
