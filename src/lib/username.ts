@@ -15,7 +15,8 @@ export function normalizeUsername(raw: string): string {
   return raw.trim().toLowerCase()
 }
 
-const MIN = 3
+// Minimum 2 znaky: iniciály („jk“) jsou legitimní jméno, jedno písmeno už vypadá jako překlep.
+const MIN = 2
 const MAX = 30
 
 /**

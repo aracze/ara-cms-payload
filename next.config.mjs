@@ -56,6 +56,23 @@ const nextConfig = {
         destination: '/o-nas',
         permanent: true,
       },
+      // Spolupráce a Pírka byly sekce redakčního systému starého webu (nábor
+      // autorů, resp. bodování příspěvků). Na novém webu ten systém není a
+      // nechystá se, takže tu nejsou náhradní stránky — jen nejbližší smysluplný
+      // cíl. Obojí má Google zaindexované z odkazů v patičce starého webu.
+      {
+        // Nábor autorů: na novém webu o něm mluví „O nás" (kdo web píše).
+        source: '/spoluprace',
+        destination: '/o-nas',
+        permanent: true,
+      },
+      {
+        // Pírka byla bodovací hra pro přispěvatele — nemá nic, co by ji
+        // nahradilo, takže domů.
+        source: '/pirka',
+        destination: '/',
+        permanent: true,
+      },
       // Kalifornie jako mezistupeň v adrese - stará i nová hierarchie ji
       // z URL schovávají (viz Pages.includeInChildUrlPaths), ale konkrétně
       // tyhle staré odkazy ji ještě obsahují (ověřeno proti aktuálním fullSlug
