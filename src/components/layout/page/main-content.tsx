@@ -32,14 +32,19 @@ interface TocItem {
 // doslova — prohlížeč je dekóduje jen při parsování HTML, ne když je JS nastaví
 // jako textContent.
 function decodeHtmlEntities(text: string): string {
+  const codePointToChar = (codePoint: number, fallback: string): string =>
+    Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+      ? String.fromCodePoint(codePoint)
+      : fallback
+
   return text
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#0*39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (match, dec) => codePointToChar(Number(dec), match))
+    .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => codePointToChar(parseInt(hex, 16), match))
     .replace(/&amp;/g, '&')
 }
 
@@ -55,7 +60,12 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   while ((match = regex.exec(html)) !== null) {
     const level = parseInt(match[1][1], 10)
     const attrs = match[2]
-    const text = decodeHtmlEntities(match[3].replace(/<[^>]+>/g, '')).trim()
+    // Entity se dekódují PŘED odstraněním značek, ne po — jinak by text jako
+    // "&lt;script&gt;" (bezpečně zakódovaný v HTML) po dekódování protekl jako
+    // živé "<script>" bez šance na odstranění.
+    const text = decodeHtmlEntities(match[3])
+      .replace(/<[^>]+>/g, '')
+      .trim()
     const idMatch = attrs.match(/\sid="([^"]*)"/)
     const id =
       idMatch?.[1] ??

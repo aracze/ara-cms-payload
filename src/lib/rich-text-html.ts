@@ -314,9 +314,15 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
             headerHtml = `<div class="nice-to-know-item__content__header"><img src="/assets/population.svg" width="60" height="60" alt="Počet obyvatel" /></div>`
           } else if (t === 'drivingSide') {
             // Legacy má dvě zrcadlené ikony podle strany, na které se jezdí —
-            // rozpoznáme ji z textu hodnoty karty (viz título/`value` v CMS).
-            const side = /levé/i.test(String(item.value || '')) ? 'left' : 'right'
-            headerHtml = `<div class="nice-to-know-item__content__header"><img src="/assets/driving/${side}-side.svg" width="60" height="60" alt="Řízení" /></div>`
+            // rozpoznáme ji z textu hodnoty karty (podchytí "levé"/"levá"/
+            // "vlevo" i "pravé"/"pravá"/"vpravo" jako podřetězec). Když text
+            // neříká jasně ani jedno, ikonu raději nezobrazíme, než abychom
+            // hádali špatnou stranu.
+            const value = String(item.value || '')
+            const side = /lev/i.test(value) ? 'left' : /prav/i.test(value) ? 'right' : null
+            headerHtml = side
+              ? `<div class="nice-to-know-item__content__header"><img src="/assets/driving/${side}-side.svg" width="60" height="60" alt="Řízení" /></div>`
+              : ''
           } else if (t === 'time') {
             const tz = String(item.timezone || 'Europe/Prague')
             timeData = getTimeDataForTimezone(tz)

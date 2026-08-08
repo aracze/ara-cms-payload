@@ -44,8 +44,12 @@ const run = async () => {
     collection: 'pages',
     where: { category: { equals: 'Praktické informace' } },
     depth: 0,
-    limit: 200,
+    limit: 0,
+    pagination: false,
+    select: { fullSlug: true, text: true, _status: true },
   })
+
+  console.log(`Nalezeno ${docs.length} stránek kategorie "Praktické informace".\n`)
 
   let pagesFixed = 0
   let cardsFixed = 0
