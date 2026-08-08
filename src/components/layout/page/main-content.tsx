@@ -51,6 +51,20 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&amp;/g, '&')
 }
 
+// Jeden průchod `/<[^>]+>/g` může odstraněním jednoho tagu spojit okolní
+// text do NOVÉHO tagu, který v původním vstupu vůbec nebyl (klasický
+// "incomplete multi-character sanitization" případ) — opakuje se proto do
+// ustálení, ne jen jednou.
+function stripTags(html: string): string {
+  let result = html
+  let previous
+  do {
+    previous = result
+    result = previous.replace(/<[^>]+>/g, '')
+  } while (result !== previous)
+  return result
+}
+
 function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   const headings: TocItem[] = []
   // Nadpisy mají po renderu atributy (např. id z richTextToHtml) — otevírací
@@ -63,7 +77,7 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   while ((match = regex.exec(html)) !== null) {
     const level = parseInt(match[1][1], 10)
     const attrs = match[2]
-    const text = decodeHtmlEntities(match[3].replace(/<[^>]+>/g, '')).trim()
+    const text = decodeHtmlEntities(stripTags(match[3])).trim()
     const idMatch = attrs.match(/\sid="([^"]*)"/)
     const id =
       idMatch?.[1] ??
