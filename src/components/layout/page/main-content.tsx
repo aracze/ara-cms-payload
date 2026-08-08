@@ -38,6 +38,9 @@ interface TocItem {
 function decodeHtmlEntities(text: string): string {
   const codePointToChar = (codePoint: number, fallback: string): string => {
     if (!Number.isInteger(codePoint) || codePoint < 0 || codePoint > 0x10ffff) return fallback
+    // Osamocené UTF-16 surrogate hodnoty nejsou platný Unicode scalar —
+    // String.fromCodePoint by je nevyhodil, ale vrátil by nepárový surrogate.
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) return fallback
     if (codePoint === 0x3c || codePoint === 0x3e) return fallback
     return String.fromCodePoint(codePoint)
   }
