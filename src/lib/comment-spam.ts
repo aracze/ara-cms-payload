@@ -33,6 +33,8 @@ export const getTurnstileSiteKey = (): string | null =>
 // přijatelný (spam se tím nezhorší). Klíč = IP; hodnota = časy posledních vložení.
 const RATE_LIMIT_MAX = 5 // max komentářů
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // za 10 minut
+// Tvrdý strop počtu klíčů v mapách (rate-limit i cooldown) — pojistka paměti.
+const BUCKET_MAX_KEYS = 5000
 const rateBucket = new Map<string, number[]>()
 
 /**
@@ -43,6 +45,14 @@ const rateBucket = new Map<string, number[]>()
  * dvě varianty se lišily v pořadí `trim()` a fallbacku.
  */
 export function clientIp(h: Headers): string {
+  // Za Cloudflare je směrodatná CF-Connecting-IP: v x-forwarded-for chodí od
+  // Caddy adresa CF okraje, kterou sdílí MNOHO návštěvníků najednou — limit by
+  // je házel do jednoho koše (a útočník by ho střídáním okrajů obcházel).
+  // Hlavičce se dá věřit: na origin se od 9. 8. 2026 nedostane nikdo jiný než
+  // Cloudflare (allowlist v Caddyfile) a ten ji vždy přepisuje skutečnou
+  // adresou návštěvníka. V dev / mimo Cloudflare hlavička chybí → fallback.
+  const cf = h.get('cf-connecting-ip')?.trim()
+  if (cf) return cf
   const forwarded = h.get('x-forwarded-for')?.split(',')[0]?.trim()
   if (forwarded) return forwarded
   return h.get('x-real-ip')?.trim() ?? ''
@@ -67,12 +77,19 @@ export function isRateLimited(ip: string, now: number): boolean {
   recent.push(now)
   rateBucket.set(ip, recent)
 
-  // Nenechat Mapu růst donekonečna (jednoduchý úklid při každém zápisu).
-  if (rateBucket.size > 5000) {
+  // Nenechat Mapu růst donekonečna: nejdřív pryč prošlé záznamy, a když ani
+  // to nestačí (tolik ŽIVÝCH klíčů = probíhající záplava), vyhazují se
+  // nejstarší. Oslabení limitu při takovém útoku je přijatelná daň za to,
+  // že paměť procesu má tvrdou hranici.
+  if (rateBucket.size > BUCKET_MAX_KEYS) {
     for (const [key, times] of rateBucket) {
       const alive = times.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
       if (alive.length === 0) rateBucket.delete(key)
       else rateBucket.set(key, alive)
+    }
+    for (const key of rateBucket.keys()) {
+      if (rateBucket.size <= BUCKET_MAX_KEYS) break
+      rateBucket.delete(key)
     }
   }
   return false
@@ -163,10 +180,18 @@ export function underCooldown(key: string, now: number): boolean {
   if (last !== undefined && now - last < COOLDOWN_WINDOW_MS) return true
   cooldownBucket.set(key, now)
 
-  // Nenechat Mapu růst donekonečna (stejný úklid jako u rate-limitu).
-  if (cooldownBucket.size > 5000) {
+  // Tvrdý strop jako u rate-limitu: pryč prošlé záznamy, a když ani to
+  // nestačí (přes 5000 živých adres za hodinu = záplava), vyhazují se
+  // nejstarší — Mapa iteruje v pořadí vložení. Vyhozením se cooldown adresy
+  // předčasně uvolní, což je při takovém útoku přijatelná daň za tvrdou
+  // hranici paměti procesu.
+  if (cooldownBucket.size > BUCKET_MAX_KEYS) {
     for (const [k, t] of cooldownBucket) {
       if (now - t >= COOLDOWN_WINDOW_MS) cooldownBucket.delete(k)
+    }
+    for (const k of cooldownBucket.keys()) {
+      if (cooldownBucket.size <= BUCKET_MAX_KEYS) break
+      cooldownBucket.delete(k)
     }
   }
   return false

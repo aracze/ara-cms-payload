@@ -46,6 +46,12 @@ jobs:
       - name: Check formatting (Prettier)
         run: npx prettier --check .
 
+      # Caddy na produkci pouští na origin jen rozsahy Cloudflare; když CF
+      # nějaký přidá, musí se allowlist obnovit — jinak část návštěvníků
+      # dostane zavřené spojení. Drift = červený build (výpadek sítě jen varuje).
+      - name: Cloudflare allowlist v Caddyfile je aktuální
+        run: node scripts/check-cloudflare-ranges.mjs
+
       - name: Run tests
         env:
           DATABASE_URL: postgres://postgres:password@localhost:5432/payload
