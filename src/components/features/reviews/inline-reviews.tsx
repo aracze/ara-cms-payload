@@ -265,7 +265,10 @@ export function InlineReviews({
             />
           </div>
 
-          {turnstileSiteKey && (
+          {/* Captcha jen pro nepřihlášené — tady se přihlášení pozná až za běhu
+              ze `signedAs` (přijde s načtenými recenzemi); server si přihlášení
+              stejně ověří sám (viz createReview). */}
+          {turnstileSiteKey && !signedAs && (
             <div className="mb-4">
               <Turnstile ref={turnstileRef} siteKey={turnstileSiteKey} />
             </div>
@@ -290,7 +293,7 @@ export function InlineReviews({
             >
               {isPending ? 'Odesílám…' : 'Vložit recenzi'}
             </button>
-            {!turnstileSiteKey && (
+            {!turnstileSiteKey && !signedAs && (
               <span className="text-[12.5px] text-gray-500">
                 Chráněno proti spamu · bez opisování captchy
               </span>

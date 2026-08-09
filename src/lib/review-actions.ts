@@ -125,8 +125,10 @@ export async function createReview(
     return { status: 'error', message: 'Recenze je příliš dlouhá.' }
   }
 
-  // 3) Cloudflare Turnstile (aktivní jen když je nastaven secret; jinak projde).
-  const humanVerified = await verifyTurnstile(turnstileToken, ip)
+  // 3) Cloudflare Turnstile — jen pro NEPŘIHLÁŠENÉ (viz komentáře: identitu
+  //    přihlášeného nese session a robotem být prokazatelně nemůže, captcha
+  //    by ho jen zdržovala). Honeypot výš a rate-limit níž platí dál i pro něj.
+  const humanVerified = currentUser ? true : await verifyTurnstile(turnstileToken, ip)
   if (!humanVerified) {
     return {
       status: 'error',
