@@ -2,6 +2,7 @@ import type {
   CollectionAfterChangeHook,
   CollectionAfterDeleteHook,
   GlobalAfterChangeHook,
+  PayloadRequest,
 } from 'payload'
 
 /**
@@ -164,29 +165,95 @@ export const revalidateCommentAfterDelete: CollectionAfterDeleteHook = async ({ 
   return doc
 }
 
-type UserLikeDoc = { username?: string | null }
+type UserLikeDoc = {
+  username?: string | null
+  avatar?: number | string | { id?: number | string } | null
+}
 
 /** Tag veřejného profilu uživatele (/profil/<username>). */
 const userProfileTags = (doc: UserLikeDoc | undefined | null): string[] =>
   typeof doc?.username === 'string' && doc.username ? ['user_profile_' + doc.username] : []
 
+/** ID profilové fotky bez ohledu na hloubku dotazu (číslo vs. objekt). */
+const avatarIdOf = (doc: UserLikeDoc | undefined | null): number | string | null => {
+  const raw = doc?.avatar
+  if (raw && typeof raw === 'object') return raw.id ?? null
+  return raw ?? null
+}
+
+/**
+ * Tagy výpisů komentářů a recenzí, kde je uživatel autorem. Výpisy mají v cache
+ * zapečenou jeho fotku a odkaz na profil (virtuální `authorPublic`), takže po
+ * výměně fotky nebo přejmenování účtu se musí obnovit i cílové články/stránky —
+ * jinak by u starších komentářů visela stará fotka až do jiné, nesouvisející
+ * změny. Obnovují se jen dotčené cíle, ne globální tag `comments` (ten by
+ * zahodil i výpisy, kterých se změna netýká).
+ */
+const authorCommentTargetTags = async (
+  req: PayloadRequest,
+  userId: number | string,
+): Promise<string[]> => {
+  const res = await req.payload.find({
+    collection: 'comments',
+    where: { author: { equals: userId } },
+    depth: 0,
+    select: { relatedTo: true },
+    limit: 1000,
+    pagination: false,
+    overrideAccess: true,
+    req,
+  })
+  const tags = new Set<string>()
+  for (const c of res.docs) {
+    for (const tag of commentTargetTags(c as CommentLikeDoc)) tags.add(tag)
+  }
+  return [...tags]
+}
+
 // Změna uživatele (popis, avatar, jméno…) invaliduje jeho veřejný profil.
 // `previousDoc` pokrývá přejmenování username (starý profil zmizí z cache).
-// Pozn.: hook se spouští i při auth operacích (loginAttempts…) — invalidace
-// je levná, přesnější filtrování by za tu složitost nestálo.
+// Pozn.: hook se spouští i při auth operacích (loginAttempts…) — základní
+// invalidace je levná a filtrování by za tu složitost nestálo. Jen dotaz na
+// komentáře autora běží VÝHRADNĚ při změně fotky nebo username, aby se
+// nespouštěl při každém přihlášení.
 export const revalidateUserAfterChange: CollectionAfterChangeHook = async ({
   doc,
   previousDoc,
+  operation,
+  req,
 }) => {
-  await safeRevalidate([
+  const tags = [
     'users',
     ...userProfileTags(doc as UserLikeDoc),
     ...userProfileTags(previousDoc as UserLikeDoc),
-  ])
+  ]
+  const identityChanged =
+    operation === 'update' &&
+    (avatarIdOf(doc as UserLikeDoc) !== avatarIdOf(previousDoc as UserLikeDoc) ||
+      (doc as UserLikeDoc).username !== (previousDoc as UserLikeDoc | undefined)?.username)
+  if (identityChanged && doc?.id != null) {
+    try {
+      tags.push(...(await authorCommentTargetTags(req, doc.id)))
+    } catch (err) {
+      // Nesmí shodit uložení profilu — výpisy se srovnají při další změně komentářů.
+      console.error('[revalidace] komentáře autora se nepodařilo načíst:', err)
+    }
+  }
+  await safeRevalidate(tags)
   return doc
 }
 
-export const revalidateUserAfterDelete: CollectionAfterDeleteHook = async ({ doc }) => {
-  await safeRevalidate(['users', ...userProfileTags(doc as UserLikeDoc)])
+export const revalidateUserAfterDelete: CollectionAfterDeleteHook = async ({ doc, id, req }) => {
+  const tags = ['users', ...userProfileTags(doc as UserLikeDoc)]
+  // Po smazání účtu se z komentářů ztrácí fotka i odkaz na profil (authorPublic
+  // se přestane doplňovat) — dotčené výpisy se musí obnovit stejně jako u změny.
+  if (id != null) {
+    try {
+      tags.push(...(await authorCommentTargetTags(req, id as number | string)))
+    } catch (err) {
+      console.error('[revalidace] komentáře autora se nepodařilo načíst:', err)
+    }
+  }
+  await safeRevalidate(tags)
   return doc
 }
