@@ -64,6 +64,11 @@ export function InlineReviews({
   const [isPending, startTransition] = useTransition()
   // Čas načtení — jednou při mountu (anti-bot timing, viz komentáře).
   const [renderedAt] = useState(() => Date.now())
+  // Přihlášení se pozná až z odpovědi `getPageReviews` — dokud se recenze
+  // načítají, NEVÍME, kdo píše, a captcha by přihlášenému zbytečně problikla.
+  // Widget se proto ukáže až po doběhnutí načítání; při chybě bereme pisatele
+  // jako anonyma (server si přihlášení stejně ověří sám, viz createReview).
+  const authResolved = reviews !== null || loadError
 
   const formRef = useRef<HTMLFormElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
@@ -265,10 +270,9 @@ export function InlineReviews({
             />
           </div>
 
-          {/* Captcha jen pro nepřihlášené — tady se přihlášení pozná až za běhu
-              ze `signedAs` (přijde s načtenými recenzemi); server si přihlášení
-              stejně ověří sám (viz createReview). */}
-          {turnstileSiteKey && !signedAs && (
+          {/* Captcha jen pro nepřihlášené (a až víme, kdo píše — viz
+              `authResolved`); server si přihlášení stejně ověří sám. */}
+          {turnstileSiteKey && authResolved && !signedAs && (
             <div className="mb-4">
               <Turnstile ref={turnstileRef} siteKey={turnstileSiteKey} />
             </div>
@@ -293,7 +297,7 @@ export function InlineReviews({
             >
               {isPending ? 'Odesílám…' : 'Vložit recenzi'}
             </button>
-            {!turnstileSiteKey && !signedAs && (
+            {!turnstileSiteKey && authResolved && !signedAs && (
               <span className="text-[12.5px] text-gray-500">
                 Chráněno proti spamu · bez opisování captchy
               </span>

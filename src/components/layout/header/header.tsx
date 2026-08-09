@@ -288,7 +288,10 @@ export function Header({
       {/* Mega Menu - Vykresleno pouze jednou mimo loop pro čistší DOM a lepší pozicování */}
       {activePage && (activePage.children?.docs?.length ?? 0) > 0 && (
         <div
-          className="absolute left-0 right-0 w-full bg-[#215490] border-b-2 border-[#1A4579] shadow-2xl transition-all duration-300 top-[65px] z-[150] pointer-events-auto animate-in fade-in slide-in-from-top-1 duration-200"
+          // `hidden lg:block`: dropdown se otevírá jen z počítačového menu, ale
+          // stav `activeDropdown` může přežít zmenšení okna pod lg — panel by
+          // pak visel nad mobilní hlavičkou bez menu, které ho otevřelo.
+          className="hidden lg:block absolute left-0 right-0 w-full bg-[#215490] border-b-2 border-[#1A4579] shadow-2xl transition-all duration-300 top-[65px] z-[150] pointer-events-auto animate-in fade-in slide-in-from-top-1 duration-200"
           onMouseEnter={() => handleMouseEnter(String(activePage.id))}
           onMouseLeave={handleMouseLeave}
         >

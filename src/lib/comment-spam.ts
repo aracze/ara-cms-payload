@@ -145,3 +145,29 @@ export function rateLimitKey(ip: string, email: string): string {
   if (ip) return ip
   return email ? `email:${email.toLowerCase()}` : ''
 }
+
+// ————————————————————————————————————————————————————————————————
+// Cooldown jednorázových upozornění (in-memory, best-effort)
+// ————————————————————————————————————————————————————————————————
+// Na rozdíl od rate-limitu výš se klíčuje podle CÍLE, ne podle útočníka:
+// e-mail „účet už máš" spouští kdokoliv pokusem o registraci s cizí adresou
+// (klidně z mnoha IP najednou) a bez zámku na adresu příjemce by šel použít
+// k bombardování cizí schránky. Jednokontejnerový deploy → Mapa v paměti
+// stačí; restart jen dřív povolí další e-mail.
+const COOLDOWN_WINDOW_MS = 60 * 60 * 1000 // 1 hodina
+const cooldownBucket = new Map<string, number>()
+
+/** true = pro daný klíč už akce nedávno proběhla (neopakovat); jinak si čas zapíše. */
+export function underCooldown(key: string, now: number): boolean {
+  const last = cooldownBucket.get(key)
+  if (last !== undefined && now - last < COOLDOWN_WINDOW_MS) return true
+  cooldownBucket.set(key, now)
+
+  // Nenechat Mapu růst donekonečna (stejný úklid jako u rate-limitu).
+  if (cooldownBucket.size > 5000) {
+    for (const [k, t] of cooldownBucket) {
+      if (now - t >= COOLDOWN_WINDOW_MS) cooldownBucket.delete(k)
+    }
+  }
+  return false
+}

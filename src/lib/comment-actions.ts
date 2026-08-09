@@ -92,8 +92,10 @@ export async function createComment(
     }
   }
 
-  // 4) Rate-limit na IP (počítáme až po ověření člověka, ať boti nemrhají limitem).
-  if (isRateLimited(ip, now)) {
+  // 4) Rate-limit: anonym podle IP, přihlášený podle ÚČTU — captcha se u něj
+  //    přeskakuje, takže limit nesmí jít obejít střídáním IP adres.
+  //    (Počítáme až po ověření člověka, ať boti nemrhají limitem.)
+  if (isRateLimited(currentUser ? `user:${currentUser.id}` : ip, now)) {
     return {
       status: 'error',
       message: 'Příliš mnoho komentářů za krátkou dobu. Zkus to prosím za chvíli.',

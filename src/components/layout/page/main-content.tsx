@@ -199,9 +199,11 @@ export const MainContent = ({
       practicalInfo),
   )
   // U cíle se odkaz na Praktické informace zapojuje přímo do karty (viz níže) —
-  // zmenšený vystředěný panel z míst pod ní působil nalepeně.
+  // zmenšený vystředěný panel z míst pod ní působil nalepeně. Rozhoduje ale
+  // skutečné VYKRESLENÍ karty, ne existence cíle: cíl bez adresy/webu/mapy
+  // kartu nemá a panel mu musí zůstat, jinak by přišel o čas a kurz.
   const showAktualniInfoPanel = Boolean(
-    showAktualniInfo && !touristPointInfo && (timezone || exchangeRate || practicalInfo),
+    showAktualniInfo && !showTouristPointCard && (timezone || exchangeRate || practicalInfo),
   )
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec

@@ -4,7 +4,13 @@ import { headers } from 'next/headers'
 import { getDb } from './db'
 import { publicBaseUrl } from './public-url'
 import { renderAraEmail } from './email-template'
-import { clientIp, isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
+import {
+  clientIp,
+  isBotSubmission,
+  isRateLimited,
+  underCooldown,
+  verifyTurnstile,
+} from './comment-spam'
 import {
   checkPassword,
   checkUsernameShape,
@@ -159,6 +165,10 @@ export async function registerAction(
  * dodává sdílená šablona (src/lib/email-template.ts).
  */
 async function sendAccountExistsEmail(email: string): Promise<void> {
+  // Zámek na ADRESU PŘÍJEMCE: opakované pokusy o registraci s toutéž cizí
+  // adresou (i z různých IP — limit na IP tohle nechytí) nesmí bombardovat
+  // schránku majitele. Jeden e-mail za hodinu informaci předá stejně dobře.
+  if (underCooldown(`ucet-uz-mas:${email.trim().toLowerCase()}`, Date.now())) return
   try {
     const payload = await getDb()
     const base = publicBaseUrl()
@@ -176,9 +186,12 @@ async function sendAccountExistsEmail(email: string): Promise<void> {
       }),
     })
   } catch (err) {
+    // Do logu bez adresy příjemce: SMTP chyby (např. EENVELOPE) ji nesou
+    // v hlášce i v objektu, a osobní údaj do aplikačního logu nepatří.
+    const raw = err instanceof Error ? `${err.name}: ${err.message}` : `ne-Error (${typeof err})`
     console.error(
       '[registrace] e-mail „účet už máš“ se nepodařilo odeslat:',
-      err instanceof Error ? err.message : err,
+      raw.split(email.trim()).join('<adresa>'),
     )
   }
 }

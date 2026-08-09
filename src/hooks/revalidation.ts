@@ -198,7 +198,10 @@ const authorCommentTargetTags = async (
     where: { author: { equals: userId } },
     depth: 0,
     select: { relatedTo: true },
-    limit: 1000,
+    // limit: 0 = bez stropu (a Payload jím vypíná stránkování) — s pevným
+    // stropem by autor s více komentáři měl část výpisů neobnovených.
+    // Číst se stejně bude jen jediné malé pole `relatedTo`.
+    limit: 0,
     pagination: false,
     overrideAccess: true,
     req,
