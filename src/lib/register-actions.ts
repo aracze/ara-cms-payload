@@ -2,6 +2,8 @@
 
 import { headers } from 'next/headers'
 import { getDb } from './db'
+import { publicBaseUrl } from './public-url'
+import { renderAraEmail } from './email-template'
 import { clientIp, isBotSubmission, isRateLimited, verifyTurnstile } from './comment-spam'
 import {
   checkPassword,
@@ -125,10 +127,12 @@ export async function registerAction(
     const message = err instanceof Error ? err.message : ''
 
     // Obsazený e-mail ZÁMĚRNĚ nehlásíme — jinak by šlo formulářem zjišťovat,
-    // kdo je na webu registrovaný. Uživatel uvidí stejnou obrazovku jako při
-    // úspěchu; kdo účet má, dostane e-mail „účet už existuje" (řeší se odděleně
-    // v kroku se zapomenutým heslem).
+    // kdo je na webu registrovaný. Formulář ukáže stejnou obrazovku jako při
+    // úspěchu a majiteli adresy odejde e-mail „účet už máš“ — jemu se to říct
+    // smí (je to jeho schránka), jinak by marně čekal na potvrzovací e-mail,
+    // který nikdy nedorazí.
     if (/duplicate|unique|already/i.test(message) && /email/i.test(message)) {
+      await sendAccountExistsEmail(email)
       return { status: 'success', email }
     }
     // Souběžná registrace stejné uživatelského jména (unique index v databázi).
@@ -144,4 +148,37 @@ export async function registerAction(
   }
 
   return { status: 'success', email }
+}
+
+/**
+ * E-mail „účet už máš“ při pokusu o registraci s obsazenou adresou.
+ *
+ * Selhání se jen zaloguje: odpověď formuláře MUSÍ zůstat stejná jako při
+ * úspěšné registraci, jinak by se z jeho chování dalo poznat, že adresa
+ * v databázi je. Jde přes stejné SMTP jako potvrzovací e-maily a vzhled
+ * dodává sdílená šablona (src/lib/email-template.ts).
+ */
+async function sendAccountExistsEmail(email: string): Promise<void> {
+  try {
+    const payload = await getDb()
+    const base = publicBaseUrl()
+    await payload.sendEmail({
+      to: email,
+      subject: 'Účet na Ara.cz už máš',
+      html: renderAraEmail({
+        title: 'Účet už máš',
+        bodyHtml:
+          'Ahoj, právě se někdo pokusil zaregistrovat na Ara.cz s touhle adresou — nejspíš ty. Účet s ní ale už existuje, takže se stačí přihlásit. A kdyby si heslo nešlo vybavit, nastav si nové:',
+        buttonLabel: 'Nastavit nové heslo',
+        buttonUrl: `${base}/zapomenute-heslo`,
+        note: 'Pokud ses neregistroval ty, tenhle e-mail klidně smaž — s tvým účtem se nic neděje.',
+        reason: 'se s tvou adresou někdo pokusil zaregistrovat.',
+      }),
+    })
+  } catch (err) {
+    console.error(
+      '[registrace] e-mail „účet už máš“ se nepodařilo odeslat:',
+      err instanceof Error ? err.message : err,
+    )
+  }
 }

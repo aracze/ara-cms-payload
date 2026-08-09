@@ -293,6 +293,15 @@ hotové a odstraněné — u nových míst se tvary vyplňují v adminu.
     e-mail se ZÁMĚRNĚ nehlásí (jinak by formulář posloužil ke zjišťování registrovaných adres).
     Účet vzniká neověřený → Payload pošle potvrzovací e-mail s odkazem na
     `/registrace/potvrzeni?token=…`; bez potvrzení Payload přihlášení odmítne (ověřeno).
+    Pokus o registraci s obsazenou adresou pošle majiteli e-mail „účet už máš" s odkazem
+    na obnovu hesla — jemu se to říct smí (je to jeho schránka), formulář dál mlčí.
+  - **E-maily webu** (potvrzení účtu, obnova hesla, „účet už máš") skládá sdílená šablona
+    `src/lib/email-template.ts`: logo nad bílou kartou, kresba papouška, titulek a jedno
+    tlačítko s náhradním odkazem. Tabulky + inline styly + systémové písmo — nic jiného
+    poštovní klienti spolehlivě neumí; prostotextová pole si šablona escapuje sama.
+    Obrázky generuje `pnpm build:email-assets` do `public/assets/email/` — **není to krok
+    buildu**, výstup je verzovaný v gitu (jako u map) a skript se pouští ručně po změně
+    loga nebo kresby.
   - **Uživatelské jméno** je veřejná identita (adresa profilu + podpis u komentářů), takže si ji uživatel
     volí sám — odvozovat ji z e-mailu by veřejně vyzradilo jeho část. Pravidla jsou v
     `src/lib/username.ts` (3–30 znaků, jen `a-z0-9._-`, nesmí začínat/končit oddělovačem,
