@@ -1,6 +1,12 @@
 # Reverzní proxy před aplikací — ukončuje TLS a předává na kontejner cms.
 # Na server patří jako /opt/aracze/Caddyfile (compose ho mountuje read-only).
 #
+# POZOR při úpravě na serveru: soubor je mountovaný jednotlivě (bind mount),
+# takže `sed -i`/vim ho nahradí novým inodem a kontejner dál vidí STARÝ obsah —
+# `caddy reload` pak tiše načte zastaralou verzi. Po úpravě je nutné
+# `docker compose up -d --force-recreate caddy` a ověřit obsah uvnitř:
+# `docker compose exec -T caddy cat /etc/caddy/Caddyfile`.
+#
 # PROČ TU JE: aplikace sama mluví jen HTTP. Dokud byla vystavená napřímo na
 # portu 80, musel být v Cloudflare režim Full, který se sice k originu připojí
 # přes HTTPS, ale certifikát NEOVĚŘUJE. S touhle proxy může být Full (strict),
@@ -17,12 +23,5 @@
 
 ara.cz, www.ara.cz {
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
-	reverse_proxy cms:3000
-}
-
-# Přístup přes holou IP, dokud se nepřepne doména. Adresa je uvedená výslovně,
-# aby nevznikl spor s bloky výš (u nepojmenovaného :80 by Caddy nevěděl, který
-# blok použít pro ara.cz na portu 80). Po přepnutí domény lze smazat.
-http://217.154.225.117 {
 	reverse_proxy cms:3000
 }
