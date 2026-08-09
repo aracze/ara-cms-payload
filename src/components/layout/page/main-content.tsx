@@ -144,7 +144,6 @@ export const MainContent = ({
 }) => {
   const placeCategories: PageCategory[] = [
     PageCategory.Misto_k_navstiveni,
-    PageCategory.Mista,
     PageCategory.Turisticky_cil,
   ]
   const showAktualniInfo = !!pageCategory && placeCategories.includes(pageCategory)

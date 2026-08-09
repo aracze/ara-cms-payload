@@ -81,11 +81,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
   cardRatings,
   showAnalyticsDebug = false,
 }) => {
-  const placeCategories = [
-    PageCategory.Misto_k_navstiveni,
-    PageCategory.Turisticky_cil,
-    PageCategory.Mista,
-  ]
+  const placeCategories = [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil]
 
   const places = pageChildren.filter((child) => {
     const cat = child.category?.trim()
@@ -94,12 +90,11 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
 
   if (places.length === 0) return null
 
-  // Determine mode: if any child is "Místo k navštívení" or "Místa" → grid cards (superordinate)
+  // Determine mode: if any child is "Místo k navštívení" → grid cards (superordinate)
   // If ALL children are "Turistický cíl" → inline article list (last-parent / detail)
-  const hasPlaceChildren = places.some((p) => {
-    const cat = p.category?.trim()
-    return cat === PageCategory.Misto_k_navstiveni || cat === PageCategory.Mista
-  })
+  const hasPlaceChildren = places.some(
+    (p) => p.category?.trim() === PageCategory.Misto_k_navstiveni,
+  )
   const isSuperordinate = hasPlaceChildren
 
   // Build map markers from places that have coordinates

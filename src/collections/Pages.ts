@@ -50,7 +50,6 @@ export const Pages: CollectionConfig = {
       options: [
         { label: 'Místo k navštívení', value: 'Místo k navštívení' },
         { label: 'Turistický cíl', value: 'Turistický cíl' },
-        { label: 'Místa', value: 'Místa' },
         { label: 'Praktické informace', value: 'Praktické informace' },
         { label: 'Vstupní podmínky', value: 'Vstupní podmínky' },
         { label: 'Cesta', value: 'Cesta' },
@@ -92,8 +91,7 @@ export const Pages: CollectionConfig = {
           name: 'detail',
           label: 'Detail',
           admin: {
-            condition: (data) =>
-              ['Místo k navštívení', 'Turistický cíl', 'Místa'].includes(data?.category),
+            condition: (data) => ['Místo k navštívení', 'Turistický cíl'].includes(data?.category),
           },
           fields: [
             {
@@ -200,10 +198,8 @@ export const Pages: CollectionConfig = {
           name: 'affiliate',
           label: 'Affiliate',
           admin: {
-            // Affiliate (booking) odkazy dávají smysl u míst — stejné kategorie jako Detail
-            // (zahrnuje i legacy hodnoty „Turistický cíl" a „Místa", ne jen „Místo k navštívení").
-            condition: (data) =>
-              ['Místo k navštívení', 'Turistický cíl', 'Místa'].includes(data?.category),
+            // Affiliate (booking) odkazy dávají smysl u míst — stejné kategorie jako Detail.
+            condition: (data) => ['Místo k navštívení', 'Turistický cíl'].includes(data?.category),
           },
           fields: [
             {

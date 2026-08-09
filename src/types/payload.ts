@@ -243,7 +243,6 @@ export interface ReviewPublic {
 export enum PageCategory {
   Misto_k_navstiveni = 'Místo k navštívení',
   Turisticky_cil = 'Turistický cíl',
-  Mista = 'Místa',
   Prakticke_informace = 'Praktické informace',
   Vstupni_podminky = 'Vstupní podmínky',
   Cesta = 'Cesta',

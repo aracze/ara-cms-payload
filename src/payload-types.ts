@@ -268,7 +268,6 @@ export interface Page {
   category:
     | 'Místo k navštívení'
     | 'Turistický cíl'
-    | 'Místa'
     | 'Praktické informace'
     | 'Vstupní podmínky'
     | 'Cesta'

@@ -1,7 +1,6 @@
 import { Page as PayloadPage, PageCategory } from '@/types/payload'
 
 export const rootPageCategories: PageCategory[] = [
-  PageCategory.Mista,
   PageCategory.Turisticky_cil,
   PageCategory.Misto_k_navstiveni,
   PageCategory.Rubrika,

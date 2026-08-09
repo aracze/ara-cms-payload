@@ -7,7 +7,7 @@ import { MapPin } from 'lucide-react'
 // Štítek ukazujeme jen u informačních stránek (praktické informace, doprava…).
 // Místa, cíle a města jsou z pohledu návštěvníka totéž — rozlišení kategorií
 // je jen interní věc webu a štítek by ve výpisu působil chaoticky.
-const PLACE_CATEGORIES = new Set(['Místo k navštívení', 'Turistický cíl', 'Místa'])
+const PLACE_CATEGORIES = new Set(['Místo k navštívení', 'Turistický cíl'])
 
 export function ResultList({
   results,

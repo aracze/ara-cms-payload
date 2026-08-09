@@ -26,7 +26,7 @@ export async function seedMapPages(): Promise<void> {
     data: {
       title: mapParent.title,
       slug: mapParent.slug,
-      category: 'Místa',
+      category: 'Místo k navštívení',
       _status: 'published',
       detail: { latitude: '45.0', longitude: '15.5', googleMapsZoom: 7 },
     },

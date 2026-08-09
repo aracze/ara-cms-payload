@@ -7,7 +7,7 @@ import { PageCategory } from '../types/payload'
  * PLACE_TO_VISIT, takže cíl pod skrytým státem si stát v adrese drží
  * (/usa/wyoming/devils-tower, ne /usa/devils-tower).
  */
-const placeCategoriesInUrls: string[] = [PageCategory.Misto_k_navstiveni, PageCategory.Mista]
+const placeCategoriesInUrls: string[] = [PageCategory.Misto_k_navstiveni]
 
 /** Předek v řetězci — jen pole, která adresa potřebuje (tvar z pluginu nested-docs). */
 type UrlAncestor = {

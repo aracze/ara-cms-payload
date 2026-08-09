@@ -4,7 +4,6 @@ import { PageChild, PageCategory } from '@/types/payload'
 const hiddenCategories: string[] = [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil]
 
 const legacyMenuOrder: PageCategory[] = [
-  PageCategory.Mista,
   PageCategory.Vstupni_podminky,
   PageCategory.Cesta,
   PageCategory.Pocasi,
