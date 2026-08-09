@@ -1,7 +1,7 @@
 import React from 'react'
 import { PageCategory, RichTextRoot } from '@/types/payload'
 import Link from 'next/link'
-import { Globe, MapPin } from 'lucide-react'
+import { ChevronRight, Globe, MapPin } from 'lucide-react'
 import { LocalTime } from '@/components/features/local-time'
 import { MapLibreMap } from '@/components/features/maplibre-map'
 import { UserAvatar } from '@/components/user-avatar'
@@ -195,10 +195,13 @@ export const MainContent = ({
     (touristPointInfo.address ||
       touristPointInfo.websiteUrl ||
       touristPointInfo.mapCenter ||
-      contributor),
+      contributor ||
+      practicalInfo),
   )
+  // U cíle se odkaz na Praktické informace zapojuje přímo do karty (viz níže) —
+  // zmenšený vystředěný panel z míst pod ní působil nalepeně.
   const showAktualniInfoPanel = Boolean(
-    showAktualniInfo && (timezone || exchangeRate || practicalInfo),
+    showAktualniInfo && !touristPointInfo && (timezone || exchangeRate || practicalInfo),
   )
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
@@ -339,6 +342,35 @@ export const MainContent = ({
                     </div>
                   </div>
                 )}
+
+                {/* Odkaz na Praktické informace země — karta-tip s jemně modrým
+                    podkladem a podkresem mapové ikony mezi koncem textu a šipkou
+                    (stejný motiv jako v panelu u míst; na modrém podkladu je
+                    potřeba o chlup silnější síla než na bílé). */}
+                {practicalInfo && (
+                  <Link
+                    href={practicalInfo.fullSlug}
+                    className="relative flex items-center gap-3 overflow-hidden rounded-lg bg-[#f2f7fb] px-[18px] py-4 transition-colors hover:bg-[#e9f2f9]"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-11 top-1/2 z-0 h-[56px] w-[56px] -translate-y-1/2 bg-[url('/assets/information/essentials-gray.gif')] bg-contain bg-no-repeat opacity-[0.18]"
+                    />
+                    <span className="relative z-10 flex-1">
+                      <span className="block font-heading text-[16px] font-semibold leading-snug text-[#1a3f6c]">
+                        Praktické informace do {practicalInfoOwnerName}
+                      </span>
+                      <span className="mt-1 block text-[13px] leading-snug text-[#6f7a86]">
+                        Měna, doprava, zdraví a další rady na cestu.
+                      </span>
+                    </span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="relative z-10 h-5 w-5 shrink-0 text-[#215491]"
+                      strokeWidth={2}
+                    />
+                  </Link>
+                )}
               </div>
             </div>
           )}
@@ -352,7 +384,7 @@ export const MainContent = ({
                 {/* Section 1: Time and Exchange Rate */}
                 {(timezone || exchangeRate) && (
                   <div className="mb-6">
-                    <h2 className="text-[20px] font-bold text-[#1a3f6c] mb-4">
+                    <h2 className="text-[20px] font-semibold text-[#1a3f6c] mb-4">
                       {timezone && exchangeRate
                         ? 'Aktuální čas a kurz měny'
                         : exchangeRate
@@ -402,7 +434,7 @@ export const MainContent = ({
                     href={practicalInfo.fullSlug}
                     className="block hover:no-underline group relative mt-6 pt-4"
                   >
-                    <h2 className="text-[22px] font-bold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
+                    <h2 className="text-[22px] font-semibold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
                       Praktické informace <br />
                       do {practicalInfoOwnerName}
                     </h2>
