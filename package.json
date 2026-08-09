@@ -46,6 +46,7 @@
     "next": "16.2.10",
     "payload": "3.86.0",
     "payload-storage-cloudinary": "^1.2.1",
+    "photoswipe": "^5.4.4",
     "qs": "^6.15.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",

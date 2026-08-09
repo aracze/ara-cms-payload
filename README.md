@@ -271,6 +271,19 @@ jsou popsaná v [docs/navigace.md](docs/navigace.md). Adresy se přepočítával
 tvary názvů míst doplňovaly jednorázovými doběhy (`fix:page-urls`, `fix:declension`); ty jsou
 hotové a odstraněné — u nových míst se tvary vyplňují v adminu.
 
+### Fotky v obsahu — lightbox (PhotoSwipe)
+
+Klik na fotku v článku otevře **lightbox** (PhotoSwipe v5): zvětšení přes ztmavenou stránku,
+zoom kolečkem/dvojklikem/pinchem, swipe mezi fotkami, zavření Esc/tažením dolů. Dřív odkaz
+vedl na surové Cloudinary URL (`c_fit,w_800` — jen o 10 px víc než náhled) a odvedl čtenáře
+z webu; `rel="lightbox"` je pozůstatek legacy webu, kde ho obsluhoval Lightbox2.
+Odkazy generuje `richTextToHtml` (`src/lib/rich-text-html.ts`): míří na `c_limit,w_1600,f_auto,q_auto`
+a nesou `data-pswp-width/height` spočtené z rozměrů média v DB (PhotoSwipe je potřebuje předem).
+Obsluhu zapíná `RichTextLightbox` v layoutu (`src/components/features/rich-text-lightbox.tsx`) —
+jedna instance deleguje klik z `<body>` (pokryje i rozbalovací texty a přechody mezi stránkami),
+jádro knihovny se stahuje až při prvním kliknutí. Titulek v lightboxu se přebírá z popisku
+pod fotkou (`.image-caption`), fotky bez rozměrů v DB mají fallback z náhledu.
+
 ### Collections
 
 - **Users (Správa uživatelů)**:
