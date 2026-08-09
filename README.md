@@ -240,6 +240,12 @@ the Local API and cached with tags (see `src/lib/search.ts`); matching uses
 - Query param `q` — the search term (empty `q` returns no matches).
 - Response: `{ "success": true, "message": [ /* Fuse results */ ] }`.
 
+Našeptávač (hlavička + homepage) ukazuje 10 nejlepších shod; **Enter nebo
+tlačítko s lupou vede na stránku všech výsledků `/hledani?q=…`** (server-side
+`searchPages`, max 50 položek, hero s výchozí fotkou, prázdný výsledek = menší
+ara + pilulky „Kam dál" sdílené se 404 přes `KamDal`). Stránka má `noindex`
+a je v `robots.ts` v `disallow` — výsledky hledání do indexu nepatří.
+
 ```bash
 curl 'http://localhost:3000/api/search?q=chorvatsko'
 ```

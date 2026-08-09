@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Loader2, X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
 import { SearchStatus } from './search-status'
@@ -17,11 +18,21 @@ export function HomepageSearch({ placeholderExample, onLightSurface }: HomepageS
   const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
   const placeholder = `Najdi si svůj cíl — třeba ${placeholderExample?.trim() || 'Chorvatsko'}…`
 
   const handleClear = () => {
     clearSearch()
     setIsExpanded(false)
+  }
+
+  // Enter / tlačítko s lupou = přechod na stránku všech výsledků. Našeptávač
+  // dál běží při psaní; tohle je cesta pro „ukaž mi všechno".
+  const submitToSearchPage = () => {
+    const trimmed = query.trim()
+    if (!trimmed) return
+    setIsExpanded(false)
+    router.push(`/hledani?q=${encodeURIComponent(trimmed)}`)
   }
 
   // Click outside to close
@@ -73,6 +84,9 @@ export function HomepageSearch({ placeholderExample, onLightSurface }: HomepageS
             setIsExpanded(true)
           }}
           onFocus={() => setIsExpanded(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitToSearchPage()
+          }}
           className="flex-1 min-w-0 bg-transparent border-none outline-none text-gray-800 font-medium placeholder:text-gray-400"
         />
         {query.length > 0 && (
@@ -87,7 +101,9 @@ export function HomepageSearch({ placeholderExample, onLightSurface }: HomepageS
         )}
         <button
           type="button"
-          onClick={() => setIsExpanded(true)}
+          // S napsaným dotazem vede na /hledani; naprázdno jen rozbalí panel
+          // (dřív nedělalo tlačítko nic ani s dotazem).
+          onClick={() => (query.trim() ? submitToSearchPage() : setIsExpanded(true))}
           aria-label="Hledat"
           className={`rounded-full bg-[#215491] hover:bg-[#1a4579] flex items-center justify-center shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#215491]/50 ${
             onLightSurface ? 'w-10 h-10' : 'w-11 h-11'

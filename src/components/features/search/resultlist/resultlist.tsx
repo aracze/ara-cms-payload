@@ -12,15 +12,20 @@ const PLACE_CATEGORIES = new Set(['Místo k navštívení', 'Turistický cíl'])
 export function ResultList({
   results,
   handleLinkClicked,
+  limit = 10,
 }: {
   results: FuseResult<SearchItem>[]
-  handleLinkClicked: () => void
+  /** Volitelné: v našeptávači zavírá panel. Stránka /hledani ho nepotřebuje —
+   *  bez něj je komponenta čistě serverová (žádný handler přes hranici RSC). */
+  handleLinkClicked?: () => void
+  /** Našeptávač ukazuje 10; stránka /hledani si řekne o víc. */
+  limit?: number
 }) {
   if (results.length === 0) return null
 
   return (
     <div className="flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
-      {results.slice(0, 10).map((result: FuseResult<SearchItem>, index: number) => {
+      {results.slice(0, limit).map((result: FuseResult<SearchItem>, index: number) => {
         const item = result.item
         const showCategory = item.category && !PLACE_CATEGORIES.has(item.category)
         return (
@@ -29,7 +34,7 @@ export function ResultList({
             // homepage místo neplatného odkazu.
             href={item.fullSlug || item.slug || '/'}
             key={item.documentId || `result-${index}`}
-            onClick={() => handleLinkClicked()}
+            onClick={handleLinkClicked ? () => handleLinkClicked() : undefined}
             className="group flex items-center gap-3 py-2 px-2 hover:bg-gray-50 rounded-lg transition-colors"
           >
             {item.image ? (
