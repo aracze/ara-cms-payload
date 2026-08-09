@@ -17,6 +17,9 @@ const CC_ICON_SVG =
 
 const allowedHeadingTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
 
+/** Šířka fotky otevírané v lightboxu (delší strana na šířku 1600 px stačí i na 4k displeje se zoomem). */
+const LIGHTBOX_MAX_WIDTH = 1600
+
 function headingIdFromHtml(html: string): string {
   return html
     .replace(/<[^>]+>/g, '')
@@ -198,10 +201,22 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
         if (cloudinaryMatch) {
           const [, cloudName, publicId] = cloudinaryMatch
           const base = `https://res.cloudinary.com/${cloudName}/image/upload`
-          const fullUrl = `${base}/c_fit,w_800/${publicId}`
+          // Odkaz otevírá lightbox (PhotoSwipe, viz RichTextLightbox) — míří na
+          // skutečně velkou verzi (c_limit malé originály nezvětšuje, f_auto/q_auto
+          // nechá Cloudinary zvolit moderní formát a kvalitu).
+          const fullUrl = `${base}/c_limit,w_${LIGHTBOX_MAX_WIDTH},f_auto,q_auto/${publicId}`
           const defaultUrl = `${base}/c_fit,w_790/${publicId}`
           const smallUrl = `${base}/c_fit,w_420/${publicId}`
-          html = `<figure class="image-wrapper"><a href="${fullUrl}" rel="lightbox"><img alt="${alt}" src="${defaultUrl}" srcset="${smallUrl} 420w, ${defaultUrl} 747w" sizes="(min-width: 480px) calc(100vw - 60px), calc(100vw - 30px)" /></a>`
+          // PhotoSwipe potřebuje rozměry otevírané fotky dopředu (animace
+          // z náhledu a rozvržení) — spočítáme je z rozměrů média v DB.
+          const width = Number(image.width)
+          const height = Number(image.height)
+          let dimensionAttrs = ''
+          if (width > 0 && height > 0) {
+            const scale = Math.min(1, LIGHTBOX_MAX_WIDTH / width)
+            dimensionAttrs = ` data-pswp-width="${Math.round(width * scale)}" data-pswp-height="${Math.round(height * scale)}"`
+          }
+          html = `<figure class="image-wrapper"><a href="${fullUrl}" rel="lightbox"${dimensionAttrs}><img alt="${alt}" src="${defaultUrl}" srcset="${smallUrl} 420w, ${defaultUrl} 747w" sizes="(min-width: 480px) calc(100vw - 60px), calc(100vw - 30px)" /></a>`
         } else {
           html = `<figure class="image-wrapper"><img src="${escapeHtml(url)}" alt="${alt}" />`
         }

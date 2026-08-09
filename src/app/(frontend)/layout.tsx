@@ -13,6 +13,7 @@ import { Header } from '@/components/layout/header/header'
 import { sanitizeHeaderLogoSvg } from '@/lib/rich-text-html'
 import { Footer } from '@/components/layout/footer/footer'
 import { NavigationProgress } from '@/components/layout/navigation-progress'
+import { RichTextLightbox } from '@/components/features/rich-text-lightbox'
 import { WebVitals } from '@/components/features/web-vitals'
 import { Analytics } from '@/components/features/analytics'
 import { fetchRootPages } from '@/lib/payload'
@@ -106,6 +107,9 @@ export default async function RootLayout({
 
         {/* Progress bar pro pomalejší přechody mezi stránkami (rychlé proběhnou bez něj). */}
         <NavigationProgress />
+
+        {/* Zvětšování fotek v obsahu (odkazy rel="lightbox") přes PhotoSwipe. */}
+        <RichTextLightbox />
 
         {/* HLAVNÍ KONTEJNER: flex rozložení pro menu a obsah */}
         <div className="flex flex-col min-h-screen">

@@ -925,3 +925,28 @@
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Lightbox fotek v obsahu (PhotoSwipe, viz RichTextLightbox)
+ * Titulek fotky — vlastní UI element `custom-caption`, obsah se přebírá
+ * z popisku pod fotkou v článku (.image-caption).
+ * ------------------------------------------------------------------------- */
+.pswp__custom-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: min(88%, 520px);
+  background: rgba(8, 14, 19, 0.72);
+  color: #fff;
+  font-size: 14.5px;
+  font-style: italic;
+  line-height: 1.5;
+  text-align: center;
+  padding: 7px 16px;
+  border-radius: 999px;
+}
+
+.pswp__custom-caption:empty {
+  display: none;
+}
