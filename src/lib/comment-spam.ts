@@ -34,8 +34,14 @@ export const getTurnstileSiteKey = (): string | null =>
 const RATE_LIMIT_MAX = 5 // max komentářů
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // za 10 minut
 // Tvrdý strop počtu klíčů v mapách (rate-limit i cooldown) — pojistka paměti.
-const BUCKET_MAX_KEYS = 5000
+// Exportované kvůli regresnímu testu vyhazování (tests/int/comment-spam).
+export const BUCKET_MAX_KEYS = 5000
+// Plný úklid prošlých záznamů je sken celé mapy — při zaplavě nad strop se
+// smí spouštět nejvýš jednou za minutu, zbytek dorovnává laciné vyhazování
+// nejdéle nepoužitých klíčů (viz níže).
+const SWEEP_MIN_INTERVAL_MS = 60 * 1000
 const rateBucket = new Map<string, number[]>()
+let rateSweepAt = 0
 
 /**
  * IP volajícího z hlaviček od proxy. Prázdný řetězec = nezjistitelná.
@@ -70,6 +76,11 @@ export function clientIp(h: Headers): string {
 export function isRateLimited(ip: string, now: number): boolean {
   if (!ip) return false
   const recent = (rateBucket.get(ip) ?? []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  // delete → set: Mapa iteruje v pořadí VLOŽENÍ a `set` existující klíč
+  // nepřesouvá — bez smazání by aktivní klíče zůstávaly na začátku a při
+  // přetečení by je vyhazování (bere od začátku) zahodilo dřív než ležáky,
+  // čímž by právě běžící limit přišel o svůj stav.
+  rateBucket.delete(ip)
   if (recent.length >= RATE_LIMIT_MAX) {
     rateBucket.set(ip, recent)
     return true
@@ -77,15 +88,18 @@ export function isRateLimited(ip: string, now: number): boolean {
   recent.push(now)
   rateBucket.set(ip, recent)
 
-  // Nenechat Mapu růst donekonečna: nejdřív pryč prošlé záznamy, a když ani
-  // to nestačí (tolik ŽIVÝCH klíčů = probíhající záplava), vyhazují se
-  // nejstarší. Oslabení limitu při takovém útoku je přijatelná daň za to,
-  // že paměť procesu má tvrdou hranici.
+  // Tvrdá hranice paměti: občasný plný úklid prošlých záznamů a k tomu
+  // laciné (O(1) na klíč) vyhazování nejdéle nepoužitých, když ani úklid
+  // nestačí — tolik živých klíčů znamená probíhající záplavu a oslabení
+  // limitu je přijatelná daň za ohraničenou paměť procesu.
   if (rateBucket.size > BUCKET_MAX_KEYS) {
-    for (const [key, times] of rateBucket) {
-      const alive = times.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
-      if (alive.length === 0) rateBucket.delete(key)
-      else rateBucket.set(key, alive)
+    if (now - rateSweepAt >= SWEEP_MIN_INTERVAL_MS) {
+      rateSweepAt = now
+      for (const [key, times] of rateBucket) {
+        const alive = times.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+        if (alive.length === 0) rateBucket.delete(key)
+        else rateBucket.set(key, alive)
+      }
     }
     for (const key of rateBucket.keys()) {
       if (rateBucket.size <= BUCKET_MAX_KEYS) break
@@ -173,21 +187,28 @@ export function rateLimitKey(ip: string, email: string): string {
 // stačí; restart jen dřív povolí další e-mail.
 const COOLDOWN_WINDOW_MS = 60 * 60 * 1000 // 1 hodina
 const cooldownBucket = new Map<string, number>()
+let cooldownSweepAt = 0
 
 /** true = pro daný klíč už akce nedávno proběhla (neopakovat); jinak si čas zapíše. */
 export function underCooldown(key: string, now: number): boolean {
   const last = cooldownBucket.get(key)
   if (last !== undefined && now - last < COOLDOWN_WINDOW_MS) return true
+  // delete → set: zápis přes existující (prošlý) klíč by ho nechal na
+  // původní pozici Mapy a vyhazování níž by čerstvý cooldown zahodilo mezi
+  // prvními — po smazání drží Mapa pořadí podle času POSLEDNÍHO zápisu.
+  cooldownBucket.delete(key)
   cooldownBucket.set(key, now)
 
-  // Tvrdý strop jako u rate-limitu: pryč prošlé záznamy, a když ani to
-  // nestačí (přes 5000 živých adres za hodinu = záplava), vyhazují se
-  // nejstarší — Mapa iteruje v pořadí vložení. Vyhozením se cooldown adresy
-  // předčasně uvolní, což je při takovém útoku přijatelná daň za tvrdou
-  // hranici paměti procesu.
+  // Tvrdý strop jako u rate-limitu: občasný plný úklid prošlých + laciné
+  // vyhazování nejstarších zápisů, když ani to nestačí (přes 5000 živých
+  // adres za hodinu = záplava). Vyhozením se cooldown adresy předčasně
+  // uvolní — přijatelná daň za ohraničenou paměť procesu.
   if (cooldownBucket.size > BUCKET_MAX_KEYS) {
-    for (const [k, t] of cooldownBucket) {
-      if (now - t >= COOLDOWN_WINDOW_MS) cooldownBucket.delete(k)
+    if (now - cooldownSweepAt >= SWEEP_MIN_INTERVAL_MS) {
+      cooldownSweepAt = now
+      for (const [k, t] of cooldownBucket) {
+        if (now - t >= COOLDOWN_WINDOW_MS) cooldownBucket.delete(k)
+      }
     }
     for (const k of cooldownBucket.keys()) {
       if (cooldownBucket.size <= BUCKET_MAX_KEYS) break
