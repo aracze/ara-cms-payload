@@ -12,8 +12,11 @@ Na serveru běží 3 kontejnery: `postgres`, `cms` (sloučená Next.js appka —
 veřejný web i administrace v jednom obraze) a `caddy` (reverzní proxy, která
 jako jediná kouká ven a ukončuje TLS).
 
-- Web: `http://217.154.225.117/`
-- Admin CMS: `http://217.154.225.117/admin`
+- Web: `https://ara.cz/`
+- Admin CMS: `https://ara.cz/admin`
+
+Web je dostupný jen přes doménu (skrz Cloudflare). Holá IP obsah neservíruje —
+Caddy má jen bloky pro `ara.cz`/`www.ara.cz`.
 
 ---
 
@@ -32,13 +35,13 @@ Repozitář `aracze` → Settings → Secrets and variables → Actions.
 **Variables** (veřejné `NEXT_PUBLIC_*` — Next.js je zapéká do klientského bundlu
 už PŘI BUILDU, proto musí být tady, ne jen v serverovém `.env`):
 
-| Název                                                                    | Hodnota                                                       |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `NEXT_PUBLIC_SITE_URL`                                                   | `http://217.154.225.117`; po přepnutí domény `https://ara.cz` |
-| `NEXT_PUBLIC_PAYLOAD_BASE_URL`                                           | `http://217.154.225.117` (stejné jako web)                    |
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                        | klíč pro mapy (v Google Cloud omez přes "HTTP referrer")      |
-| `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`                                         | Map ID (Cloud Console → Map Management) pro nový typ značky   |
-| `NEXT_PUBLIC_ADSENSE_CLIENT` / `..._ARTICLE_SLOT` / `..._ARTICLE_SLOT_2` | AdSense (nepovinné)                                           |
+| Název                                                                    | Hodnota                                                     |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`                                                   | `https://ara.cz`                                            |
+| `NEXT_PUBLIC_PAYLOAD_BASE_URL`                                           | `https://ara.cz` (stejné jako web)                          |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                        | klíč pro mapy (v Google Cloud omez přes "HTTP referrer")    |
+| `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`                                         | Map ID (Cloud Console → Map Management) pro nový typ značky |
+| `NEXT_PUBLIC_ADSENSE_CLIENT` / `..._ARTICLE_SLOT` / `..._ARTICLE_SLOT_2` | AdSense (nepovinné)                                         |
 
 > Obrazy do ghcr.io se pushují automaticky pomocí vestavěného `GITHUB_TOKEN`,
 > žádný další token pro push není potřeba.
@@ -145,7 +148,7 @@ Schéma nastav jednou ze dvou cest:
   docker compose logs cms | grep -i migrat   # "Migrated: ..._initial"
   ```
 
-Pak otevři `http://217.154.225.117/admin` — Payload nabídne **vytvoření
+Pak otevři `https://ara.cz/admin` — Payload nabídne **vytvoření
 prvního administrátora**. Tím je CMS připravené.
 
 > Pozn.: Při změně datového modelu vygeneruj migraci
@@ -193,7 +196,8 @@ cd /opt/aracze && docker compose pull && docker compose up -d
 - **HTTPS**: ✅ hotovo (7. 8. 2026). Před appkou běží Caddy s certifikátem
   Cloudflare Origin CA (platnost do 2041, neobnovuje se), takže Cloudflare může
   jet v režimu Full (strict). Port 3000 se ven neotevírá — appka je dostupná
-  jen skrz proxy. Zbývá přepnout A záznam domény na tenhle server.
+  jen skrz proxy. Doména na server míří od 8. 8. 2026; dočasný blok pro přístup
+  přes holou IP byl z Caddyfile odstraněn 9. 8. 2026.
 - **Vyhledávání**: index se staví za běhu z Payload Local API a obnovuje se
   automaticky při změně obsahu (revalidace cache tagů v hoocích) — žádný
   samostatný build/workflow už není potřeba.

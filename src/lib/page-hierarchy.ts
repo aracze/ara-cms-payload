@@ -5,10 +5,7 @@ import { PageCategory, type Page } from '@/types/payload'
  * není — menu vždy deleguje na nadřazené Místo. Stejně tak článek: visí pod
  * místem a přebírá jeho menu (jen se v něm zvýrazní položka „Články").
  */
-export const menuOwnerCategories: PageCategory[] = [
-  PageCategory.Mista,
-  PageCategory.Misto_k_navstiveni,
-]
+export const menuOwnerCategories: PageCategory[] = [PageCategory.Misto_k_navstiveni]
 
 /** Jeden drobeček — název a odkaz na stránku předka. */
 export type Breadcrumb = {

@@ -31,7 +31,7 @@ import { unstable_cache } from 'next/cache'
 import { cache } from 'react'
 import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
-import { and, asc, count, eq, inArray, isNotNull } from '@payloadcms/db-postgres/drizzle'
+import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
 import {
   getArticleImageUrl,
@@ -408,10 +408,8 @@ const isTouristPointCategory = (category: string | undefined) =>
   category?.trim() === PageCategory.Turisticky_cil
 
 /** Kategorie „místa" (na rozdíl od turistického cíle) — dlaždice v „Co vidět". */
-export const isPlaceListingCategory = (category: string | undefined) => {
-  const trimmed = category?.trim()
-  return trimmed === PageCategory.Misto_k_navstiveni || trimmed === PageCategory.Mista
-}
+export const isPlaceListingCategory = (category: string | undefined) =>
+  category?.trim() === PageCategory.Misto_k_navstiveni
 
 // Pojistka proti chybě v datech (např. rodičovský cyklus) — v praxi nejhlubší
 // zjištěná hierarchie „Místo k navštívení" má ~6 úrovní.
@@ -2232,11 +2230,7 @@ async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {
           { _status: { equals: 'published' } },
           {
             category: {
-              in: [
-                PageCategory.Misto_k_navstiveni,
-                PageCategory.Turisticky_cil,
-                PageCategory.Mista,
-              ],
+              in: [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil],
             },
           },
         ],
@@ -2820,8 +2814,8 @@ export const fetchHomepageInspiration = async (): Promise<HomepageInspiration | 
 
 /** ID kandidátů pro denní výběr hero místa — přímý SQL dotaz, viz komentář
  * u fetchPlaceCandidateIds (populace přes payload.find by byla zbytečně
- * drahá, tady stačí ID). Zahrnuje všechny kategorie míst (jako fetchLatestActivity),
- * ne jen „Místo k navštívení" — hero fotka může být z libovolného místa/cíle. */
+ * drahá, tady stačí ID). ZÁMĚRNĚ jen „Místo k navštívení" (rozhodnutí
+ * uživatele 9.8.2026) — turistické cíle v hero rotaci být nemají. */
 async function fetchHeroPlaceCandidateIds(payload: Payload): Promise<number[]> {
   const db = payload.db as unknown as PostgresAdapter
   const pages = db.tables.pages
@@ -2831,11 +2825,7 @@ async function fetchHeroPlaceCandidateIds(payload: Payload): Promise<number[]> {
     .where(
       and(
         eq(pages._status, 'published'),
-        inArray(pages.category, [
-          PageCategory.Misto_k_navstiveni,
-          PageCategory.Turisticky_cil,
-          PageCategory.Mista,
-        ]),
+        eq(pages.category, PageCategory.Misto_k_navstiveni),
         isNotNull(pages.featuredImage_image),
       ),
     )

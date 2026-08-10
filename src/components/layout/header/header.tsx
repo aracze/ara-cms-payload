@@ -107,10 +107,10 @@ export function Header({
       }
     }
 
-    // Když se okno dostane na desktop breakpoint (md = 768px), menu zavřeme —
-    // jinak `md:hidden` skryje panel i hamburger, ale mobileOpen zůstane true
+    // Když se okno dostane na desktop breakpoint (lg = 1024px), menu zavřeme —
+    // jinak `lg:hidden` skryje panel i hamburger, ale mobileOpen zůstane true
     // a body by zůstalo zamčené proti scrollování (resize/otočení displeje).
-    const desktopMq = window.matchMedia('(min-width: 768px)')
+    const desktopMq = window.matchMedia('(min-width: 1024px)')
     const handleBreakpoint = () => {
       if (desktopMq.matches) setMobileOpen(false)
     }
@@ -222,7 +222,12 @@ export function Header({
             </Link>
           )}
 
-          <div className="hidden md:flex items-center gap-0 h-full text-white/90 font-semibold">
+          {/* Počítačové menu až od lg (1024 px): s lupou, „Rady na cestu" a účtem
+              potřebuje ~875+ px, takže na md šířkách (768–1023) přetékalo o ~55 px
+              za okraj okna. Pod lg jede mobilní hlavička s hamburgerem, která je
+              na dotykových tabletech stejně pohodlnější. Stejnou hranici hlídá
+              i matchMedia výš a „Rady na cestu" ji měla už dřív. */}
+          <div className="hidden lg:flex items-center gap-0 h-full text-white/90 font-semibold">
             {sortedNavPages.map((page, index) => {
               const hasChildren = (page.children?.docs?.length ?? 0) > 0
               const pageId = page.id || `temp-id-${index}`
@@ -268,7 +273,7 @@ export function Header({
               aria-label={mobileOpen ? 'Zavřít menu' : 'Otevřít menu'}
               aria-expanded={mobileOpen}
               aria-controls="mobile-menu"
-              className="md:hidden -mr-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-white [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              className="lg:hidden -mr-2 inline-flex h-11 w-11 items-center justify-center rounded-md text-white [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
             >
               {mobileOpen ? (
                 <X className="h-6 w-6" aria-hidden="true" />
@@ -283,7 +288,10 @@ export function Header({
       {/* Mega Menu - Vykresleno pouze jednou mimo loop pro čistší DOM a lepší pozicování */}
       {activePage && (activePage.children?.docs?.length ?? 0) > 0 && (
         <div
-          className="absolute left-0 right-0 w-full bg-[#215490] border-b-2 border-[#1A4579] shadow-2xl transition-all duration-300 top-[65px] z-[150] pointer-events-auto animate-in fade-in slide-in-from-top-1 duration-200"
+          // `hidden lg:block`: dropdown se otevírá jen z počítačového menu, ale
+          // stav `activeDropdown` může přežít zmenšení okna pod lg — panel by
+          // pak visel nad mobilní hlavičkou bez menu, které ho otevřelo.
+          className="hidden lg:block absolute left-0 right-0 w-full bg-[#215490] border-b-2 border-[#1A4579] shadow-2xl transition-all duration-300 top-[65px] z-[150] pointer-events-auto animate-in fade-in slide-in-from-top-1 duration-200"
           onMouseEnter={() => handleMouseEnter(String(activePage.id))}
           onMouseLeave={handleMouseLeave}
         >
@@ -310,7 +318,7 @@ export function Header({
 
       {/* Mobilní menu (do `md`) — backdrop + rozbalovací panel s accordionem. */}
       {mobileOpen && (
-        <div className="md:hidden">
+        <div className="lg:hidden">
           <button
             type="button"
             aria-label="Zavřít menu"

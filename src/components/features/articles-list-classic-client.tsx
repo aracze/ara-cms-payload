@@ -84,8 +84,9 @@ export const ArticlesListClassicClient = ({
             ))}
           </div>
 
-          {/* Ad column — like the legacy layout */}
-          <aside className="hidden lg:block w-[300px] shrink-0">
+          {/* Ad column — like the legacy layout. 340 = 300px reklama + 2×20px
+              padding šedého boxu (viz ArticleAd), stejně jako aside u článků. */}
+          <aside className="hidden lg:block w-[340px] shrink-0">
             <AdSenseScript />
             <ArticleAd variant="primary" className="sticky top-24" />
           </aside>

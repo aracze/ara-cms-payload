@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { Loader2, X } from 'lucide-react'
 import { ResultList } from './resultlist/resultlist'
@@ -10,11 +11,20 @@ export function HeaderSearch() {
   const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
   const [isExpanded, setIsExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
 
   const handleClear = useCallback(() => {
     clearSearch()
     setIsExpanded(false)
   }, [clearSearch])
+
+  // Enter = stránka všech výsledků (našeptávač ukazuje jen 10 nejlepších).
+  const submitToSearchPage = () => {
+    const trimmed = query.trim()
+    if (!trimmed) return
+    handleClear()
+    router.push(`/hledani?q=${encodeURIComponent(trimmed)}`)
+  }
 
   // Focus management
   useEffect(() => {
@@ -82,6 +92,9 @@ export function HeaderSearch() {
                   placeholder="Hledat..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitToSearchPage()
+                  }}
                   className="flex-1 bg-transparent border-none outline-none text-xl font-normal text-gray-800 placeholder:text-gray-400 py-1"
                 />
                 <div className="hidden md:flex items-center gap-4 border-l border-gray-100 pl-6">

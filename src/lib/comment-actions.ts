@@ -80,8 +80,11 @@ export async function createComment(
     return { status: 'error', message: 'Komentář je příliš dlouhý.' }
   }
 
-  // 3) Cloudflare Turnstile (aktivní jen když je nastaven secret; jinak projde).
-  const humanVerified = await verifyTurnstile(turnstileToken, ip)
+  // 3) Cloudflare Turnstile — jen pro NEPŘIHLÁŠENÉ. Přihlášený už prokázal,
+  //    že není robot, při registraci (Turnstile + potvrzený e-mail) a jeho
+  //    identitu nese session; captcha by ho jen zdržovala. Honeypot výš
+  //    a rate-limit níž platí dál i pro něj.
+  const humanVerified = currentUser ? true : await verifyTurnstile(turnstileToken, ip)
   if (!humanVerified) {
     return {
       status: 'error',
@@ -89,8 +92,10 @@ export async function createComment(
     }
   }
 
-  // 4) Rate-limit na IP (počítáme až po ověření člověka, ať boti nemrhají limitem).
-  if (isRateLimited(ip, now)) {
+  // 4) Rate-limit: anonym podle IP, přihlášený podle ÚČTU — captcha se u něj
+  //    přeskakuje, takže limit nesmí jít obejít střídáním IP adres.
+  //    (Počítáme až po ověření člověka, ať boti nemrhají limitem.)
+  if (isRateLimited(currentUser ? `user:${currentUser.id}` : ip, now)) {
     return {
       status: 'error',
       message: 'Příliš mnoho komentářů za krátkou dobu. Zkus to prosím za chvíli.',

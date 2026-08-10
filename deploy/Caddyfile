@@ -1,6 +1,17 @@
 # Reverzní proxy před aplikací — ukončuje TLS a předává na kontejner cms.
 # Na server patří jako /opt/aracze/Caddyfile (compose ho mountuje read-only).
 #
+# POZOR při úpravě na serveru: soubor je mountovaný jednotlivě (bind mount),
+# takže `sed -i`/vim ho nahradí novým inodem a kontejner dál vidí STARÝ obsah —
+# `caddy reload` pak tiše načte zastaralou verzi. Po úpravě je nutné
+# `docker compose up -d --force-recreate caddy` a ověřit obsah uvnitř:
+# `docker compose exec -T caddy cat /etc/caddy/Caddyfile`.
+# Před restartem novou konfiguraci ZVALIDUJ (ať se proxy nezastaví nad rozbitým
+# souborem) — jednorázovým kontejnerem nad novým souborem:
+#   docker run --rm -v /opt/aracze/Caddyfile:/etc/caddy/Caddyfile:ro \
+#     -v /opt/aracze/certs:/etc/caddy/certs:ro caddy:2-alpine \
+#     caddy validate --config /etc/caddy/Caddyfile
+#
 # PROČ TU JE: aplikace sama mluví jen HTTP. Dokud byla vystavená napřímo na
 # portu 80, musel být v Cloudflare režim Full, který se sice k originu připojí
 # přes HTTPS, ale certifikát NEOVĚŘUJE. S touhle proxy může být Full (strict),
@@ -17,12 +28,14 @@
 
 ara.cz, www.ara.cz {
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
-	reverse_proxy cms:3000
-}
 
-# Přístup přes holou IP, dokud se nepřepne doména. Adresa je uvedená výslovně,
-# aby nevznikl spor s bloky výš (u nepojmenovaného :80 by Caddy nevěděl, který
-# blok použít pro ara.cz na portu 80). Po přepnutí domény lze smazat.
-http://217.154.225.117 {
+	# Na origin smí jen Cloudflare. Bez tohohle by kdokoliv se znalostí IP
+	# serveru mohl mluvit s aplikací napřímo (stačí poslat správné jméno
+	# domény) a obejít tak ochrany Cloudflare. Seznam rozsahů je oficiální
+	# (https://www.cloudflare.com/ips, staženo 9. 8. 2026) a mění se vzácně —
+	# při potížích s dostupností ho porovnej s aktuálním stavem.
+	@mimoCloudflare not remote_ip 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+	abort @mimoCloudflare
+
 	reverse_proxy cms:3000
 }

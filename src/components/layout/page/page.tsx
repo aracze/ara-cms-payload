@@ -39,7 +39,6 @@ import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@
 import type { ReviewPublic } from '@/types/payload'
 
 const exchangeRateCategories: PageCategory[] = [
-  PageCategory.Mista,
   PageCategory.Misto_k_navstiveni,
   PageCategory.Turisticky_cil,
   // Praktické informace: kurz plní blok „Aktuální měna" ve vlastním textu

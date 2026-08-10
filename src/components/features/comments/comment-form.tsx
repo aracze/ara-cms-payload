@@ -191,7 +191,9 @@ export function CommentForm({
           />
         </div>
 
-        {turnstileSiteKey && (
+        {/* Captcha jen pro nepřihlášené — přihlášeného ověřuje session na
+            serveru (viz createComment), widget by ho jen zdržoval. */}
+        {turnstileSiteKey && !isSignedIn && (
           <div className="mb-4">
             <Turnstile ref={turnstileRef} siteKey={turnstileSiteKey} />
           </div>
@@ -217,7 +219,7 @@ export function CommentForm({
           >
             {isPending ? 'Odesílám…' : replyTo ? 'Odeslat odpověď' : 'Vložit komentář'}
           </button>
-          {!turnstileSiteKey && (
+          {!turnstileSiteKey && !isSignedIn && (
             <span className="text-[12.5px] text-gray-500">
               Chráněno proti spamu · bez opisování captchy
             </span>
