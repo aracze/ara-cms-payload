@@ -395,7 +395,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: touristPointJsonLd(page, reviewsData.reviews, heroRating),
+            __html: touristPointJsonLd(page, reviewsData.reviews, heroRating, breadcrumbs),
           }}
         />
       )}
@@ -537,23 +537,44 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
  *
  * Dvojí @type: samotný TouristAttraction Google pro hvězdičky u recenzí
  * nepodporuje (Search Console: „Invalid object type for field <parent_node>"),
- * LocalBusiness ano — recenzujeme cizí atrakce, ne sebe, takže to pravidla
- * review snippets dovolují.
+ * LocalBusiness ano — recenzujeme cizí atrakce, ne sebe, takže se na nás
+ * nevztahuje zákaz „samoobslužných" recenzí (jsme třetí strana jako Yelp).
+ *
+ * LocalBusiness ale Google váže na povinnou `address` typu PostalAddress, a tu
+ * skládáme z HIERARCHIE (drobečky = země → … → město), ne z `googleMapsAddress`:
+ * to je volný text, který u poloviny cílů není adresa, ale jen název („Eiffelova
+ * věž"). Bez země proto LocalBusiness raději vynecháme a zůstane samotný
+ * TouristAttraction — nevalidní značka je horší než chybějící hvězdičky.
  */
 function touristPointJsonLd(
   page: PayloadPage,
   reviews: ReviewPublic[],
   rating: { avg: number; count: number },
+  breadcrumbs: Breadcrumb[],
 ): string {
   const lat = page.detail?.latitude ? parseFloat(page.detail.latitude) : null
   const lng = page.detail?.longitude ? parseFloat(page.detail.longitude) : null
 
+  // Drobečky u cíle jsou `[země, …, město]` (kontinent i cíl sám jsou odříznuté
+  // v `buildBreadcrumbs`). Mělká hierarchie `/slovensko/oravsky-hrad` má jen
+  // zemi — pak jde ven adresa bez `addressLocality`.
+  const country = breadcrumbs[0]?.title ?? null
+  const locality =
+    breadcrumbs.length > 1 ? (breadcrumbs[breadcrumbs.length - 1]?.title ?? null) : null
+  const address = country
+    ? {
+        '@type': 'PostalAddress',
+        ...(locality ? { addressLocality: locality } : {}),
+        addressCountry: country,
+      }
+    : null
+
   const data = {
     '@context': 'https://schema.org',
-    '@type': ['TouristAttraction', 'LocalBusiness'],
+    '@type': address ? ['TouristAttraction', 'LocalBusiness'] : 'TouristAttraction',
     name: page.title,
     url: getSiteURL() + page.fullSlug,
-    ...(page.detail?.googleMapsAddress ? { address: page.detail.googleMapsAddress } : {}),
+    ...(address ? { address } : {}),
     ...(page.detail?.website ? { sameAs: websiteHref(page.detail.website) } : {}),
     ...(lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
       ? { geo: { '@type': 'GeoCoordinates', latitude: lat, longitude: lng } }
