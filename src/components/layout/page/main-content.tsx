@@ -8,6 +8,7 @@ import { UserAvatar } from '@/components/user-avatar'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { websiteHref, websiteLabel } from '@/lib/utils'
 import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
+import { PageContributor } from './page-contributor'
 import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
 import { TocSidebar } from '@/components/features/toc-sidebar'
 
@@ -21,7 +22,7 @@ export interface TouristPointInfo {
   fullSlug: string
 }
 
-interface TocItem {
+export interface TocItem {
   id: string
   text: string
   level: number
@@ -102,7 +103,11 @@ export const MainContent = ({
   practicalInfo = null,
   createdByPublic,
   touristPointInfo = null,
+  aboveText = null,
   belowText = null,
+  preHeadings = [],
+  extraHeadings = [],
+  contributorAtEnd = false,
   centerColumn = false,
 }: {
   text: string | RichTextRoot
@@ -136,6 +141,27 @@ export const MainContent = ({
    */
   belowText?: React.ReactNode
   /**
+   * Obsah PŘED textem stránky uvnitř čtecího sloupce (dnes aktuální počasí
+   * na stránkách Počasí — legacy pořadí: počasí, text „Kdy jet", zbytek).
+   */
+  aboveText?: React.ReactNode
+  /**
+   * Položky obsahu (TOC) PŘED nadpisy z textu — pro sekce v `aboveText`.
+   */
+  preHeadings?: TocItem[]
+  /**
+   * Položky obsahu (TOC) navíc za nadpisy z textu — pro sekce vykreslované
+   * mimo rich text (dnes graf klimatu v `belowText` na stránkách Počasí).
+   * Bez nich by sekce v postranním obsahu chyběla, extractHeadings čte jen HTML.
+   */
+  extraHeadings?: TocItem[]
+  /**
+   * Podpis autora až na SAMÉM KONCI sloupce (za `belowText`), ne hned pod
+   * textem. Zapnuté na stránkách počasí: mezi textem a grafy by autor rozdělil
+   * sekce, které patří k sobě.
+   */
+  contributorAtEnd?: boolean
+  /**
    * Postavit čtecí sloupec na osu stránky, i když vedle sebe nemá boční panel.
    * Zapíná se na statických stránkách — pod nimi nezačíná žádná sekce přes
    * celou šířku, ke které by se text měl zarovnat vlevo (viz `justify` níž).
@@ -163,7 +189,9 @@ export const MainContent = ({
   // Složené Praktické informace mají nadpisy posunuté o úroveň níž — obsah
   // proto bere h2–h4 (sekce + dvě úrovně podkapitol, jako starý web s h1–h3).
   const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
-  const headings = showTableOfContents ? extractHeadings(textHtml, isPracticalInfo ? 4 : 3) : []
+  const headings = showTableOfContents
+    ? [...preHeadings, ...extractHeadings(textHtml, isPracticalInfo ? 4 : 3), ...extraHeadings]
+    : []
 
   const cleanOwnerGenitive = practicalInfo?.ownerGenitive?.replace(/^do\s+/i, '')
   const practicalInfoOwnerName = practicalInfo
@@ -228,6 +256,7 @@ export const MainContent = ({
     >
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
+        {aboveText}
         <CollapsiblePageTextWithContributor
           textHtml={textHtml}
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
@@ -236,7 +265,9 @@ export const MainContent = ({
           // Na turistickém cíli se autor přesouvá do karty Praktické informace
           // v pravém sloupci (legacy rozložení), pod textem by byl dvakrát.
           contributor={
-            (showAktualniInfo || showTableOfContents) && !touristPointInfo ? contributor : null
+            (showAktualniInfo || showTableOfContents) && !touristPointInfo && !contributorAtEnd
+              ? contributor
+              : null
           }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
           // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
@@ -245,6 +276,11 @@ export const MainContent = ({
           proseClassName={touristPointInfo ? 'poi-prose' : isPracticalInfo ? 'pi-prose' : undefined}
         />
         {belowText}
+        {contributorAtEnd && contributor && (
+          <div className="mt-10">
+            <PageContributor contributor={contributor} />
+          </div>
+        )}
       </div>
 
       {/* Sidebar / Info Column — vznikne jen když má co ukázat (viz hasSidebar) */}

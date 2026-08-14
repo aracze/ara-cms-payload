@@ -130,6 +130,9 @@ const PAGE_SCALAR_SELECT = {
   breadcrumbs: BREADCRUMBS_SELECT,
   // Deep-linky destinace pro sekci „Příprava do …" (zájezdy/ubytování/auto).
   affiliate: true,
+  // Klimatické normály pro sekci „Průměrné měsíční teploty a srážky" na
+  // stránkách kategorie „Počasí" (plní /api/sync-climate-normals).
+  climateNormals: true,
   createdBy: true,
   // Bezpečný veřejný autor přes VIRTUÁLNÍ pole (afterRead hook čte uživatele s
   // overrideAccess: true). Stejný vzor jako u článků. Ruční dohled přes

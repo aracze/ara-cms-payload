@@ -9,6 +9,9 @@ import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
 import { PreparationSection } from './preparation-section'
 import { DealsSection, parseAffiliateDeals } from './deals-section'
+import { ClimateSection, parseClimateNormals, climateHeading } from './climate-section'
+import { WeatherNowSection, WeatherForecastSection, forecastHeading } from './weather-now-section'
+import { fetchPlaceWeather } from '@/lib/weather'
 import {
   fetchPageLightByFullSlug,
   fetchMediaUrlsByIds,
@@ -166,6 +169,26 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // Košicemi je počasí Košic, ne Slovenska. Titulek i hero fotka proto berou
   // kontextové místo z menu (stejné jako legacy `getRootPage`), ne kořenovou zemi.
   const contextPlace = menuContext.contextPage
+  // Graf „Průměrné měsíční teploty a srážky" — jen stránky kategorie Počasí
+  // s daty z měsíčního syncu (/api/sync-climate-normals). Nadpis skloňuje
+  // kontextové místo (počasí pod Londýnem je počasí Londýna, ne Anglie).
+  const climateNormals =
+    page.category === PageCategory.Pocasi ? parseClimateNormals(page.climateNormals) : null
+  const climateLocative = contextPlace.detail?.locative || `v ${contextPlace.title}`
+  // Druhý pád VČETNĚ předložky, jak ho drží admin („do Londýna", „na Maltu") —
+  // nadpis z něj skládá „Nejlepší doba na cestu do Londýna".
+  const climateGenitive = contextPlace.detail?.genitive || `do ${contextPlace.title}`
+  // Živé počasí (OpenWeather One Call 3.0) — jen stránky Počasí, souřadnice
+  // z kontextového místa (stránka počasí vlastní nemá). Promise startuje hned,
+  // await až v poslední vlně s ostatními dotazy.
+  const weatherLat = Number.parseFloat(contextPlace.detail?.latitude ?? '')
+  const weatherLng = Number.parseFloat(contextPlace.detail?.longitude ?? '')
+  const weatherPromise =
+    page.category === PageCategory.Pocasi &&
+    Number.isFinite(weatherLat) &&
+    Number.isFinite(weatherLng)
+      ? fetchPlaceWeather(weatherLat, weatherLng)
+      : Promise.resolve(null)
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
   // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
   const cmsImageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
@@ -198,6 +221,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     practicalInfoSections,
     teamSection,
     inheritedDeals,
+    placeWeather,
   ] = await Promise.all([
     fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -235,6 +259,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     // Sekce „Náš tým" — jen na stránce O nás, jinde by šlo o dotaz nazdařbůh.
     isAboutPage ? fetchTeamSection() : Promise.resolve(null),
     inheritedDealsPromise,
+    weatherPromise,
   ])
 
   // Vstupy sekce „Akční nabídky": vlastní data stránky, jinak zděděná od
@@ -457,7 +482,65 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           practicalInfo={practicalInfo}
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
-          belowText={teamSection ? <TeamSection {...teamSection} /> : null}
+          // Aktuální počasí nad textem „Kdy jet…", klima a předpověď pod ním —
+          // pořadí bloků jako na starém webu.
+          aboveText={
+            placeWeather ? (
+              <WeatherNowSection weather={placeWeather} locative={climateLocative} />
+            ) : null
+          }
+          belowText={
+            teamSection ? (
+              <TeamSection {...teamSection} />
+            ) : climateNormals || placeWeather ? (
+              <>
+                {climateNormals && (
+                  <ClimateSection
+                    normals={climateNormals}
+                    locative={climateLocative}
+                    genitive={climateGenitive}
+                  />
+                )}
+                {placeWeather && (
+                  <WeatherForecastSection weather={placeWeather} locative={climateLocative} />
+                )}
+              </>
+            ) : null
+          }
+          preHeadings={
+            placeWeather
+              ? [
+                  {
+                    id: 'aktualni-pocasi',
+                    text: `Aktuální počasí ${climateLocative}`,
+                    level: 2,
+                  },
+                ]
+              : undefined
+          }
+          extraHeadings={[
+            ...(climateNormals
+              ? [
+                  {
+                    id: 'prumerne-teploty-a-srazky',
+                    text: climateHeading(climateGenitive),
+                    level: 2,
+                  },
+                ]
+              : []),
+            ...(placeWeather && placeWeather.days.length > 0
+              ? [
+                  {
+                    id: 'predpoved-pocasi',
+                    text: forecastHeading(placeWeather, climateLocative),
+                    level: 2,
+                  },
+                ]
+              : []),
+          ]}
+          // Na stránkách počasí patří podpis autora až za předpověď (rozhodnutí
+          // uživatele) — mezi textem a grafy by rozdělil související sekce.
+          contributorAtEnd={page.category === PageCategory.Pocasi}
           centerColumn={isStaticPage}
         />
 

@@ -70,6 +70,33 @@ export interface AffiliateDeals {
   updatedAt?: string
 }
 
+/**
+ * Klimatické normály — dlouhodobé měsíční průměry počasí pro stránky kategorie
+ * „Počasí" (sekce „Průměrné měsíční teploty a srážky"). Tvar JSON pole
+ * `climateNormals` na stránce; plní ho sync /api/sync-climate-normals
+ * (viz src/endpoints/syncClimateNormals.ts) z Meteostat API. Čte se přes
+ * type-guard `parseClimateNormals` (climate-section.tsx) — JSON pole nemá
+ * v generovaných typech tvar.
+ */
+export interface ClimateNormalMonth {
+  /** Měsíc 1–12. */
+  month: number
+  /** Průměrná minimální teplota (°C); null = stanice hodnotu nemá. */
+  tmin: number | null
+  /** Průměrná maximální teplota (°C); null = stanice hodnotu nemá. */
+  tmax: number | null
+  /** Průměrný úhrn srážek (mm); null = stanice hodnotu nemá. */
+  prcp: number | null
+}
+
+export interface ClimateNormals {
+  months: ClimateNormalMonth[]
+  /** Referenční období normálů (typicky 1991–2020). */
+  period?: { start: number; end: number } | null
+  /** ISO timestamp posledního úspěšného syncu. */
+  updatedAt?: string
+}
+
 export interface SharedImageComponent {
   alternativeText: string
   url: string | URL
@@ -209,6 +236,11 @@ export interface Page {
    * (viz PreparationSection).
    */
   affiliate?: GeneratedPage['affiliate']
+  /**
+   * Klimatické normály pro stránky „Počasí" (surový JSON z měsíčního syncu
+   * /api/sync-climate-normals) — tvar ověří `parseClimateNormals`.
+   */
+  climateNormals?: GeneratedPage['climateNormals']
   createdBy?:
     | {
         username?: string | null

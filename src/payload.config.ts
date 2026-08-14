@@ -42,6 +42,7 @@ import { dbDumpEndpoint } from './endpoints/dbDump'
 import { dbImportEndpoint } from './endpoints/dbImport'
 import { syncAnalyticsEndpoint } from './endpoints/syncAnalytics'
 import { syncAffiliateDealsEndpoint } from './endpoints/syncAffiliateDeals'
+import { syncClimateNormalsEndpoint } from './endpoints/syncClimateNormals'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -158,7 +159,13 @@ export default buildConfig({
     prodMigrations: process.env.PAYLOAD_RUN_MIGRATIONS === 'true' ? migrations : undefined,
   }),
   sharp,
-  endpoints: [dbDumpEndpoint, dbImportEndpoint, syncAnalyticsEndpoint, syncAffiliateDealsEndpoint],
+  endpoints: [
+    dbDumpEndpoint,
+    dbImportEndpoint,
+    syncAnalyticsEndpoint,
+    syncAffiliateDealsEndpoint,
+    syncClimateNormalsEndpoint,
+  ],
   plugins: [
     nestedDocsPlugin({
       collections: ['pages'],

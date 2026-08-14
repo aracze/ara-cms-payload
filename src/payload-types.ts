@@ -347,6 +347,15 @@ export interface Page {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
+  climateNormals?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   slug?: string | null;
   legacyPageId?: number | null;
   /**
@@ -795,6 +804,7 @@ export interface PagesSelect<T extends boolean = true> {
         deals?: T;
       };
   comments?: T;
+  climateNormals?: T;
   slug?: T;
   legacyPageId?: T;
   analyticsPageViews?: T;

@@ -279,6 +279,19 @@ export const Pages: CollectionConfig = {
         },
       ],
     },
+    {
+      // Klimatické normály (12 měsíců: min/max teplota, srážky) pro stránky
+      // kategorie „Počasí" — plní /api/sync-climate-normals z Meteostatu
+      // (přímým SQL mimo hooky, ať neroste historie verzí), souřadnice se
+      // berou z rodičovského místa. V adminu SKRYTÉ ze stejného důvodu jako
+      // affiliate.deals: surový JSON editor by jen mátl.
+      name: 'climateNormals',
+      label: 'Klimatické normály (stažená data)',
+      type: 'json',
+      admin: {
+        hidden: true,
+      },
+    },
     slugField(),
     {
       name: 'legacyPageId',
