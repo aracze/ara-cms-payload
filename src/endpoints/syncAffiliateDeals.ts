@@ -176,6 +176,28 @@ type DrizzleLike = DrizzleTx & {
   transaction: <T>(fn: (tx: DrizzleTx) => Promise<T>) => Promise<T>
 }
 
+/**
+ * Rezervace běhu PŘED stahováním. Advisory lock v transakci chrání až samotný
+ * zápis, takže dva souběžné požadavky (ruční běh přes ruční spuštění workflow
+ * + noční cron) by nejdřív oba stáhly všechny nabídky — zbytečné dotazy proti
+ * kvótě Kiwi. Web běží v JEDNOM kontejneru, takže na to stačí příznak v paměti
+ * procesu; nastavuje se SYNCHRONNĚ před naplánováním práce, aby mezi kontrolou
+ * a zabráním nevznikla mezera.
+ *
+ * Drží se čas startu, ne boolean: kdyby background úloha kvůli chybě nedoběhla
+ * do finally (např. tvrdé ukončení uprostřed), po STALE_MS se rezervace uvolní
+ * sama a sync se nezasekne napořád.
+ */
+let syncStartedAt: number | null = null
+const SYNC_STALE_MS = 30 * 60 * 1000
+
+function reserveSyncRun(): boolean {
+  const now = Date.now()
+  if (syncStartedAt !== null && now - syncStartedAt < SYNC_STALE_MS) return false
+  syncStartedAt = now
+  return true
+}
+
 export const syncAffiliateDealsEndpoint: Endpoint = {
   path: '/sync-affiliate-deals',
   method: 'post',
@@ -224,6 +246,11 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       return Response.json({ ok: true, dryRun: true, pages: results, errors })
     }
 
+    // Souběžný běh se odmítne HNED, ještě před stahováním (viz reserveSyncRun).
+    if (!reserveSyncRun()) {
+      throw new APIError('Sync už běží — zkus to za chvíli znovu', 409)
+    }
+
     // Odpověď se vrací HNED (202) a práce doběhne na pozadí: sync trvá přes
     // minutu (rozestupy kvůli Kiwi kvótě) a Cloudflare utíná spojení po 100 s
     // — noční cron by tak svítil červeně, i když sync doběhl (HTTP 524,
@@ -236,6 +263,8 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
         console.log('[sync-affiliate-deals] hotovo:', JSON.stringify(summary))
       } catch (err) {
         console.error('[sync-affiliate-deals] selhal:', err)
+      } finally {
+        syncStartedAt = null
       }
     })
     return Response.json({ ok: true, accepted: true, pages: pages.length }, { status: 202 })
@@ -297,7 +326,8 @@ async function runSync(req: Parameters<Endpoint['handler']>[0], pages: DealPage[
   const { results, errors } = await collectDeals(pages)
 
   // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
-  // s try-advisory lockem proti souběhu (curl --retry umí poslat druhý běh).
+  // s try-advisory lockem. Souběh řeší primárně rezervace v paměti procesu
+  // (reserveSyncRun); lock je druhá pojistka pro případ víc instancí appky.
   const db = req.payload.db as unknown as { drizzle: DrizzleLike }
   await db.drizzle.transaction(async (tx) => {
     const lockResult = (await tx.execute(

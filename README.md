@@ -289,6 +289,8 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   Souhrn běhu je v logu serveru:
   `docker compose logs cms | grep sync-affiliate-deals`. Jen `?dryRun=1`
   zůstává synchronní a vypíše, co by se zapsalo (nic neukládá).
+- Souběžný běh (ruční spuštění přes běžící cron) endpoint odmítne hned
+  **409** — jinak by obě volání zbytečně stáhla vše proti kvótě Kiwi.
 - Zápis jde **přímým SQL mimo Payload hooky** (stránky mají drafts — denní
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
