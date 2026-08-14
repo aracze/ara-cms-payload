@@ -21,13 +21,11 @@ import { ReviewRatingBox } from './review-rating-box'
  */
 export async function ReviewsSection({
   pageId,
-  pageTitle,
   reviews,
   /** Adresa cíle — po přihlášení se sem uživatel vrátí. */
   backTo,
 }: {
   pageId: number
-  pageTitle: string
   reviews: ReviewPublic[]
   backTo: string
 }) {
@@ -57,7 +55,6 @@ export async function ReviewsSection({
                 <ReviewItem
                   key={review.id}
                   review={review}
-                  itemReviewed={pageTitle}
                   // Jemné oddělovače (jako inline výpis); poslední recenze bez linky.
                   className={i === reviews.length - 1 ? 'border-b-0' : 'border-[#eceff2]'}
                 />

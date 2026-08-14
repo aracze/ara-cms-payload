@@ -465,7 +465,6 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         {reviewsData && (
           <ReviewsSection
             pageId={Number(page.id)}
-            pageTitle={page.title}
             reviews={reviewsData.reviews}
             // Kam se vrátit po přihlášení z pruhu nad formulářem recenze.
             backTo={page.fullSlug}
@@ -535,6 +534,11 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
  * a jednotlivými recenzemi (schema.org). Znak menšítka se escapuje na
  * unicode sekvenci (viz replace níže), aby obsah recenze nemohl utéct
  * ze script tagu.
+ *
+ * Dvojí @type: samotný TouristAttraction Google pro hvězdičky u recenzí
+ * nepodporuje (Search Console: „Invalid object type for field <parent_node>"),
+ * LocalBusiness ano — recenzujeme cizí atrakce, ne sebe, takže to pravidla
+ * review snippets dovolují.
  */
 function touristPointJsonLd(
   page: PayloadPage,
@@ -546,7 +550,7 @@ function touristPointJsonLd(
 
   const data = {
     '@context': 'https://schema.org',
-    '@type': 'TouristAttraction',
+    '@type': ['TouristAttraction', 'LocalBusiness'],
     name: page.title,
     url: getSiteURL() + page.fullSlug,
     ...(page.detail?.googleMapsAddress ? { address: page.detail.googleMapsAddress } : {}),
