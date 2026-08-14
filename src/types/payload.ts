@@ -155,6 +155,12 @@ export interface Page {
   breadcrumbs?: { label?: string | null; url?: string | null }[] | null
   // Odvozeno ze schématu (payload-types.ts) — nebude se rozcházet s CMS.
   detail?: GeneratedPage['detail']
+  /**
+   * Partnerské odkazy pro sekci „Příprava do …“ — deep-linky pro konkrétní
+   * destinaci (zájezdy/ubytování/auto). Prázdné pole = obecný výchozí odkaz
+   * (viz PreparationSection).
+   */
+  affiliate?: GeneratedPage['affiliate']
   createdBy?:
     | {
         username?: string | null

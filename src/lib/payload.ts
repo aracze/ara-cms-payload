@@ -128,6 +128,8 @@ const PAGE_SCALAR_SELECT = {
   detail: true,
   featuredImage: true,
   breadcrumbs: BREADCRUMBS_SELECT,
+  // Deep-linky destinace pro sekci „Příprava do …" (zájezdy/ubytování/auto).
+  affiliate: true,
   createdBy: true,
   // Bezpečný veřejný autor přes VIRTUÁLNÍ pole (afterRead hook čte uživatele s
   // overrideAccess: true). Stejný vzor jako u článků. Ruční dohled přes

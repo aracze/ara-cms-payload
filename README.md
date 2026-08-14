@@ -514,6 +514,41 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   - **Odvozené hodnocení míst**: recenze se píšou **jen k turistickým cílům** (jako na legacy webu), ale **místa** hvězdičky přebírají z cílů pod sebou — průměr ze **všech jednotlivých recenzí** (ne průměr průměrů, takže cíl s 30 recenzemi váží víc než cíl s jednou). Zobrazí se v **hero vedle názvu** místa jako „N recenzí cílů" (odkaz na `#mista`, tedy výpis cílů — místo vlastní sekci recenzí nemá) a na **dlaždicích v „Co vidět"** pod názvem. Nárok má místo, které se v seznamu chová jako koncová dlaždice: buď pod sebou nemá další místa (Budapešť), nebo má zapnuté `stopDisplayingChildPlaces` (ostrov — pak se sečtou i cíle v jeho podřazených místech). **Země, regiony ani kontinenty hodnocení nemají nikde** (ani jako dlaždice v nadřazeném seznamu) — průměr přes celou zemi se vždy usadí kolem 4,5 a nenese informaci; kontinent se proto ani nepočítá (zkratka `!page.parent`, jinak by se zbytečně procházely děti všech zemí). Hranice **3 recenzí** brání tomu, aby místo s jedinou nadšenou recenzí vypadalo jako nejlépe hodnocená destinace webu (`MIN_DERIVED_PLACE_REVIEWS`); dlaždice samotných **cílů** naopak ukazují hvězdičky od první recenze jako všude jinde. Data dodává `fetchDerivedPlaceRatings` (`src/lib/payload.ts`): dávkové BFS po úrovních (jeden dotaz na úroveň stromu, ne na dlaždici) + hromadný `fetchPageReviewStats`. Hierarchie se jde po `parent`, **ne** prefixem `fullSlug` — místo se může z URL potomků vynechat (`includeInChildUrlPaths`), takže cesta potomka nemusí začínat cestou předka.
   - Data přenesl jednorázový migrační doběh z legacy MySQL databáze. Legacy web vlákna neměl — vazby odpovědí dopočítala kontextová analýza textů. Oba skripty jsou hotové a odstraněné (viz git historie); v adminu lze `parentComment` kdykoliv ručně upravit.
 
+- **Sekce „Příprava do …“** (`src/components/layout/page/preparation-section.tsx`): na
+  stránkách kategorie **Místo k navštívení** mezi „Co vidět“ a „Články a cestopisy“ (legacy
+  parita s `_affiliate.gsp`). Pět karet: **Cestovní pojištění** (redirect `/go/pojisteni`
+  v `next.config.mjs` — záměrně dočasný 307 s neutrálním názvem, cíl jde vyměnit na jednom
+  místě; od 14. 8. 2026 vede na **Klik.cz** přes síť CJ/VIVnetworks, starý web měl
+  ePojištění.cz), **Zájezdy / Rezervace ubytování / Půjčení auta** (deep-linky destinace
+  z pole `affiliate` v CMS, prázdné pole = obecný provizní odkaz). **Ubytování jde přes
+  Booking na síti CJ**: přímý program Booking ukončil 20. 6. 2025 (staré `aid=` odkazy
+  se načtou, ale provizi nenesou). Karta vede na vlastní redirect
+  `/go/ubytovani[/cesta-na-bookingu]` (route handler, důvěryhodná adresa místo tracking
+  domény CJ), který cestu zvaliduje (pevný vzor, host natvrdo booking.com — žádný open
+  redirect) a pošle na CJ click-link přes `?url=` — ověřeno, že finální stránka nese
+  živý `aid` + `cjevent`. Deep-link země bere `accommodationHref` z CMS adresy (mrtvé
+  `aid`/`label` zahodí), bez deep-linku vede na homepage Bookingu.
+  **Auta jdou přes DiscoverCars** (program Rentalcars skončil — Booking Holdings):
+  vlastní redirect `/go/auta[/cesta]` (route handler, stejný vzor a validace jako
+  ubytování) vede na `discovercars.com/cz/…?a_aid=aracz`. Staré Rentalcars adresy
+  v CMS (`countryCode=XX`) překládá mapa `RENTALCARS_COUNTRY_TO_DISCOVERCARS`
+  na stránky zemí (ověřeno proti webu 14. 8. 2026; US/RU/CV stránku nemají → homepage);
+  nové adresy z jejich [Landing page generatoru](https://www.discovercars.com/landing-page-generator)
+  (i města, např. `/cz/austria/vienna`) lze vkládat rovnou do CMS pole. **Přesné
+  deep-linky doplnil doběh `pnpm backfill:affiliate`** (`scripts/backfill-affiliate-links.ts`,
+  dry-run bez `--apply`): každému místu najde stránku města/regionu přímo na webech
+  partnerů (exonyma Vídeň→vienna, přepis bez diakritiky, Booking si chybné slugy opraví
+  sám přesměrováním) a kde není, zdědí odkaz rodiče — v adminu je tak vidět skutečný cíl.
+  Země se určuje z názvu kořenové stránky, NE z legacy kódů (Egypt měl chybně `ec` =
+  Ekvádor). Na dev spuštěno 14. 8. 2026 (664 stránek; Booking 454 přesných, DiscoverCars 258) — **na produkci je po nasazení potřeba spustit znovu + force-recreate cms**.
+  Zájezdy (Invia `aid=`) jedou na starém přímém odkazu — jestli provize počítá, je
+  potřeba ověřit v partnerském účtu. Dále **Praktické
+  informace** (interní, podbarvená; stejný zdroj odkazu jako karta v pravém panelu, vč.
+  zdědění od předka). Partnerské odkazy mají `rel="nofollow sponsored"` a nadpis se skloňuje
+  přes `detail.genitive`; ikony jsou originální legacy SVG (fill `currentColor`), jen brožura
+  Praktických informací je zjednodušená náhrada za 129kB originál. Robots.txt vylučuje
+  `/go/` z procházení. Na mobilu karty po dvou, Praktické informace přes celou šířku.
+
 - **Pages — statické stránky** (`O nás`, `Reklama`, `Podmínky užívání webu`; kategorie
   `Statická stránka`, odkazy z patičky):
   - Založil je jednorázový doběh spolu s obsahem patičky; ten je hotový a odstraněný, takže

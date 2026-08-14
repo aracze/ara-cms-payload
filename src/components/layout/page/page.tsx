@@ -7,6 +7,7 @@ import { MainContent } from './main-content'
 import { PlacesToVisit } from './places-to-visit'
 import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
+import { PreparationSection } from './preparation-section'
 import {
   fetchPageLightByFullSlug,
   fetchMediaUrlsByIds,
@@ -444,6 +445,17 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             reviewStats={reviewStats}
             cardRatings={cardRatings}
             showAnalyticsDebug={currentUser?.isAdmin ?? false}
+          />
+        )}
+
+        {/* Příprava do … (pojištění, zájezdy, ubytování, auto, praktické
+            informace) — jen místa k navštívení, mezi „Co vidět" a články
+            (legacy parita). */}
+        {page.category === PageCategory.Misto_k_navstiveni && (
+          <PreparationSection
+            genitive={page.detail?.genitive || `do ${page.title}`}
+            affiliate={page.affiliate}
+            practicalInfo={practicalInfo}
           />
         )}
 
