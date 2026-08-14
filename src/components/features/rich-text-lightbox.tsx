@@ -76,5 +76,23 @@ export function RichTextLightbox() {
     }
   }, [])
 
+  // Bublina s licencí fotky (ⓒ v popisku) se otvírá přes :hover/:focus-within —
+  // na iOS Safari ale ťuknutí na tlačítko nedá focus, takže by se nemusela
+  // otevřít vůbec. Delegovaný klik přepíná třídu `open` (stejný efekt v CSS)
+  // a ťuknutí kamkoli jinam otevřené bubliny zavře.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Element | null
+      const trigger = target?.closest('.image-attribution-trigger')
+      const tooltip = trigger?.closest('.image-attribution-tooltip') ?? null
+      document.querySelectorAll('.image-attribution-tooltip.open').forEach((el) => {
+        if (el !== tooltip) el.classList.remove('open')
+      })
+      tooltip?.classList.toggle('open')
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [])
+
   return null
 }
