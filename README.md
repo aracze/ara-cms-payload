@@ -155,17 +155,28 @@ Ověřeno naostro při doplňování affiliate deep-linků (14. 8. 2026, 657 str
 z těchto pastí jeden běh shodila, proto stojí za zapsání:
 
 1. **Skript pouštěj z verze kódu, která odpovídá NASAZENÉ**, ne z pracovní kopie:
+
    ```bash
    git worktree add --detach /tmp/wt-prod origin/main
    ln -s "$PWD/node_modules" /tmp/wt-prod/node_modules && cp .env /tmp/wt-prod/.env
    ```
+
    Pracovní kopie obvykle obsahuje rozpracovaná pole, která na produkci ještě nejsou
    (dev si sloupce přidává sám přes `push: true`, produkce ne) — Payload pak padá na
    chybějící sloupec. `DATABASE_URL` stačí exportovat, `dotenv` proměnnou z prostředí
    nepřepisuje.
+
 2. **Postgres není zvenčí dostupný** (žádné `ports`, jen docker síť), takže tunel na IP
-   kontejneru: `ssh -f -N -o ServerAliveInterval=30 -L 15432:$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <pg-container>):5432 root@<server>`.
+   kontejneru. IP se MUSÍ zjistit na serveru — `$(…)` přímo v příkazu `ssh -L` by se
+   vyhodnotilo lokálně a vzalo IP místního kontejneru:
+
+   ```bash
+   PG_IP="$(ssh root@<server> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <pg-container>")"
+   ssh -f -N -o ServerAliveInterval=30 -L "15432:${PG_IP}:5432" root@<server>
+   ```
+
    Bez `ServerAliveInterval` tunel během dlouhého běhu odejde (`ECONNRESET`).
+
 3. **Dlouhé ověřování odděl od zápisu.** Když skript nejdřív dvacet minut osahává cizí
    weby, spojení do DB mezitím zahálí a padne. Osvědčené: fáze 1 vypíše výsledky do JSON
    (`--report=…`), fáze 2 je z něj jen zapíše. Zápisový krok dělej **idempotentní** (co

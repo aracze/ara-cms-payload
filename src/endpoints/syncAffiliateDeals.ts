@@ -240,15 +240,21 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       (p) => p.affiliate?.kiwiIataCode?.trim() || p.affiliate?.inviaFeedUrl?.trim(),
     )
 
-    if (dryRun) {
-      // Ladicí režim zůstává synchronní — volá se ručně a chce vidět výsledky.
-      const { results, errors } = await collectDeals(pages)
-      return Response.json({ ok: true, dryRun: true, pages: results, errors })
-    }
-
     // Souběžný běh se odmítne HNED, ještě před stahováním (viz reserveSyncRun).
+    // Rezervace platí i pro dryRun: jinak by ladicí běh spuštěný během ostrého
+    // syncu stáhl všechno podruhé a zbytečně ubral z kvóty Kiwi.
     if (!reserveSyncRun()) {
       throw new APIError('Sync už běží — zkus to za chvíli znovu', 409)
+    }
+
+    if (dryRun) {
+      // Ladicí režim zůstává synchronní — volá se ručně a chce vidět výsledky.
+      try {
+        const { results, errors } = await collectDeals(pages)
+        return Response.json({ ok: true, dryRun: true, pages: results, errors })
+      } finally {
+        syncStartedAt = null
+      }
     }
 
     // Odpověď se vrací HNED (202) a práce doběhne na pozadí: sync trvá přes
