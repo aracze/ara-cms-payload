@@ -314,7 +314,6 @@ export function ExpandableTouristPoint({
           <div ref={reviewsRef} className="scroll-mt-24">
             <InlineReviews
               pageId={Number(id)}
-              pageTitle={title}
               turnstileSiteKey={turnstileSiteKey}
               rateRequest={rateRequest}
             />
