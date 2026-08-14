@@ -51,7 +51,11 @@ export const HeroSection = ({
       </div>
 
       {/* Title Content - Overlaid like in Grails */}
-      <div className="relative z-[101] h-full flex flex-col items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-1000">
+      {/* `pt` pod lg = výška hlavičky: ta hero překrývá, takže centrování do celé
+          výšky sekce tlačí obsah pod ni. Na mobilu se dlouhý název láme na dva
+          řádky a pilulka drobečků pak lezla hlavičce do cesty (překryv 9 px);
+          s odsazením se obsah centruje do volného pruhu mezi hlavičkou a vlnkou. */}
+      <div className="relative z-[101] h-full flex flex-col items-center justify-center pt-16 lg:pt-0 animate-in fade-in slide-in-from-bottom-4 duration-1000">
         {/* Řetězec jde po hierarchii v CMS, takže může mít i 4 položky. Aby
             dlouhá cesta na mobilu netlačila celou stránku do vodorovného
             posuvu, přetéká jen pilulka sama (posuvník skrytý — odkazy jsou
