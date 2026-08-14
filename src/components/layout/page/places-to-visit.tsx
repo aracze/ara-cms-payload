@@ -189,10 +189,13 @@ function SuperordinateGrid({
 }) {
   return (
     <div
+      // Mobil má dvě dlaždice vedle sebe: na kartě je jen fotka a název, takže
+      // jde o prohlížení nabídky — čím víc míst je vidět naráz, tím líp. U zemí
+      // s desítkami míst to půlí délku sekce (Chorvatsko: 14 680 → 6 336 px).
       className={
         hasMap
-          ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5'
-          : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6'
+          ? 'grid grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5'
+          : 'grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-6'
       }
     >
       {places.map((place) => {
@@ -206,7 +209,7 @@ function SuperordinateGrid({
             key={place.id}
             href={place.fullSlug}
             data-poiid={place.id}
-            className="poi-article group relative flex flex-col bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 h-[280px]"
+            className="poi-article group relative flex flex-col bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 h-[240px] sm:h-[280px]"
           >
             <div className="relative h-full w-full overflow-hidden">
               {imageUrl ? (
@@ -234,7 +237,7 @@ function SuperordinateGrid({
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
-              <div className="absolute bottom-0 left-0 right-0 p-4">
+              <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
                 <h3 className="text-lg font-bold text-white leading-tight drop-shadow-md">
                   {place.title}
                 </h3>
