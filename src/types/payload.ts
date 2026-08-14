@@ -20,6 +20,54 @@ export interface StrapiMedia {
 export interface Homepage {
   /** Věta pod herem — nepovinná; prázdná/null = na webu se nezobrazí nic. */
   title?: string | null
+  /**
+   * Obecné partnerské odkazy (cíle redirectů /go/*) — prázdné pole = výchozí
+   * hodnota z kódu, viz `src/lib/affiliate.ts`.
+   */
+  affiliate?: {
+    insuranceUrl?: string | null
+    toursUrl?: string | null
+    accommodationUrl?: string | null
+    carRentalUrl?: string | null
+  } | null
+}
+
+/**
+ * Sekce „Akční nabídky" — nejlevnější letenka a zájezd pro destinaci. Tvar
+ * JSON pole `affiliate.deals` na stránce; plní ho denní sync
+ * /api/sync-affiliate-deals (viz src/endpoints/syncAffiliateDeals.ts).
+ * Čte se přes type-guard `parseAffiliateDeals` (deals-section.tsx) — JSON pole
+ * nemá v generovaných typech tvar.
+ */
+export interface AffiliateDealKiwi {
+  /** Cena v CZK (Kiwi Search API s curr=CZK). */
+  price: number
+  /** Odkaz s provizí (affilid) na kiwi.com. */
+  deepLink: string
+  /** Datum odletu ve formátu ISO (YYYY-MM-DD). */
+  departureDate: string
+}
+
+export interface AffiliateDealInvia {
+  /** Celková cena v CZK (nejlevnější nabídka s odletem z Prahy). */
+  price: number
+  /** Odkaz s provizí (aid) na invia.cz. */
+  deepLink: string
+  /** Fotka hotelu z feedu (inviacdn.net); null = použije se fotka místa. */
+  photoUrl: string | null
+  hotel: string
+  /** Datum odjezdu ve formátu ISO (YYYY-MM-DD). */
+  termFrom: string
+  days: number
+  /** Strava („Snídaně", „All Inclusive"…); null = feed neuvedl. */
+  food: string | null
+}
+
+export interface AffiliateDeals {
+  kiwi?: AffiliateDealKiwi | null
+  invia?: AffiliateDealInvia | null
+  /** ISO timestamp posledního úspěšného syncu. */
+  updatedAt?: string
 }
 
 export interface SharedImageComponent {
@@ -155,6 +203,12 @@ export interface Page {
   breadcrumbs?: { label?: string | null; url?: string | null }[] | null
   // Odvozeno ze schématu (payload-types.ts) — nebude se rozcházet s CMS.
   detail?: GeneratedPage['detail']
+  /**
+   * Partnerské odkazy pro sekci „Příprava do …“ — deep-linky pro konkrétní
+   * destinaci (zájezdy/ubytování/auto). Prázdné pole = obecný výchozí odkaz
+   * (viz PreparationSection).
+   */
+  affiliate?: GeneratedPage['affiliate']
   createdBy?:
     | {
         username?: string | null

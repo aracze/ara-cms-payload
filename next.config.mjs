@@ -49,6 +49,9 @@ const nextConfig = {
   // kolekci - jde o malou, stabilní sadu 301, ne o obsah editovaný v adminu.
   async redirects() {
     return [
+      // Provizní redirecty /go/* NEJSOU tady — čtou cíle z adminu (globál
+      // Homepage → Připrav se na cestu), takže běží jako route handlery
+      // v src/app/(frontend)/go/. Statický redirect by cíl zapekl do buildu.
       // Starý web měl /kontakt jako statickou stránku s kontaktními údaji;
       // na novém webu ji nahrazuje /o-nas.
       {

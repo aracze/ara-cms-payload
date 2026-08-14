@@ -324,7 +324,23 @@ export interface Page {
     toursUrl?: string | null;
     accommodationUrl?: string | null;
     carRentalUrl?: string | null;
+    /**
+     * Kam hledat nejlevnější letenku z Prahy (sekce „Akční nabídky"). Bere IATA kód letiště/města (LON, PAR) i kód země (HR, GR) — viz Tequila Search API.
+     */
     kiwiIataCode?: string | null;
+    /**
+     * Odkaz „Vygenerovat XML" z affil.invia.cz (Nástroje → XML feed → Uložené XML feedy). Plní kartu zájezdu v sekci „Akční nabídky".
+     */
+    inviaFeedUrl?: string | null;
+    deals?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
   };
   comments?: {
     docs?: (number | Comment)[];
@@ -775,6 +791,8 @@ export interface PagesSelect<T extends boolean = true> {
         accommodationUrl?: T;
         carRentalUrl?: T;
         kiwiIataCode?: T;
+        inviaFeedUrl?: T;
+        deals?: T;
       };
   comments?: T;
   slug?: T;
@@ -919,6 +937,24 @@ export interface Homepage {
    * Krátký text pod vyhledáváním na homepage (např. „Objevuj stovky turistických cílů a míst po celém světě."). Nech prázdné, když se nemá zobrazovat nic.
    */
   title?: string | null;
+  affiliate?: {
+    /**
+     * Cíl přesměrování /go/pojisteni. Výchozí: CJ odkaz na Klik.cz (https://www.anrdoezrs.net/click-101533587-15024030).
+     */
+    insuranceUrl?: string | null;
+    /**
+     * Cíl přesměrování /go/zajezdy — obecný odkaz; konkrétní destinace mají vlastní odkaz na své stránce (záložka Affiliate). Výchozí: https://www.invia.cz/?aid=4745582.
+     */
+    toursUrl?: string | null;
+    /**
+     * Cíl přesměrování /go/ubytovani. Musí to být CJ „click" odkaz na Booking, jinak přestanou fungovat odkazy na konkrétní země. Výchozí: https://www.kqzyfj.com/click-101533587-13386171.
+     */
+    accommodationUrl?: string | null;
+    /**
+     * Cíl přesměrování /go/auta. Musí to být adresa discovercars.com s ?a_aid=, jinak přestanou fungovat odkazy na konkrétní země. Výchozí: https://www.discovercars.com/cz?a_aid=aracz.
+     */
+    carRentalUrl?: string | null;
+  };
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -1010,6 +1046,14 @@ export interface Footer {
  */
 export interface HomepageSelect<T extends boolean = true> {
   title?: T;
+  affiliate?:
+    | T
+    | {
+        insuranceUrl?: T;
+        toursUrl?: T;
+        accommodationUrl?: T;
+        carRentalUrl?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

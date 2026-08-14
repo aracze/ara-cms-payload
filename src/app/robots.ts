@@ -7,7 +7,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      // Affiliate redirecty (/go/porovnej24, /go/epojisteni…) — nejsou to obsah,
+      // Affiliate redirecty (/go/pojisteni…) — nejsou to obsah,
       // nemají se procházet ani indexovat. Platí pro všechny boty (na rozdíl od
       // starého robots.txt, kde prázdné skupiny Googlebot/Seznambot blokaci obcházely).
       // Výsledky hledání jsou z pohledu vyhledávačů nekonečný duplicitní obsah —

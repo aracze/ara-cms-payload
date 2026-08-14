@@ -1,0 +1,35 @@
+name: Sync affiliate deals
+
+# Denní obnova sekce „Akční nabídky": nejlevnější letenka (Kiwi Tequila,
+# ceny v CZK) a nejlevnější zájezd s odletem z Prahy (Invia XML feed) pro
+# místa s vyplněným polem Affiliate (endpoint /api/sync-affiliate-deals,
+# viz src/endpoints/syncAffiliateDeals.ts). Stejný vzor jako sync-analytics —
+# prostý autentizovaný HTTP požadavek na běžící produkci, sdílené tajemství.
+on:
+  schedule:
+    - cron: '41 3 * * *' # denně ve 3:41 UTC, po syncu analytiky a mimo špičku
+  workflow_dispatch: {} # umožní ruční spuštění z webu GitHubu
+
+concurrency:
+  group: sync-affiliate-deals
+  cancel-in-progress: false # ať se souběžný ruční běh nezruší uprostřed zápisu
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Job jen volá HTTP endpoint — GITHUB_TOKEN nepotřebuje žádná práva.
+    permissions: {}
+    timeout-minutes: 10
+    steps:
+      - name: Zavolat /api/sync-affiliate-deals
+        # Sync stahuje z Kiwi s rozestupy kvůli kvótě (30 dotazů/min) —
+        # při ~20 destinacích běží požadavek i přes minutu, proto max-time 300.
+        # Secrets jdou přes env, ne přímo do příkazu (neobjeví se v command line
+        # procesu a zvláštní znaky nerozbijí quoting).
+        env:
+          SYNC_URL: ${{ secrets.SYNC_ANALYTICS_URL }}
+          SYNC_SECRET: ${{ secrets.ANALYTICS_SYNC_SECRET }}
+        run: |
+          curl -fsS -X POST "$SYNC_URL/api/sync-affiliate-deals" \
+            -H "X-Sync-Secret: $SYNC_SECRET" \
+            --connect-timeout 10 --max-time 300 --retry 2 --retry-delay 30
