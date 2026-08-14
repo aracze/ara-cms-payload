@@ -96,6 +96,16 @@ type InviaOffer = {
   airports?: { airport?: string[] }
 }
 
+/** Jediný povolený zdroj Invia feedů (viz SSRF poznámka ve fetchInviaDeal). */
+export function isAllowedInviaFeedUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'affil.invia.cz'
+  } catch {
+    return false
+  }
+}
+
 const inviaXmlParser = new XMLParser({
   ignoreAttributes: true,
   // Pole, která mají být VŽDY pole (jinak parser jediný prvek zploští na objekt).
@@ -109,7 +119,17 @@ const inviaXmlParser = new XMLParser({
  * inzerovat Čechům „zájezd za X" s odletem z Vídně by bylo zavádějící.
  */
 async function fetchInviaDeal(feedUrl: string): Promise<AffiliateDealInvia | null> {
-  const res = await fetch(feedUrl, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+  // Adresa feedu je editovatelný text z adminu a stahuje se server-side —
+  // bez kontroly hosta by šla zneužít jako SSRF (požadavek na interní/cizí
+  // adresu). Povolený je jen https feed přímo z affil.invia.cz; stejné
+  // pravidlo hlídá i validace pole v kolekci Pages.
+  if (!isAllowedInviaFeedUrl(feedUrl)) {
+    throw new Error('Invia feed URL musí být https://affil.invia.cz/…')
+  }
+  const res = await fetch(feedUrl, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    redirect: 'error',
+  })
   if (!res.ok) throw new Error(`Invia feed ${res.status}`)
   const xml = await res.text()
   const parsed = inviaXmlParser.parse(xml) as { offers?: { offer?: InviaOffer[] } }
@@ -171,14 +191,21 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
     }
     const dryRun = new URL(req.url ?? '', 'http://localhost').searchParams.get('dryRun') === '1'
 
-    // Jen publikované stránky s aspoň jedním vyplněným zdrojem nabídek.
+    // Jen publikované stránky s aspoň jedním vyplněným zdrojem nabídek —
+    // overrideAccess: true obchází přístupová práva (a s nimi filtr draftů),
+    // proto se _status hlídá explicitně.
     const pagesRes = await req.payload.find({
       collection: 'pages',
       overrideAccess: true,
       where: {
-        or: [
-          { 'affiliate.kiwiIataCode': { exists: true } },
-          { 'affiliate.inviaFeedUrl': { exists: true } },
+        and: [
+          { _status: { equals: 'published' } },
+          {
+            or: [
+              { 'affiliate.kiwiIataCode': { exists: true } },
+              { 'affiliate.inviaFeedUrl': { exists: true } },
+            ],
+          },
         ],
       },
       depth: 0,

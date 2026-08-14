@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { revalidatePageAfterChange, revalidatePageAfterDelete } from '../hooks/revalidation'
+import { isAllowedInviaFeedUrl } from '../endpoints/syncAffiliateDeals'
 import { imageFields } from '../fields/image'
 import { slugField } from '../fields/slug'
 import { isAdmin } from '../access/isAdmin'
@@ -230,6 +231,15 @@ export const Pages: CollectionConfig = {
               name: 'inviaFeedUrl',
               label: 'Invia XML feed (URL)',
               type: 'text',
+              // Adresu stahuje server (denní sync) — bez omezení hosta by šla
+              // zneužít jako SSRF; stejné pravidlo hlídá i endpoint samotný.
+              validate: (value: string | null | undefined) => {
+                if (!value) return true
+                return (
+                  isAllowedInviaFeedUrl(value) ||
+                  'Musí být odkaz https://affil.invia.cz/… (Nástroje → XML feed → Vygenerovat XML).'
+                )
+              },
               admin: {
                 description:
                   'Odkaz „Vygenerovat XML" z affil.invia.cz (Nástroje → XML feed → Uložené XML feedy). Plní kartu zájezdu v sekci „Akční nabídky".',

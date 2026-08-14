@@ -51,10 +51,35 @@ export function parseAffiliateDeals(raw: unknown): AffiliateDeals | null {
     typeof value.invia.deepLink === 'string' &&
     value.invia.deepLink.startsWith('https://')
   if (!kiwiValid && !inviaValid) return null
+  // Metadata karet se koercují na bezpečné typy — guard je tu právě proti
+  // ručnímu zásahu do JSON v DB a nestringový hotel/food by shodil render.
+  const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
   return {
-    kiwi: kiwiValid ? value.kiwi : null,
-    invia: inviaValid ? value.invia : null,
+    kiwi: kiwiValid
+      ? {
+          price: value.kiwi!.price,
+          deepLink: value.kiwi!.deepLink,
+          departureDate: str(value.kiwi!.departureDate) ?? '',
+        }
+      : null,
+    invia: inviaValid
+      ? {
+          price: value.invia!.price,
+          deepLink: value.invia!.deepLink,
+          photoUrl: str(value.invia!.photoUrl),
+          hotel: str(value.invia!.hotel) ?? '',
+          termFrom: str(value.invia!.termFrom) ?? '',
+          days:
+            typeof value.invia!.days === 'number' && value.invia!.days > 0 ? value.invia!.days : 0,
+          food: str(value.invia!.food),
+        }
+      : null,
   }
+}
+
+/** České skloňování délky zájezdu: 1 den, 2–4 dny, 5+ dní. */
+export function dayCount(days: number): string {
+  return `${days} ${days === 1 ? 'den' : days <= 4 ? 'dny' : 'dní'}`
 }
 
 /** Cena v korunách s českými mezerami (sdílí i homepage sekce nabídek dne). */
@@ -77,7 +102,7 @@ function kiwiMeta(kiwi: AffiliateDealKiwi): string {
 function inviaMeta(invia: AffiliateDealInvia): string {
   const parts = [
     invia.hotel || null,
-    invia.days > 0 ? `${invia.days} ${invia.days >= 5 ? 'dní' : 'dny'}` : null,
+    invia.days > 0 ? dayCount(invia.days) : null,
     invia.food,
     'Invia',
   ].filter(Boolean)

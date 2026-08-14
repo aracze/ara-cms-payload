@@ -1,6 +1,6 @@
 import React from 'react'
 import type { TopAffiliateDeal } from '@/lib/payload'
-import { Badge, priceCzk } from '../page/deals-section'
+import { Badge, dayCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
 /**
@@ -53,36 +53,29 @@ export function DealsOfDaySection({
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-[18px]">
         {flights.map((deal) => (
-          <DealTile
-            key={deal.deepLink}
-            deal={deal}
-            badge="flight"
-            metaLine={[
-              deal.departureDate ? `odlet ${shortDate(deal.departureDate)}` : null,
-              'jednosměrná',
-              'Kiwi.com',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          />
+          <DealTile key={deal.deepLink} deal={deal} badge="flight" metaLine={flightMeta(deal)} />
         ))}
         {tours.map((deal) => (
-          <DealTile
-            key={deal.deepLink}
-            deal={deal}
-            badge="tour"
-            metaLine={[
-              deal.hotel,
-              deal.days && deal.days > 0 ? `${deal.days} ${deal.days >= 5 ? 'dní' : 'dny'}` : null,
-              'Invia',
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          />
+          <DealTile key={deal.deepLink} deal={deal} badge="tour" metaLine={tourMeta(deal)} />
         ))}
       </div>
     </section>
   )
+}
+
+function flightMeta(deal: TopAffiliateDeal): string {
+  // shortDate umí vrátit null (neparsovatelné datum) — bez kontroly výsledku
+  // by se vykreslilo „odlet null".
+  const departure = deal.departureDate ? shortDate(deal.departureDate) : null
+  return [departure ? `odlet ${departure}` : null, 'jednosměrná', 'Kiwi.com']
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function tourMeta(deal: TopAffiliateDeal): string {
+  return [deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function DealTile({

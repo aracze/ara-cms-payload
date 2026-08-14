@@ -551,7 +551,18 @@ const run = async () => {
 
   let written = 0
   for (const ch of changes) {
-    const p = byId.get(ch.id)!
+    // Skupinu posíláme CELOU (Payload chybějící podpole skupiny nuluje),
+    // ale spread se dělá z ČERSTVÉHO čtení těsně před zápisem — snapshot
+    // z úvodu skriptu je po dlouhé sondovací fázi starý a přepsal by pole
+    // doplněná mezitím jinými procesy (kiwiIataCode/inviaFeedUrl/deals
+    // z denního syncu; přesně to se 14. 8. 2026 v dev stalo).
+    const fresh = (await payload.findByID({
+      collection: 'pages',
+      id: ch.id,
+      depth: 0,
+      overrideAccess: true,
+      select: { affiliate: true },
+    })) as { affiliate?: Record<string, unknown> | null }
     await payload.update({
       collection: 'pages',
       id: ch.id,
@@ -559,10 +570,7 @@ const run = async () => {
       overrideAccess: true,
       data: {
         affiliate: {
-          // Skupinu posíláme CELOU včetně polí, která neměníme (spread) —
-          // nespoléháme na merge chování a hlavně nesmíme smazat pole
-          // doplňovaná jinými větvemi práce (např. `deals` z denního syncu).
-          ...(p.affiliate ?? {}),
+          ...(fresh.affiliate ?? {}),
           toursUrl: ch.tours.new || null,
           accommodationUrl: ch.booking.new || null,
           carRentalUrl: ch.discover.new || null,

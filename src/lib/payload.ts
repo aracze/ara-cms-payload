@@ -1271,6 +1271,11 @@ async function fetchInheritedAffiliateDealsUncached(
     const doc = bySlug.get(slug)
     const deals = doc?.affiliate?.deals
     if (!doc || !deals || typeof deals !== 'object') continue
+    // Předek s prázdnými/nepoužitelnými nabídkami (kiwi i invia null — např.
+    // zájezdy bez odletu z Prahy a bez letenky) nesmí zastínit vzdálenějšího
+    // předka s platnými daty — jinak by sekce zmizela úplně.
+    const dealsObj = deals as { kiwi?: unknown; invia?: unknown }
+    if (!isValidDeal(dealsObj.kiwi) && !isValidDeal(dealsObj.invia)) continue
     // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
     const [enriched] = await enrichFeaturedImages([doc])
     const imageUrl = (enriched.featuredImage?.image as { url?: string } | null | undefined)?.url
@@ -1439,8 +1444,17 @@ const fetchTopAffiliateDealsCached = cached(
 
 /** Top nabídky dne pro homepage; prázdné seznamy = sekce se nezobrazí. */
 export const fetchTopAffiliateDeals = cache(
-  (limitPerKind = 4): Promise<{ flights: TopAffiliateDeal[]; tours: TopAffiliateDeal[] }> =>
-    fetchTopAffiliateDealsCached(limitPerKind),
+  async (limitPerKind = 4): Promise<{ flights: TopAffiliateDeal[]; tours: TopAffiliateDeal[] }> => {
+    try {
+      return await fetchTopAffiliateDealsCached(limitPerKind)
+    } catch (err) {
+      // Homepage nesmí spadnout kvůli jedné sekci (stejně jako ostatní
+      // homepage fetchery). Chyba propadá VEN z cache (nic se nezapeklo),
+      // tady se jen ztiší a sekce se nevykreslí.
+      console.error('[akční nabídky] načtení top nabídek selhalo:', err)
+      return { flights: [], tours: [] }
+    }
+  },
 )
 
 // ————————————————————————————————————————————————————————————————

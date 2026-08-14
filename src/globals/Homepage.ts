@@ -2,6 +2,20 @@ import type { GlobalConfig } from 'payload'
 import { revalidateGlobalsAfterChange } from '../hooks/revalidation'
 import { AFFILIATE_FALLBACKS } from '../lib/affiliate-defaults'
 
+/**
+ * Redirecty /go/* posílají návštěvníka na uloženou adresu — kontrola tu hlídá,
+ * že jde o absolutní https:// URL (relativní cesta nebo překlep by přesměrování
+ * rozbily). Prázdné pole je v pořádku, platí výchozí odkaz z kódu.
+ */
+const validateAbsoluteHttpsUrl = (value: string | null | undefined) => {
+  if (!value) return true
+  try {
+    return new URL(value).protocol === 'https:' || 'Musí být absolutní https:// adresa.'
+  } catch {
+    return 'Musí být absolutní https:// adresa.'
+  }
+}
+
 export const Homepage: GlobalConfig = {
   slug: 'homepage',
   access: {
@@ -35,6 +49,7 @@ export const Homepage: GlobalConfig = {
         {
           name: 'insuranceUrl',
           defaultValue: AFFILIATE_FALLBACKS.insuranceUrl,
+          validate: validateAbsoluteHttpsUrl,
           label: 'Cestovní pojištění (URL)',
           type: 'text',
           admin: {
@@ -45,6 +60,7 @@ export const Homepage: GlobalConfig = {
         {
           name: 'toursUrl',
           defaultValue: AFFILIATE_FALLBACKS.toursUrl,
+          validate: validateAbsoluteHttpsUrl,
           label: 'Zájezdy (URL)',
           type: 'text',
           admin: {
@@ -55,6 +71,7 @@ export const Homepage: GlobalConfig = {
         {
           name: 'accommodationUrl',
           defaultValue: AFFILIATE_FALLBACKS.accommodationUrl,
+          validate: validateAbsoluteHttpsUrl,
           label: 'Rezervace ubytování (URL)',
           type: 'text',
           admin: {
@@ -65,6 +82,7 @@ export const Homepage: GlobalConfig = {
         {
           name: 'carRentalUrl',
           defaultValue: AFFILIATE_FALLBACKS.carRentalUrl,
+          validate: validateAbsoluteHttpsUrl,
           label: 'Půjčení auta (URL)',
           type: 'text',
           admin: {

@@ -296,10 +296,26 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   z Krakova/Vídně; inzerovat je Čechům by bylo zavádějící) — proto může mít
   destinace jen kartu letenky (např. Malta).
 - **Nasazení na produkci:** do `/opt/aracze/.env` přidat
-  `KIWI_TEQUILA_API_KEY`; schéma doplnit SQL
-  `ALTER TABLE pages ADD COLUMN IF NOT EXISTS affiliate_invia_feed_url varchar, ADD COLUMN IF NOT EXISTS affiliate_deals jsonb;`
-  (vzor dřívějších ručních zarovnání schématu); pak backfill, force-recreate
-  cms a ruční spuštění workflow.
+  `KIWI_TEQUILA_API_KEY`; schéma doplnit SQL (POZOR — i verzní tabulka
+  `_pages_v`, bez jejích sloupců spadne publikování stránek v adminu):
+
+  ```sql
+  ALTER TABLE pages
+    ADD COLUMN IF NOT EXISTS affiliate_invia_feed_url varchar,
+    ADD COLUMN IF NOT EXISTS affiliate_deals jsonb;
+  ALTER TABLE _pages_v
+    ADD COLUMN IF NOT EXISTS version_affiliate_invia_feed_url varchar,
+    ADD COLUMN IF NOT EXISTS version_affiliate_deals jsonb;
+  ```
+
+  Ruční SQL místo Payload migrace je v projektu ZÁMĚR: repo drží jedinou
+  initial migraci a produkce se zarovnává ručním SQL (viz dřívější změny
+  schématu), `PAYLOAD_RUN_MIGRATIONS` se na prod nepouští. Pak backfill,
+  force-recreate cms a ruční spuštění workflow.
+
+- **Drafty:** JSON `deals` je součást verzovaného dokumentu — publikování
+  starší verze stránky může vrátit starší nabídky; nejbližší noční sync je
+  přepíše (vědomě přijaté zjednodušení).
 
 ```bash
 curl -X POST 'http://localhost:3000/api/sync-affiliate-deals?dryRun=1' \

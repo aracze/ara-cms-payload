@@ -87,6 +87,16 @@ async function main() {
     )
     if (!APPLY) continue
 
+    // Skupina se posílá CELÁ (Payload chybějící podpole nuluje) a spread se
+    // dělá z ČERSTVÉHO čtení těsně před zápisem — nesmí smazat toursUrl
+    // a spol. z backfill-affiliate-links ani `deals` z denního syncu.
+    const fresh = (await payload.findByID({
+      collection: 'pages',
+      id: page.id,
+      depth: 0,
+      overrideAccess: true,
+      select: { affiliate: true },
+    })) as { affiliate?: Record<string, unknown> | null }
     await payload.update({
       collection: 'pages',
       id: page.id,
@@ -94,9 +104,7 @@ async function main() {
       overrideAccess: true,
       data: {
         affiliate: {
-          // Skupina se posílá CELÁ (spread) — nesmí smazat toursUrl a spol.
-          // z doběhu backfill-affiliate-links ani `deals` z denního syncu.
-          ...(page.affiliate ?? {}),
+          ...(fresh.affiliate ?? {}),
           kiwiIataCode: src.kiwi,
           inviaFeedUrl: src.inviaFeed,
         },
