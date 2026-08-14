@@ -572,8 +572,15 @@ const run = async () => {
         affiliate: {
           ...(fresh.affiliate ?? {}),
           toursUrl: ch.tours.new || null,
-          accommodationUrl: ch.booking.new || null,
-          carRentalUrl: ch.discover.new || null,
+          // Při --tours-only se Booking/DiscoverCars NEpřepisují: ch.* nese
+          // momentku z úvodního čtení („keep" hodnoty), která by přepsala
+          // souběžné změny — nechávají se z čerstvého spreadu výše.
+          ...(TOURS_ONLY
+            ? {}
+            : {
+                accommodationUrl: ch.booking.new || null,
+                carRentalUrl: ch.discover.new || null,
+              }),
         },
       },
     })
