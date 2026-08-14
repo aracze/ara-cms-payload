@@ -149,6 +149,34 @@ To build and run the production-optimized Docker image:
 > [!TIP]
 > This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
 
+### Jednorázové doběhy proti produkční databázi — čtyři pasti
+
+Ověřeno naostro při doplňování affiliate deep-linků (14. 8. 2026, 657 stránek). Každá
+z těchto pastí jeden běh shodila, proto stojí za zapsání:
+
+1. **Skript pouštěj z verze kódu, která odpovídá NASAZENÉ**, ne z pracovní kopie:
+   ```bash
+   git worktree add --detach /tmp/wt-prod origin/main
+   ln -s "$PWD/node_modules" /tmp/wt-prod/node_modules && cp .env /tmp/wt-prod/.env
+   ```
+   Pracovní kopie obvykle obsahuje rozpracovaná pole, která na produkci ještě nejsou
+   (dev si sloupce přidává sám přes `push: true`, produkce ne) — Payload pak padá na
+   chybějící sloupec. `DATABASE_URL` stačí exportovat, `dotenv` proměnnou z prostředí
+   nepřepisuje.
+2. **Postgres není zvenčí dostupný** (žádné `ports`, jen docker síť), takže tunel na IP
+   kontejneru: `ssh -f -N -o ServerAliveInterval=30 -L 15432:$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <pg-container>):5432 root@<server>`.
+   Bez `ServerAliveInterval` tunel během dlouhého běhu odejde (`ECONNRESET`).
+3. **Dlouhé ověřování odděl od zápisu.** Když skript nejdřív dvacet minut osahává cizí
+   weby, spojení do DB mezitím zahálí a padne. Osvědčené: fáze 1 vypíše výsledky do JSON
+   (`--report=…`), fáze 2 je z něj jen zapíše. Zápisový krok dělej **idempotentní** (co
+   už sedí, přeskoč) — pak se dá po přerušení prostě spustit znovu.
+4. **NIKDY neukládej stránky paralelně.** Souběh 5 skončil deadlockem: uložení stránky
+   sahá i na řetězec předků (plugin nested-docs), takže dvě místa pod stejnou zemí se
+   navzájem zablokují. Sekvenčně to je ~3 s/stránka a je to jediná bezpečná cesta.
+
+Po zápisu do CMS mimo admin **vždy** `docker compose up -d --force-recreate cms`
+(cache se invalidují jen z hooků v adminu).
+
 ### Ochrana e-mailu proti robotům — řeší Cloudflare, ne kód
 
 **Na zóně `ara.cz` je Scrape Shield → Email Address Obfuscation už ZAPNUTÝ** (ověřeno 6. 8. 2026: `https://ara.cz/kontakt` nemá v HTML `mailto:` ani samotnou adresu, odkaz vede na
@@ -601,17 +629,20 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   na stránky zemí (ověřeno proti webu 14. 8. 2026; US/RU/CV stránku nemají → homepage);
   nové adresy z jejich [Landing page generatoru](https://www.discovercars.com/landing-page-generator)
   (i města, např. `/cz/austria/vienna`) lze vkládat rovnou do CMS pole. **Přesné
-  deep-linky doplnil doběh `pnpm backfill:affiliate`** (`scripts/backfill-affiliate-links.ts`,
-  dry-run bez `--apply`): každému místu najde stránku města/regionu přímo na webech
-  partnerů (exonyma Vídeň→vienna, přepis bez diakritiky, Booking si chybné slugy opraví
-  sám přesměrováním) a kde není, zdědí odkaz rodiče — v adminu je tak vidět skutečný cíl.
-  Země se určuje z názvu kořenové stránky, NE z legacy kódů (Egypt měl chybně `ec` =
-  Ekvádor). Na dev spuštěno 14. 8. 2026 (664 stránek; Booking 454 přesných, DiscoverCars 258) — **na produkci je po nasazení potřeba spustit znovu + force-recreate cms**.
+  deep-linky doplnil jednorázový doběh** (`scripts/backfill-affiliate-links.ts`): každému
+  místu našel stránku města/regionu přímo na webech partnerů (exonyma Vídeň→vienna, přepis
+  bez diakritiky, Booking si chybné slugy opraví sám přesměrováním) a kde nebyla, zdědil
+  odkaz rodiče — v adminu je tak vidět skutečný cíl. Země se určovala z názvu kořenové
+  stránky, NE z legacy kódů (Egypt měl chybně `ec` = Ekvádor). **Doběh je hotový (dev
+  i produkce, 14. 8. 2026) a skript odstraněný** — v případě potřeby ho najdeš v git
+  historii, viz „Stará databáze" výše pro postup. Výsledek na produkci: 657 stránek,
+  z toho 487 s přesnou stránkou města/regionu u Bookingu, 258 u DiscoverCars a 117
+  lokalit u Invie; zbytek dědí zemi. Novým místům stačí vyplnit pole v adminu (nebo
+  nechat prázdné — runtime spadne na odkaz země/obecný).
   **Zájezdy jdou přes Invii** (partnerský účet ověřen živý 14. 8. 2026, `aid=4745582`):
-  deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym)
-  doplnil týž doběh s `--tours-only` (117 přesných lokalit, jinak země; Invia neexistující
-  lokalitu přesměruje na zemi, hit je jen přímé 200) a karta je obaluje redirectem
-  `/go/zajezdy[/cesta]`, který doplní `aid` ze základního odkazu v adminu. **Homepage** má panel „Připrav se na cestu"
+  deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym;
+  Invia neexistující lokalitu přesměruje na zemi, hit je jen přímé 200) obaluje karta
+  redirectem `/go/zajezdy[/cesta]`, který doplní `aid` ze základního odkazu v adminu. **Homepage** má panel „Připrav se na cestu"
   (`homepage/preparation-section.tsx`, legacy parita s `affiliate--homepage`): 4 obecné
   karty bez Praktických informací a deep-linků, mezi „Co je nového" a „Tématy ke čtení";
   mřížku karet sdílí `PreparationCards`. Dále **Praktické
