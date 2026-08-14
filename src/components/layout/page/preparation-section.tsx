@@ -10,8 +10,9 @@ import type { Page } from '@/types/payload'
  * Partnerské odkazy: stránka s vyplněným polem `affiliate` v CMS má deep-link
  * pro svou destinaci, jinak vede karta na obecný redirect /go/* (cíle
  * editovatelné v adminu, viz `src/lib/affiliate.ts`). Fallback na odkazy
- * RODIČE (legacy breadcrumbParent) záměrně není — deep-linky doplnil
- * hromadný doběh `pnpm backfill:affiliate` i s děděním po rodiči.
+ * RODIČE (legacy breadcrumbParent) záměrně není — dědění po rodiči vyřešil
+ * jednorázový doběh, který deep-linky zapsal přímo do CMS (hotový a
+ * odstraněný, viz README „Sekce Příprava do …").
  */
 
 export interface PreparationPracticalInfo {

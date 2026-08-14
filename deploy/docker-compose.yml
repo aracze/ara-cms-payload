@@ -64,6 +64,11 @@ services:
       GA4_PROPERTY_ID: ${GA4_PROPERTY_ID}
       GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON}
       ANALYTICS_SYNC_SECRET: ${ANALYTICS_SYNC_SECRET}
+      # Kiwi Tequila Search API – denní sync akčních nabídek
+      # (/api/sync-affiliate-deals). Bez tohoto řádku se hodnota z /opt/aracze/.env
+      # do kontejneru NEDOSTANE (compose proměnné vyjmenovává) a sync tiše
+      # vynechá letenky — ověřeno při nasazení 14. 8. 2026.
+      KIWI_TEQUILA_API_KEY: ${KIWI_TEQUILA_API_KEY}
       # Cloudflare Turnstile (ochrana registrace/obnovy hesla a komentářů proti
       # robotům) — bez obou klíčů se v aplikaci tiše vypne a jede jen honeypot.
       # Hodnoty do /opt/aracze/.env; widget má v CF povolené hostnames ara.cz.
