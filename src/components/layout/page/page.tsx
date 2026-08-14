@@ -8,6 +8,7 @@ import { PlacesToVisit } from './places-to-visit'
 import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
 import { PreparationSection } from './preparation-section'
+import { DealsSection, parseAffiliateDeals } from './deals-section'
 import {
   fetchPageLightByFullSlug,
   fetchMediaUrlsByIds,
@@ -21,6 +22,7 @@ import {
   pageHasArticlesBySlug,
   fetchPracticalInfoSections,
   fetchTeamSection,
+  fetchInheritedAffiliateDeals,
 } from '@/lib/payload'
 import { TeamSection } from './team-section'
 import { ABOUT_PAGE_SLUG } from '@/lib/team'
@@ -53,6 +55,26 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // resolvePlacesToVisitUncached), NE `pageChildren` (ty zůstávají pro menu/taby
   // s ostatními kategoriemi — Praktické informace, Doprava...).
   const placesToVisit = page.resolvedPlacesToVisit ?? []
+
+  // Akční nabídky — JSON z denního syncu přes type-guard; jen místa k navštívení.
+  const ownAffiliateDeals =
+    page.category === PageCategory.Misto_k_navstiveni
+      ? parseAffiliateDeals(page.affiliate?.deals)
+      : null
+  // Místo bez vlastních nabídek dědí od NEJBLIŽŠÍHO předka, který je má
+  // (Dubrovník → Chorvatsko); slugy z breadcrumbs od nejbližšího, bez stránky
+  // samotné. Promise startuje hned, await až v poslední vlně s ostatními.
+  const ancestorSlugsForDeals =
+    !ownAffiliateDeals && page.category === PageCategory.Misto_k_navstiveni
+      ? (page.breadcrumbs ?? [])
+          .map((b) => b?.url)
+          .filter((u): u is string => typeof u === 'string' && !!u && u !== page.fullSlug)
+          .reverse()
+      : []
+  const inheritedDealsPromise =
+    ancestorSlugsForDeals.length > 0
+      ? fetchInheritedAffiliateDeals(ancestorSlugsForDeals)
+      : Promise.resolve(null)
 
   // Nezávislé dotazy běží PARALELNĚ — sekvenční čekání (ancestors → menu →
   // kurz → obrázky) sčítalo ~0,3 s režii CMS za každý dotaz. React cache()
@@ -175,6 +197,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     siblings,
     practicalInfoSections,
     teamSection,
+    inheritedDeals,
   ] = await Promise.all([
     fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -211,7 +234,32 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       : Promise.resolve([]),
     // Sekce „Náš tým" — jen na stránce O nás, jinde by šlo o dotaz nazdařbůh.
     isAboutPage ? fetchTeamSection() : Promise.resolve(null),
+    inheritedDealsPromise,
   ])
+
+  // Vstupy sekce „Akční nabídky": vlastní data stránky, jinak zděděná od
+  // předka — pak karty nesou PŘEDKOVO jméno, skloňování i fotku (chorvatská
+  // letenka pod titulkem „do Dubrovníku" by byla zavádějící).
+  const absoluteMediaUrl = (url: string | null | undefined): string | null =>
+    url ? (url.startsWith('/') ? new URL(url, getPayloadURL()).toString() : url) : null
+  const inheritedParsedDeals = inheritedDeals ? parseAffiliateDeals(inheritedDeals.deals) : null
+  const dealsSection = ownAffiliateDeals
+    ? {
+        genitive: page.detail?.genitive || `do ${page.title}`,
+        placeTitle: page.title,
+        // Vlastní fotka stránky (bez fallbacku na kořen jako u hera — cizí
+        // fotka by u nabídky destinace byla zavádějící).
+        placeImageUrl: absoluteMediaUrl(page.featuredImage?.image?.url),
+        deals: ownAffiliateDeals,
+      }
+    : inheritedDeals && inheritedParsedDeals
+      ? {
+          genitive: inheritedDeals.genitive || `do ${inheritedDeals.title}`,
+          placeTitle: inheritedDeals.title,
+          placeImageUrl: absoluteMediaUrl(inheritedDeals.imageUrl),
+          deals: inheritedParsedDeals,
+        }
+      : null
   const contextHasPlaces = contextFlags.hasPlaces
   const contextHasArticles = contextFlags.hasArticles
 
@@ -433,6 +481,12 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             parentLocative={relatedParent.locative}
           />
         )}
+
+        {/* Akční nabídky (nejlevnější letenka Kiwi + zájezd Invia) — jen místa
+            k navštívení, NAD sekcí „Co vidět" (legacy parita s _highlights.gsp).
+            Data plní denní sync /api/sync-affiliate-deals; místo bez vlastních
+            dat dědí nabídky nejbližšího předka; jinak se sekce nezobrazí. */}
+        {dealsSection && <DealsSection {...dealsSection} />}
 
         {/* 3. PLACES TO VISIT SECTION */}
         {placesToVisit.length > 0 && (

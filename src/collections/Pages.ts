@@ -221,6 +221,31 @@ export const Pages: CollectionConfig = {
               name: 'kiwiIataCode',
               label: 'Kiwi Fly To (IATA kód letiště)',
               type: 'text',
+              admin: {
+                description:
+                  'Kam hledat nejlevnější letenku z Prahy (sekce „Akční nabídky"). Bere IATA kód letiště/města (LON, PAR) i kód země (HR, GR) — viz Tequila Search API.',
+              },
+            },
+            {
+              name: 'inviaFeedUrl',
+              label: 'Invia XML feed (URL)',
+              type: 'text',
+              admin: {
+                description:
+                  'Odkaz „Vygenerovat XML" z affil.invia.cz (Nástroje → XML feed → Uložené XML feedy). Plní kartu zájezdu v sekci „Akční nabídky".',
+              },
+            },
+            {
+              // Denně přepisuje /api/sync-affiliate-deals (přímým SQL mimo hooky,
+              // ať neroste historie verzí) — viz src/endpoints/syncAffiliateDeals.ts.
+              // V adminu SKRYTÉ: surový JSON editor jen mátl (a šlo do něj psát);
+              // co web zrovna ukazuje, je vidět na stránce, syrová data v DB.
+              name: 'deals',
+              label: 'Akční nabídky (stažená data)',
+              type: 'json',
+              admin: {
+                hidden: true,
+              },
             },
           ],
         },

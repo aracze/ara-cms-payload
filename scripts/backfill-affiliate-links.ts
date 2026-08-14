@@ -5,30 +5,36 @@ import configPromise from '../src/payload.config'
 
 /**
  * Jednorázový doběh: doplní místům k navštívení PŘESNÉ affiliate odkazy na
- * ubytování (Booking) a půjčení auta (DiscoverCars).
+ * ubytování (Booking), půjčení auta (DiscoverCars) a zájezdy (Invia).
  *
- *   pnpm backfill:affiliate            # dry-run: jen zjistí a vypíše, co by zapsal
- *   pnpm backfill:affiliate -- --apply # zapíše výsledky do CMS
+ *   pnpm backfill:affiliate                # dry-run: jen zjistí a vypíše, co by zapsal
+ *   pnpm backfill:affiliate -- --apply     # zapíše výsledky do CMS
+ *   pnpm backfill:affiliate -- --tours-only  # řeší jen zájezdy (Booking/DiscoverCars nechá být)
  *
  * Postup (viz sekce „Příprava do …" v README):
  *  1. Země se určuje z NÁZVU kořenové stránky země (dítě kontinentu) přes
  *     slovník COUNTRIES — NE ze starých odkazů (legacy data měla u Egypta
- *     chybný kód `ec`, tedy Ekvádor).
+ *     chybný kód `ec`, tedy Ekvádor). Invia slug země se bere z existujícího
+ *     odkazu v CMS (dovolena/<země>), případně se zkusí přepis názvu.
  *  2. U podřazených míst se zkouší stránka města/regionu přímo na webu
  *     partnera (kandidáti: český exonym → anglický název, přepis bez
- *     diakritiky, název bez prefixu „Ostrov/Národní park/…"). Booking
- *     neexistující město sám přesměruje — cíl na /city|/region|/district se
- *     bere jako oprava, přesměrování na /country jako neexistence.
+ *     diakritiky, název bez prefixu „Ostrov/Národní park/…"; Invia má slugy
+ *     ČESKY, takže bez exonym). Booking neexistující město sám přesměruje —
+ *     cíl na /city|/region|/district se bere jako oprava, přesměrování na
+ *     /country jako neexistence. Invia přesměrovává neexistující lokalitu
+ *     na zemi — hit je jen přímé 200.
  *  3. Kde přesná stránka není, dědí se odkaz NADŘAZENÉ stránky (rodičovské
  *     země/regionu) — zapisuje se explicitně do CMS, ať je v adminu vidět,
  *     kam karta skutečně vede.
  *
  * Zapisují se ČISTÉ cílové adresy bez provizních parametrů — tracking
- * (CJ ?url=, resp. a_aid) doplňují až redirecty /go/ubytovani a /go/auta.
- * Po běhu na PRODUKCI je potřeba force-recreate cms (cache mimo hooky).
+ * (CJ ?url=, a_aid, aid) doplňují až redirecty /go/ubytovani, /go/auta
+ * a /go/zajezdy. Po běhu na PRODUKCI je potřeba force-recreate cms (cache
+ * mimo hooky).
  */
 
 const APPLY = process.argv.includes('--apply')
+const TOURS_ONLY = process.argv.includes('--tours-only')
 const REPORT_ARG = process.argv.find((a) => a.startsWith('--report='))
 const REPORT_PATH = REPORT_ARG ? REPORT_ARG.slice('--report='.length) : null
 
@@ -36,6 +42,7 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
 const BOOKING_DELAY_MS = 300
 const DISCOVER_DELAY_MS = 250
+const INVIA_DELAY_MS = 300
 
 /**
  * Kořenové země podle českého názvu → kód země na Bookingu (ISO) + slug na
@@ -111,6 +118,7 @@ const COUNTRIES: Record<string, { cc: string | null; dc: string | null }> = {
  * České exonymy → anglický slug u partnerů. Klíč je název po `fold()`.
  * Jen názvy, kde se čeština liší od mezinárodního tvaru — zbytek vyřeší
  * přepis bez diakritiky (a u Bookingu i jeho opravné přesměrování).
+ * Invia je česky, exonyma NEpoužívá (viz candidateSlugs).
  */
 const EXONYMS: Record<string, string> = {
   aljaska: 'alaska',
@@ -228,19 +236,22 @@ function slugify(folded: string): string {
   return folded.replace(/ /g, '-')
 }
 
-/** Kandidátní slugy pro hledání stránky místa u partnerů (v pořadí pokusů). */
-function candidateSlugs(title: string): { slug: string; stripped: boolean }[] {
+/**
+ * Kandidátní slugy pro hledání stránky místa u partnerů (v pořadí pokusů).
+ * `withExonyms: false` pro Invii — má slugy česky (viden, kreta…).
+ */
+function candidateSlugs(title: string, withExonyms = true): { slug: string; stripped: boolean }[] {
   const folded = fold(title)
   const out: { slug: string; stripped: boolean }[] = []
   const push = (slug: string, stripped: boolean) => {
     if (slug && !out.some((c) => c.slug === slug)) out.push({ slug, stripped })
   }
-  if (EXONYMS[folded]) push(EXONYMS[folded], false)
+  if (withExonyms && EXONYMS[folded]) push(EXONYMS[folded], false)
   push(slugify(folded), false)
   for (const prefix of STRIP_PREFIXES) {
     if (folded.startsWith(prefix)) {
       const rest = folded.slice(prefix.length)
-      if (EXONYMS[rest]) push(EXONYMS[rest], true)
+      if (withExonyms && EXONYMS[rest]) push(EXONYMS[rest], true)
       push(slugify(rest), true)
     }
   }
@@ -296,6 +307,18 @@ async function probeDiscover(dcCountry: string, cand: { slug: string }) {
   return status === 200 ? url : null
 }
 
+/**
+ * Invia: /dovolena/<země>/<lokalita>/ (slugy ČESKY). Neexistující lokalitu
+ * Invia přesměruje na zemi → trefa je jen přímé 200. Stejně tak země:
+ * /dovolena/<země>/.
+ */
+async function probeInvia(pathSegments: string[]) {
+  const url = `https://www.invia.cz/dovolena/${pathSegments.join('/')}/`
+  const { status } = await fetchStatus(url)
+  await sleep(INVIA_DELAY_MS)
+  return status === 200 ? url : null
+}
+
 type PageRow = {
   id: number
   title: string
@@ -312,10 +335,14 @@ type PageRow = {
 type Resolved = {
   booking: string
   discover: string
+  tours: string
   bookingSource: string
   discoverSource: string
+  toursSource: string
   cc: string | null
   dc: string | null
+  /** Invia slug země (dovolena/<slug>) pro hledání lokalit u dětí. */
+  invia: string | null
 }
 
 const run = async () => {
@@ -330,7 +357,9 @@ const run = async () => {
     overrideAccess: true,
   })
   const pages = res.docs as unknown as PageRow[]
-  console.log(`Míst k navštívení: ${pages.length}${APPLY ? '' : ' (DRY-RUN, nic se nezapíše)'}`)
+  console.log(
+    `Míst k navštívení: ${pages.length}${APPLY ? '' : ' (DRY-RUN, nic se nezapíše)'}${TOURS_ONLY ? ' — jen zájezdy' : ''}`,
+  )
 
   const byId = new Map<number, PageRow>()
   const childrenOf = new Map<number | null, PageRow[]>()
@@ -350,10 +379,13 @@ const run = async () => {
   const EMPTY: Resolved = {
     booking: '',
     discover: '',
+    tours: '',
     bookingSource: 'none',
     discoverSource: 'none',
+    toursSource: 'none',
     cc: null,
     dc: null,
+    invia: null,
   }
 
   // BFS od kontinentů (kořenů) — rodič je vyřešený dřív než děti, takže
@@ -371,41 +403,80 @@ const run = async () => {
     const { page, parentResolved, isCountry } = queue.shift()!
     let r: Resolved
 
+    // Při --tours-only se Booking/DiscoverCars vůbec neřeší — projdou beze
+    // změny současné hodnoty stránky (diff je pak nevidí).
+    const keepBooking = page.affiliate?.accommodationUrl ?? ''
+    const keepDiscover = page.affiliate?.carRentalUrl ?? ''
+
     if (isCountry) {
       const country = COUNTRIES[page.title]
-      if (!country) {
+      if (!country && !TOURS_ONLY) {
         console.warn(`! Neznámá země pod kontinentem: ${page.title} (${page.fullSlug})`)
-        r = EMPTY
-      } else {
-        r = {
-          booking: country.cc ? `https://www.booking.com/country/${country.cc}.cs.html` : '',
-          discover: country.dc ? `https://www.discovercars.com/cz/${country.dc}` : '',
-          bookingSource: country.cc ? 'country' : 'none',
-          discoverSource: country.dc ? 'country' : 'none',
-          cc: country.cc,
-          dc: country.dc,
-        }
       }
-    } else if (!parentResolved.cc && !parentResolved.dc) {
-      r = { ...parentResolved, bookingSource: 'parent', discoverSource: 'parent' }
+      // Invia slug země: z existujícího odkazu v CMS, jinak zkusit přepis názvu.
+      let inviaSlug = (page.affiliate?.toursUrl ?? '').match(/dovolena\/([a-z0-9-]+)/)?.[1] ?? null
+      if (!inviaSlug) {
+        const cand = slugify(fold(page.title))
+        if (await probeInvia([cand])) inviaSlug = cand
+      }
+      r = {
+        booking: TOURS_ONLY
+          ? keepBooking
+          : country?.cc
+            ? `https://www.booking.com/country/${country.cc}.cs.html`
+            : '',
+        discover: TOURS_ONLY
+          ? keepDiscover
+          : country?.dc
+            ? `https://www.discovercars.com/cz/${country.dc}`
+            : '',
+        tours: inviaSlug ? `https://www.invia.cz/dovolena/${inviaSlug}/` : '',
+        bookingSource: TOURS_ONLY ? 'keep' : country?.cc ? 'country' : 'none',
+        discoverSource: TOURS_ONLY ? 'keep' : country?.dc ? 'country' : 'none',
+        toursSource: inviaSlug ? 'country' : 'none',
+        cc: country?.cc ?? null,
+        dc: country?.dc ?? null,
+        invia: inviaSlug,
+      }
+    } else if (!parentResolved.cc && !parentResolved.dc && !parentResolved.invia) {
+      r = {
+        ...parentResolved,
+        booking: TOURS_ONLY ? keepBooking : parentResolved.booking,
+        discover: TOURS_ONLY ? keepDiscover : parentResolved.discover,
+        bookingSource: TOURS_ONLY ? 'keep' : 'parent',
+        discoverSource: TOURS_ONLY ? 'keep' : 'parent',
+        toursSource: 'parent',
+      }
     } else {
-      const cands = candidateSlugs(page.title)
       let booking: string | null = null
       let discover: string | null = null
-      for (const cand of cands) {
-        if (!booking && parentResolved.cc) booking = await probeBooking(parentResolved.cc, cand)
-        if (!discover && parentResolved.dc) discover = await probeDiscover(parentResolved.dc, cand)
-        if ((booking || !parentResolved.cc) && (discover || !parentResolved.dc)) break
+      if (!TOURS_ONLY) {
+        for (const cand of candidateSlugs(page.title)) {
+          if (!booking && parentResolved.cc) booking = await probeBooking(parentResolved.cc, cand)
+          if (!discover && parentResolved.dc)
+            discover = await probeDiscover(parentResolved.dc, cand)
+          if ((booking || !parentResolved.cc) && (discover || !parentResolved.dc)) break
+        }
+      }
+      let tours: string | null = null
+      if (parentResolved.invia) {
+        for (const cand of candidateSlugs(page.title, false)) {
+          tours = await probeInvia([parentResolved.invia, cand.slug])
+          if (tours) break
+        }
       }
       probed++
       if (probed % 25 === 0) console.log(`  …ověřeno ${probed} míst`)
       r = {
-        booking: booking ?? parentResolved.booking,
-        discover: discover ?? parentResolved.discover,
-        bookingSource: booking ? 'exact' : 'parent',
-        discoverSource: discover ? 'exact' : 'parent',
+        booking: TOURS_ONLY ? keepBooking : (booking ?? parentResolved.booking),
+        discover: TOURS_ONLY ? keepDiscover : (discover ?? parentResolved.discover),
+        tours: tours ?? parentResolved.tours,
+        bookingSource: TOURS_ONLY ? 'keep' : booking ? 'exact' : 'parent',
+        discoverSource: TOURS_ONLY ? 'keep' : discover ? 'exact' : 'parent',
+        toursSource: tours ? 'exact' : 'parent',
         cc: parentResolved.cc,
         dc: parentResolved.dc,
+        invia: parentResolved.invia,
       }
     }
 
@@ -422,35 +493,50 @@ const run = async () => {
     fullSlug: string
     booking: { old: string; new: string; source: string }
     discover: { old: string; new: string; source: string }
+    tours: { old: string; new: string; source: string }
   }[] = []
-  const counts = { bookingExact: 0, discoverExact: 0, bookingParent: 0, discoverParent: 0 }
+  const counts = {
+    bookingExact: 0,
+    discoverExact: 0,
+    toursExact: 0,
+    bookingParent: 0,
+    discoverParent: 0,
+    toursParent: 0,
+  }
   for (const p of pages) {
     const r = resolved.get(Number(p.id))
     if (!r) continue
     if (r.bookingSource === 'exact') counts.bookingExact++
     if (r.discoverSource === 'exact') counts.discoverExact++
+    if (r.toursSource === 'exact') counts.toursExact++
     if (r.bookingSource === 'parent' && r.booking) counts.bookingParent++
     if (r.discoverSource === 'parent' && r.discover) counts.discoverParent++
+    if (r.toursSource === 'parent' && r.tours) counts.toursParent++
     const oldBooking = p.affiliate?.accommodationUrl ?? ''
     const oldDiscover = p.affiliate?.carRentalUrl ?? ''
-    if (oldBooking !== r.booking || oldDiscover !== r.discover) {
+    const oldTours = p.affiliate?.toursUrl ?? ''
+    if (oldBooking !== r.booking || oldDiscover !== r.discover || oldTours !== r.tours) {
       changes.push({
         id: Number(p.id),
         title: p.title,
         fullSlug: p.fullSlug,
         booking: { old: oldBooking, new: r.booking, source: r.bookingSource },
         discover: { old: oldDiscover, new: r.discover, source: r.discoverSource },
+        tours: { old: oldTours, new: r.tours, source: r.toursSource },
       })
     }
   }
 
   console.log('')
-  console.log(
-    `Booking:      přesná stránka ${counts.bookingExact}×, zděděno ${counts.bookingParent}×`,
-  )
-  console.log(
-    `DiscoverCars: přesná stránka ${counts.discoverExact}×, zděděno ${counts.discoverParent}×`,
-  )
+  if (!TOURS_ONLY) {
+    console.log(
+      `Booking:      přesná stránka ${counts.bookingExact}×, zděděno ${counts.bookingParent}×`,
+    )
+    console.log(
+      `DiscoverCars: přesná stránka ${counts.discoverExact}×, zděděno ${counts.discoverParent}×`,
+    )
+  }
+  console.log(`Invia:        přesná lokalita ${counts.toursExact}×, zděděno ${counts.toursParent}×`)
   console.log(`Ke změně: ${changes.length} stránek`)
 
   if (REPORT_PATH) {
@@ -473,9 +559,11 @@ const run = async () => {
       overrideAccess: true,
       data: {
         affiliate: {
-          // Skupinová pole raději posíláme celá — nespoléháme na merge chování.
-          toursUrl: p.affiliate?.toursUrl ?? null,
-          kiwiIataCode: p.affiliate?.kiwiIataCode ?? null,
+          // Skupinu posíláme CELOU včetně polí, která neměníme (spread) —
+          // nespoléháme na merge chování a hlavně nesmíme smazat pole
+          // doplňovaná jinými větvemi práce (např. `deals` z denního syncu).
+          ...(p.affiliate ?? {}),
+          toursUrl: ch.tours.new || null,
           accommodationUrl: ch.booking.new || null,
           carRentalUrl: ch.discover.new || null,
         },

@@ -1225,6 +1225,225 @@ export const fetchTouristPointSiblings = cache(
 )
 
 // ————————————————————————————————————————————————————————————————
+// Akční nabídky zděděné z nadřazeného místa (Dubrovník → Chorvatsko)
+// ————————————————————————————————————————————————————————————————
+
+/** Nejbližší předek s nabídkami — vše, co sekce potřebuje vykreslit. */
+export type InheritedAffiliateDeals = {
+  title: string
+  genitive: string | null
+  imageUrl: string | null
+  /** Surový JSON `affiliate.deals` — tvar ověří parseAffiliateDeals. */
+  deals: unknown
+}
+
+/**
+ * Místo bez vlastních nabídek zdědí nabídky NEJBLIŽŠÍHO předka, který je má
+ * (Dubrovník → Chorvatsko). Karty pak nesou předkovo jméno, skloňování
+ * i fotku — inzerovat chorvatskou letenku pod titulkem „do Dubrovníku" by
+ * bylo zavádějící. Slugy předků dodá volající z breadcrumbs, SEŘAZENÉ od
+ * nejbližšího; jeden dotaz pro celý řetěz.
+ */
+async function fetchInheritedAffiliateDealsUncached(
+  ancestorFullSlugs: string[],
+): Promise<InheritedAffiliateDeals | null> {
+  if (ancestorFullSlugs.length === 0) return null
+  const payload = await getDb()
+
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: { fullSlug: { in: ancestorFullSlugs } },
+    depth: 0,
+    limit: ancestorFullSlugs.length,
+    select: { title: true, fullSlug: true, detail: true, featuredImage: true, affiliate: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    title: string
+    fullSlug: string
+    detail?: { genitive?: string | null } | null
+    featuredImage?: { image?: unknown } | null
+    affiliate?: { deals?: unknown } | null
+  }>
+
+  const bySlug = new Map((res.docs ?? []).map((d) => [d.fullSlug, d]))
+  for (const slug of ancestorFullSlugs) {
+    const doc = bySlug.get(slug)
+    const deals = doc?.affiliate?.deals
+    if (!doc || !deals || typeof deals !== 'object') continue
+    // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
+    const [enriched] = await enrichFeaturedImages([doc])
+    const imageUrl = (enriched.featuredImage?.image as { url?: string } | null | undefined)?.url
+    return {
+      title: doc.title,
+      genitive: doc.detail?.genitive ?? null,
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+      deals,
+    }
+  }
+  return null
+}
+
+const fetchInheritedAffiliateDealsCached = cached(
+  fetchInheritedAffiliateDealsUncached,
+  'inherited-affiliate-deals',
+  // Tagy stránek předků: denní sync nabídek invaliduje page_<fullSlug> vlastníka
+  // (viz syncAffiliateDeals), změna stránek obecný tag 'pages'.
+  ([slugs]) => ['pages', ...slugs.map((s) => 'page_' + s)],
+)
+
+/** Nabídky nejbližšího předka pro místo bez vlastních (viz výše). */
+export const fetchInheritedAffiliateDeals = cache(
+  (ancestorFullSlugs: string[]): Promise<InheritedAffiliateDeals | null> =>
+    fetchInheritedAffiliateDealsCached(ancestorFullSlugs),
+)
+
+// ————————————————————————————————————————————————————————————————
+// Dnešní akční nabídky pro homepage (top letenky + zájezdy dne)
+// ————————————————————————————————————————————————————————————————
+
+/** Jedna dlaždice sekce „Dnešní akční nabídky" na homepage. */
+export type TopAffiliateDeal = {
+  /** Název destinace (stránky) pro titulek dlaždice. */
+  title: string
+  deepLink: string
+  /** Cena v CZK. */
+  price: number
+  /** Letenka: ISO datum odletu. */
+  departureDate?: string | null
+  /** Zájezd: hotel + délka. */
+  hotel?: string | null
+  days?: number | null
+  /** Fotka dlaždice (letenka = místo, zájezd = hotel z feedu). */
+  imageUrl: string | null
+}
+
+type RawDealPage = {
+  title: string
+  fullSlug: string
+  featuredImage?: { image?: unknown } | null
+  affiliate?: { deals?: unknown } | null
+}
+
+/** Minimální tvarová kontrola nabídky (plný guard má parseAffiliateDeals na webu). */
+const isValidDeal = (d: unknown): d is { price: number; deepLink: string } =>
+  !!d &&
+  typeof d === 'object' &&
+  typeof (d as { price?: unknown }).price === 'number' &&
+  (d as { price: number }).price > 0 &&
+  typeof (d as { deepLink?: unknown }).deepLink === 'string' &&
+  (d as { deepLink: string }).deepLink.startsWith('https://')
+
+/**
+ * Nejlevnější letenky a zájezdy dne napříč místy s nasyncovanými nabídkami
+ * (`affiliate.deals`, plní /api/sync-affiliate-deals). Stejný deep-link se
+ * počítá jen jednou — Anglie a Londýn sdílí zdroje, vyhrává KONKRÉTNĚJŠÍ
+ * stránka (delší fullSlug → titulek „Londýn", ne „Anglie").
+ */
+async function fetchTopAffiliateDealsUncached(
+  limitPerKind: number,
+): Promise<{ flights: TopAffiliateDeal[]; tours: TopAffiliateDeal[] }> {
+  const payload = await getDb()
+
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      or: [
+        { 'affiliate.kiwiIataCode': { exists: true } },
+        { 'affiliate.inviaFeedUrl': { exists: true } },
+      ],
+    },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    select: { title: true, fullSlug: true, featuredImage: true, affiliate: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<RawDealPage>
+
+  const pages = res.docs ?? []
+  if (pages.length === 0) return { flights: [], tours: [] }
+
+  // Fotky míst (id → URL) jedním hromadným dotazem.
+  const enriched = await enrichFeaturedImages(pages)
+  const placeImageOf = (p: RawDealPage): string | null => {
+    const img = p.featuredImage?.image
+    return img && typeof img === 'object' && 'url' in img
+      ? ((img as { url: string }).url ?? null)
+      : null
+  }
+
+  type Candidate = TopAffiliateDeal & { specificity: number }
+  const flightsByLink = new Map<string, Candidate>()
+  const toursByLink = new Map<string, Candidate>()
+
+  for (const page of enriched) {
+    const deals = (page.affiliate?.deals ?? null) as {
+      kiwi?: { price: number; deepLink: string; departureDate?: string } | null
+      invia?: {
+        price: number
+        deepLink: string
+        photoUrl?: string | null
+        hotel?: string
+        days?: number
+      } | null
+    } | null
+    const specificity = page.fullSlug.split('/').length
+
+    if (isValidDeal(deals?.kiwi)) {
+      const kiwi = deals!.kiwi!
+      const existing = flightsByLink.get(kiwi.deepLink)
+      if (!existing || existing.specificity < specificity) {
+        flightsByLink.set(kiwi.deepLink, {
+          title: page.title,
+          deepLink: kiwi.deepLink,
+          price: kiwi.price,
+          departureDate: kiwi.departureDate ?? null,
+          imageUrl: placeImageOf(page),
+          specificity,
+        })
+      }
+    }
+    if (isValidDeal(deals?.invia)) {
+      const invia = deals!.invia!
+      const existing = toursByLink.get(invia.deepLink)
+      if (!existing || existing.specificity < specificity) {
+        toursByLink.set(invia.deepLink, {
+          title: page.title,
+          deepLink: invia.deepLink,
+          price: invia.price,
+          hotel: invia.hotel ?? null,
+          days: invia.days ?? null,
+          imageUrl: invia.photoUrl || placeImageOf(page),
+          specificity,
+        })
+      }
+    }
+  }
+
+  const top = (m: Map<string, Candidate>): TopAffiliateDeal[] =>
+    [...m.values()]
+      .sort((a, b) => a.price - b.price)
+      .slice(0, limitPerKind)
+      .map(({ specificity: _, ...deal }) => deal)
+
+  return { flights: top(flightsByLink), tours: top(toursByLink) }
+}
+
+const fetchTopAffiliateDealsCached = cached(
+  fetchTopAffiliateDealsUncached,
+  'top-affiliate-deals',
+  // Denní sync invaliduje obecný tag 'pages' (a stránky vlastníků nabídek).
+  () => ['pages'],
+)
+
+/** Top nabídky dne pro homepage; prázdné seznamy = sekce se nezobrazí. */
+export const fetchTopAffiliateDeals = cache(
+  (limitPerKind = 4): Promise<{ flights: TopAffiliateDeal[]; tours: TopAffiliateDeal[] }> =>
+    fetchTopAffiliateDealsCached(limitPerKind),
+)
+
+// ————————————————————————————————————————————————————————————————
 // Veřejný profil uživatele (/profil/<username>)
 // ————————————————————————————————————————————————————————————————
 

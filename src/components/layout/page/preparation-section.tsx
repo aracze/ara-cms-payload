@@ -8,11 +8,10 @@ import type { Page } from '@/types/payload'
  * se jen na místech k navštívení, mezi „Co vidět“ a „Články a cestopisy“.
  *
  * Partnerské odkazy: stránka s vyplněným polem `affiliate` v CMS má deep-link
- * pro svou destinaci, jinak platí obecné výchozí odkazy (legacy fallbacky).
- * Fallback na odkazy RODIČE (legacy breadcrumbParent) záměrně není — v datech
- * dnes není místo bez vlastních odkazů, jehož rodič by je měl, takže by nikdy
- * nic nezměnil. Pojištění vede přes redirect /go/pojisteni (next.config.mjs)
- * — od 14. 8. 2026 na Klik.cz (dřív ePojištění.cz na starém webu).
+ * pro svou destinaci, jinak vede karta na obecný redirect /go/* (cíle
+ * editovatelné v adminu, viz `src/lib/affiliate.ts`). Fallback na odkazy
+ * RODIČE (legacy breadcrumbParent) záměrně není — deep-linky doplnil
+ * hromadný doběh `pnpm backfill:affiliate` i s děděním po rodiči.
  */
 
 export interface PreparationPracticalInfo {
@@ -29,11 +28,6 @@ interface PreparationSectionProps {
   /** Odkaz na Praktické informace nejbližšího místa (stejný zdroj jako karta v panelu). */
   practicalInfo: PreparationPracticalInfo | null
 }
-
-/** Obecné provizní odkazy — stejné výchozí hodnoty jako na starém webu. */
-const AFFILIATE_DEFAULTS = {
-  toursUrl: 'https://www.invia.cz/?aid=4745582',
-} as const
 
 /**
  * Půjčení auta vede přes vlastní redirect /go/auta[/cesta] (route handler
@@ -145,11 +139,63 @@ function accommodationHref(cmsUrl: string | null | undefined): string {
   return `/go/ubytovani${target.pathname}`
 }
 
+/**
+ * Zájezdy vedou přes vlastní redirect /go/zajezdy[/cesta-na-invii] — deep-link
+ * destinace z CMS (dovolena/<země>[/<lokalita>]) se předává jako cesta,
+ * provizní `aid` doplňuje handler ze základního odkazu v adminu. Adresa mimo
+ * invia.cz se nechá být (mířila by na jiného partnera).
+ */
+function toursHref(cmsUrl: string | null | undefined): string {
+  if (!cmsUrl) return '/go/zajezdy'
+  let target: URL
+  try {
+    target = new URL(cmsUrl)
+  } catch {
+    return '/go/zajezdy'
+  }
+  if (target.hostname !== 'invia.cz' && !target.hostname.endsWith('.invia.cz')) {
+    return cmsUrl
+  }
+  const path = target.pathname.replace(/\/+$/, '')
+  return path && path !== '/' ? `/go/zajezdy${path}` : '/go/zajezdy'
+}
+
 export function PreparationSection({
   genitive,
   affiliate,
   practicalInfo,
 }: PreparationSectionProps) {
+  return (
+    <section className="w-full bg-white py-16">
+      <div className="mx-auto max-w-7xl px-4 md:px-12">
+        {/* Nadpis ve stejném vzoru jako sousední sekce („Co vidět…", články). */}
+        <div className="mb-12 flex flex-col items-center text-center">
+          <h2 className="font-heading mb-3 text-3xl font-bold tracking-tight text-[#1a3f6c]">
+            Příprava {genitive}
+          </h2>
+          <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
+          <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
+            Zařiď si vše potřebné na cestu z jednoho místa.
+          </p>
+        </div>
+        <PreparationCards affiliate={affiliate} practicalInfo={practicalInfo} />
+      </div>
+    </section>
+  )
+}
+
+/**
+ * Samotná mřížka karet — sdílí ji stránka místa (5 karet vč. Praktických
+ * informací a deep-linků destinace) a homepage (4 obecné karty, viz
+ * `homepage/preparation-section.tsx`, legacy parita s `affiliate--homepage`).
+ */
+export function PreparationCards({
+  affiliate,
+  practicalInfo,
+}: {
+  affiliate: Page['affiliate'] | null
+  practicalInfo: PreparationPracticalInfo | null
+}) {
   const ownerGenitive = practicalInfo
     ? practicalInfo.ownerGenitive || `do ${practicalInfo.ownerTitle}`
     : null
@@ -174,7 +220,7 @@ export function PreparationSection({
           <br />• široká nabídka a nejlepší ceny
         </>
       ),
-      href: affiliate?.toursUrl || AFFILIATE_DEFAULTS.toursUrl,
+      href: toursHref(affiliate?.toursUrl),
       icon: <TravelIcon height={44} />,
     },
     {
@@ -203,61 +249,47 @@ export function PreparationSection({
   ]
 
   return (
-    <section className="w-full bg-white py-16">
-      <div className="mx-auto max-w-7xl px-4 md:px-12">
-        {/* Nadpis ve stejném vzoru jako sousední sekce („Co vidět…", články). */}
-        <div className="mb-12 flex flex-col items-center text-center">
-          <h2 className="font-heading mb-3 text-3xl font-bold tracking-tight text-[#1a3f6c]">
-            Příprava {genitive}
-          </h2>
-          <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
-          <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
-            Zařiď si vše potřebné na cestu z jednoho místa.
+    // Bez páté karty (homepage) drží mřížka 4 sloupce, ať nezbývá prázdný.
+    <div
+      className={`grid grid-cols-2 gap-5 ${practicalInfo ? 'md:grid-cols-3 lg:grid-cols-5' : 'md:grid-cols-2 lg:grid-cols-4'}`}
+    >
+      {partnerItems.map((item) => (
+        <a
+          key={item.title}
+          href={item.href}
+          target="_blank"
+          rel="nofollow sponsored noopener"
+          className="group block rounded-lg border border-[#e6ebf1] bg-white px-4 pt-[30px] pb-6 text-center transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(26,63,108,0.12)]"
+        >
+          <span className="flex h-12 items-center justify-center text-[#1a3f6c]">{item.icon}</span>
+          <h3 className="mt-[18px] mb-2 text-[16px] font-bold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
+            {item.title}
+          </h3>
+          <p className="text-[13.5px] leading-normal text-[#74808f]">{item.description}</p>
+        </a>
+      ))}
+      {practicalInfo && (
+        <Link
+          href={practicalInfo.fullSlug}
+          // Interní odkaz — podbarvením odlišený od partnerských karet.
+          // Na mobilu (2 sloupce) přes celou šířku, ať nezůstává díra vedle
+          // páté karty; od md už je v mřížce jako ostatní.
+          className="group col-span-2 block rounded-lg border border-[#e0e8f1] bg-[#f3f6fa] px-4 pt-[30px] pb-6 text-center transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(26,63,108,0.12)] md:col-span-1"
+        >
+          <span className="flex h-12 items-center justify-center text-[#1a3f6c]">
+            <GuideIcon height={44} />
+          </span>
+          <h3 className="mt-[18px] mb-2 text-[16px] font-bold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
+            Praktické informace
+          </h3>
+          <p className="text-[13.5px] leading-normal text-[#74808f]">
+            Praktické cestovní informace
+            <br />
+            při cestě {ownerGenitive}
           </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-5">
-          {partnerItems.map((item) => (
-            <a
-              key={item.title}
-              href={item.href}
-              target="_blank"
-              rel="nofollow sponsored noopener"
-              className="group block rounded-lg border border-[#e6ebf1] bg-white px-4 pt-[30px] pb-6 text-center transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(26,63,108,0.12)]"
-            >
-              <span className="flex h-12 items-center justify-center text-[#1a3f6c]">
-                {item.icon}
-              </span>
-              <h3 className="mt-[18px] mb-2 text-[16px] font-bold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
-                {item.title}
-              </h3>
-              <p className="text-[13.5px] leading-normal text-[#74808f]">{item.description}</p>
-            </a>
-          ))}
-          {practicalInfo && (
-            <Link
-              href={practicalInfo.fullSlug}
-              // Interní odkaz — podbarvením odlišený od partnerských karet.
-              // Na mobilu (2 sloupce) přes celou šířku, ať nezůstává díra vedle
-              // páté karty; od md už je v mřížce jako ostatní.
-              className="group col-span-2 block rounded-lg border border-[#e0e8f1] bg-[#f3f6fa] px-4 pt-[30px] pb-6 text-center transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(26,63,108,0.12)] md:col-span-1"
-            >
-              <span className="flex h-12 items-center justify-center text-[#1a3f6c]">
-                <GuideIcon height={44} />
-              </span>
-              <h3 className="mt-[18px] mb-2 text-[16px] font-bold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
-                Praktické informace
-              </h3>
-              <p className="text-[13.5px] leading-normal text-[#74808f]">
-                Praktické cestovní informace
-                <br />
-                při cestě {ownerGenitive}
-              </p>
-            </Link>
-          )}
-        </div>
-      </div>
-    </section>
+        </Link>
+      )}
+    </div>
   )
 }
 

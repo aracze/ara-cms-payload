@@ -49,19 +49,9 @@ const nextConfig = {
   // kolekci - jde o malou, stabilní sadu 301, ne o obsah editovaný v adminu.
   async redirects() {
     return [
-      // Provizní odkaz na srovnávač pojištění (karta „Cestovní pojištění"
-      // v sekci „Příprava do …"). Přes redirect jako na starém webu, ať se dá
-      // cíl vyměnit na jednom místě; ZÁMĚRNĚ dočasný (307), ať si prohlížeče
-      // a vyhledávače cíl necachují. Robots.txt /go/ vylučuje z procházení.
-      // Cíl: Klik.cz přes síť CJ (VIVnetworks) — CJ link přesměruje na
-      // klik.cz/cestovni-pojisteni s měřením provize. Adresa je záměrně
-      // NEUTRÁLNÍ (/go/pojisteni, ne jméno partnera) — partner se může měnit
-      // (starý web měl ePojištění.cz), adresa zůstává.
-      {
-        source: '/go/pojisteni',
-        destination: 'https://www.anrdoezrs.net/click-101533587-15024030',
-        permanent: false,
-      },
+      // Provizní redirecty /go/* NEJSOU tady — čtou cíle z adminu (globál
+      // Homepage → Připrav se na cestu), takže běží jako route handlery
+      // v src/app/(frontend)/go/. Statický redirect by cíl zapekl do buildu.
       // Starý web měl /kontakt jako statickou stránku s kontaktními údaji;
       // na novém webu ji nahrazuje /o-nas.
       {

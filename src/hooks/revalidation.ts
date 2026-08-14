@@ -21,7 +21,7 @@ import type {
 // → ERR_MODULE_NOT_FOUND. `next/cache.js` je fyzický soubor, který se resolvne
 // nativně i přes bundler. Líné načtení navíc znamená, že mimo Next runtime
 // (payload CLI, skripty jako generate:types) se `next/cache` vůbec nesáhne.
-const safeRevalidate = async (tags: string[]) => {
+export const safeRevalidate = async (tags: string[]) => {
   try {
     const { revalidateTag } = await import('next/cache.js')
     // expire: 0 → tag se zneplatní okamžitě. (updateTag je v Next 16 jen pro

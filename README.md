@@ -199,6 +199,7 @@ storage credentials, the following variables drive user-visible features:
 | `NEXT_PUBLIC_ADSENSE_CLIENT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT`, `NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT_2` | Optional                   | Google AdSense units in article listings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `TURNSTILE_SITE_KEY`                                                                                   | Optional                   | Cloudflare Turnstile site key for the article comment form (anti-spam).                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `TURNSTILE_SECRET_KEY`                                                                                 | Optional                   | Cloudflare Turnstile secret key (server-side token verification).                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `KIWI_TEQUILA_API_KEY`                                                                                 | For Akční nabídky          | Server-side klíč Kiwi Tequila Search API pro denní sync `/api/sync-affiliate-deals` (sekce „Akční nabídky"). Účet je schválený partner z 2023 — od 5/2024 Tequila nové partnery nebere, klíč nerušit.                                                                                                                                                                                                                                                                                                         |
 
 > `NEXT_PUBLIC_*` variables are inlined into the client bundle at build time and
 > are therefore public. Keep secrets (e.g. `OPENWEATHER_API_KEY`, `PAYLOAD_SECRET`)
@@ -264,6 +265,45 @@ server-side). Requires `OPENWEATHER_API_KEY`.
 curl -X PUT http://localhost:3000/api/weather \
   -H 'Content-Type: application/json' \
   -d '{"lat": 45.81, "lng": 15.98}'
+```
+
+### `POST /api/sync-affiliate-deals`
+
+Denní obnova sekce **„Akční nabídky"** na stránkách míst: pro stránky
+s vyplněným polem Affiliate stáhne **nejlevnější letenku Praha ⇄ destinace**
+(Kiwi Tequila Search API, ceny v CZK) a **nejlevnější zájezd s odletem
+z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
+(viz `src/endpoints/syncAffiliateDeals.ts`).
+
+- Zdroje na stránce (tab **Affiliate** v adminu): `Kiwi Fly To` — IATA kód
+  města (LON, PAR) nebo země (HR, GR); `Invia XML feed (URL)` — odkaz
+  „Vygenerovat XML" z [affil.invia.cz](https://affil.invia.cz) (feedy
+  „&lt;Destinace&gt; – ara.cz", odlet z Prahy, Data1=`akcni-nabidky`).
+  Jednorázové naplnění: `pnpm backfill:affiliate-deals -- --apply`.
+- Spouští GitHub Actions cron denně ve 3:41 UTC
+  (`.github/workflows/sync-affiliate-deals.yml`, ruční běh přes _Run
+  workflow_); autentizace hlavičkou `X-Sync-Secret` = `ANALYTICS_SYNC_SECRET`
+  (sdílené se sync-analytics) nebo admin session. `?dryRun=1` jen vypíše, co
+  by se zapsalo.
+- Zápis jde **přímým SQL mimo Payload hooky** (stránky mají drafts — denní
+  update přes Local API by sypal historii verzí) a cache stránek se
+  invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
+  nabídku beze změny.
+- Kiwi kvóty: 30 dotazů/min a **look-to-book ratio 1 rezervace / 5000
+  dotazů** (jinak hrozí vypnutí účtu) — proto rozestupy mezi dotazy a jen
+  jeden běh denně.
+- Zájezd bez odletu z Prahy se **nezobrazuje** (feed vrací i odlety
+  z Krakova/Vídně; inzerovat je Čechům by bylo zavádějící) — proto může mít
+  destinace jen kartu letenky (např. Malta).
+- **Nasazení na produkci:** do `/opt/aracze/.env` přidat
+  `KIWI_TEQUILA_API_KEY`; schéma doplnit SQL
+  `ALTER TABLE pages ADD COLUMN IF NOT EXISTS affiliate_invia_feed_url varchar, ADD COLUMN IF NOT EXISTS affiliate_deals jsonb;`
+  (vzor dřívějších ručních zarovnání schématu); pak backfill, force-recreate
+  cms a ruční spuštění workflow.
+
+```bash
+curl -X POST 'http://localhost:3000/api/sync-affiliate-deals?dryRun=1' \
+  -H "X-Sync-Secret: $ANALYTICS_SYNC_SECRET"
 ```
 
 ---
@@ -517,10 +557,14 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
 - **Sekce „Příprava do …“** (`src/components/layout/page/preparation-section.tsx`): na
   stránkách kategorie **Místo k navštívení** mezi „Co vidět“ a „Články a cestopisy“ (legacy
   parita s `_affiliate.gsp`). Pět karet: **Cestovní pojištění** (redirect `/go/pojisteni`
-  v `next.config.mjs` — záměrně dočasný 307 s neutrálním názvem, cíl jde vyměnit na jednom
-  místě; od 14. 8. 2026 vede na **Klik.cz** přes síť CJ/VIVnetworks, starý web měl
-  ePojištění.cz), **Zájezdy / Rezervace ubytování / Půjčení auta** (deep-linky destinace
-  z pole `affiliate` v CMS, prázdné pole = obecný provizní odkaz). **Ubytování jde přes
+  — záměrně dočasný 302 s neutrálním názvem; od 14. 8. 2026 vede na **Klik.cz** přes síť
+  CJ/VIVnetworks, starý web měl ePojištění.cz), **Zájezdy / Rezervace ubytování / Půjčení
+  auta** (deep-linky destinace z pole `affiliate` v CMS, prázdné pole = obecný redirect
+  `/go/zajezdy` atd.). **Obecné cíle všech /go/ redirectů jsou editovatelné v adminu**:
+  globál Homepage → skupina „Připrav se na cestu" (route handlery je čtou přes
+  `getAffiliateTargets` v `src/lib/affiliate.ts`; prázdné pole = výchozí odkaz z kódu
+  tamtéž, takže smazáním hodnoty se nic nerozbije — proto redirecty NEJSOU
+  v `next.config.mjs`, statický redirect by cíl zapekl do buildu). **Ubytování jde přes
   Booking na síti CJ**: přímý program Booking ukončil 20. 6. 2025 (staré `aid=` odkazy
   se načtou, ale provizi nenesou). Karta vede na vlastní redirect
   `/go/ubytovani[/cesta-na-bookingu]` (route handler, důvěryhodná adresa místo tracking
@@ -541,8 +585,14 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   sám přesměrováním) a kde není, zdědí odkaz rodiče — v adminu je tak vidět skutečný cíl.
   Země se určuje z názvu kořenové stránky, NE z legacy kódů (Egypt měl chybně `ec` =
   Ekvádor). Na dev spuštěno 14. 8. 2026 (664 stránek; Booking 454 přesných, DiscoverCars 258) — **na produkci je po nasazení potřeba spustit znovu + force-recreate cms**.
-  Zájezdy (Invia `aid=`) jedou na starém přímém odkazu — jestli provize počítá, je
-  potřeba ověřit v partnerském účtu. Dále **Praktické
+  **Zájezdy jdou přes Invii** (partnerský účet ověřen živý 14. 8. 2026, `aid=4745582`):
+  deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym)
+  doplnil týž doběh s `--tours-only` (117 přesných lokalit, jinak země; Invia neexistující
+  lokalitu přesměruje na zemi, hit je jen přímé 200) a karta je obaluje redirectem
+  `/go/zajezdy[/cesta]`, který doplní `aid` ze základního odkazu v adminu. **Homepage** má panel „Připrav se na cestu"
+  (`homepage/preparation-section.tsx`, legacy parita s `affiliate--homepage`): 4 obecné
+  karty bez Praktických informací a deep-linků, mezi „Co je nového" a „Tématy ke čtení";
+  mřížku karet sdílí `PreparationCards`. Dále **Praktické
   informace** (interní, podbarvená; stejný zdroj odkazu jako karta v pravém panelu, vč.
   zdědění od předka). Partnerské odkazy mají `rel="nofollow sponsored"` a nadpis se skloňuje
   přes `detail.genitive`; ikony jsou originální legacy SVG (fill `currentColor`), jen brožura

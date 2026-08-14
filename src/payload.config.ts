@@ -41,6 +41,7 @@ import { isHttpsUrl, publicBaseUrlOptional } from './lib/public-url'
 import { dbDumpEndpoint } from './endpoints/dbDump'
 import { dbImportEndpoint } from './endpoints/dbImport'
 import { syncAnalyticsEndpoint } from './endpoints/syncAnalytics'
+import { syncAffiliateDealsEndpoint } from './endpoints/syncAffiliateDeals'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -157,7 +158,7 @@ export default buildConfig({
     prodMigrations: process.env.PAYLOAD_RUN_MIGRATIONS === 'true' ? migrations : undefined,
   }),
   sharp,
-  endpoints: [dbDumpEndpoint, dbImportEndpoint, syncAnalyticsEndpoint],
+  endpoints: [dbDumpEndpoint, dbImportEndpoint, syncAnalyticsEndpoint, syncAffiliateDealsEndpoint],
   plugins: [
     nestedDocsPlugin({
       collections: ['pages'],

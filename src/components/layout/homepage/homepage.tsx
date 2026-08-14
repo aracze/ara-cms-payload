@@ -6,11 +6,14 @@ import { StaticHeroImage } from '@/components/features/static-hero-image'
 import { WhatsNewSection } from './whats-new-section'
 import { InspirationSection } from './inspiration-section'
 import { InspirationPlacesSection } from './inspiration-places-section'
+import { HomepagePreparationSection } from './preparation-section'
 import { ReadingTopicsSection } from './reading-topics-section'
+import { DealsOfDaySection } from './deals-of-day-section'
 import {
   fetchLatestActivity,
   fetchHomepageInspiration,
   fetchHomepageHeroPlace,
+  fetchTopAffiliateDeals,
 } from '@/lib/payload'
 
 // Fallback, když se nepodaří vylosovat denní místo (např. žádné publikované
@@ -20,11 +23,12 @@ const HOMEPAGE_HERO_IMAGE_FALLBACK =
   'https://res.cloudinary.com/ara/image/upload/homepage.jpg'
 
 export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
-  // Všechny tři nezávisle — pomalejší nesmí blokovat začátek ostatních.
-  const [activity, inspiration, heroPlace] = await Promise.all([
+  // Všechny nezávisle — pomalejší nesmí blokovat začátek ostatních.
+  const [activity, inspiration, heroPlace, topDeals] = await Promise.all([
     fetchLatestActivity(),
     fetchHomepageInspiration(),
     fetchHomepageHeroPlace(),
+    fetchTopAffiliateDeals(),
   ])
 
   return (
@@ -69,6 +73,15 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
           </p>
         )}
 
+        {/* Dnešní akční nabídky — top letenky a zájezdy dne napříč destinacemi
+            (denní sync /api/sync-affiliate-deals) HNED pod herem; bez dat se
+            sekce nezobrazí (mb nese wrapper, ať bez ní nevzniká mezera). */}
+        {(topDeals.flights.length > 0 || topDeals.tours.length > 0) && (
+          <div className="mb-16">
+            <DealsOfDaySection flights={topDeals.flights} tours={topDeals.tours} />
+          </div>
+        )}
+
         <InspirationSection data={inspiration} />
 
         <div className="mt-16">
@@ -77,6 +90,12 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
 
         <div className="mt-16">
           <WhatsNewSection items={activity.items} renderedAt={activity.fetchedAt} />
+        </div>
+
+        {/* Panel „Připrav se na cestu" — legacy homepage parita; obecné
+            partnerské odkazy (bez deep-linků, z homepage není kam cílit). */}
+        <div className="mt-16">
+          <HomepagePreparationSection />
         </div>
 
         <div className="mt-16">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getAffiliateTargets } from '@/lib/affiliate'
 
 /**
  * Provizní redirect na Booking.com přes síť CJ (karta „Rezervace ubytování“
@@ -11,25 +12,40 @@ import { NextRequest, NextResponse } from 'next/server'
  * finální stránka pak nese živý aid + cjevent. Bez cesty vede klik na
  * homepage Bookingu. Cesta se validuje proti pevnému vzoru a hostitel je
  * natvrdo booking.com — z redirectu nejde udělat otevřený redirect jinam.
+ *
+ * Základní CJ odkaz je editovatelný v adminu (globál Homepage → Připrav se
+ * na cestu). Deep-link přes `?url=` umí jen CJ „click" odkazy — kdyby se
+ * v adminu nastavil jiný cíl, cesta se zahodí a klik vede na něj napřímo.
  */
 
-/** CJ click link Booking.com (schváleno v CJ účtu uživatele 14. 8. 2026). */
-const BOOKING_CJ_CLICK = 'https://www.kqzyfj.com/click-101533587-13386171'
+/** Tracking domény sítě CJ — jen na ně lze věšet `?url=` deep-link. */
+const CJ_CLICK_HOSTS = ['kqzyfj.com', 'anrdoezrs.net', 'jdoqocy.com', 'tkqlhce.com']
 
 // Segment smí být jen [a-z0-9._-], nesmí začínat tečkou (žádné "..") a cest
 // je nejvýš pět — víc booking URL nemají a případný útok na délku to utne.
 const SEGMENT_PATTERN = /^[a-z0-9_-][a-z0-9._-]{0,80}$/i
 
+function isCjClickUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname
+    return CJ_CLICK_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))
+  } catch {
+    return false
+  }
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ cil?: string[] }> }) {
+  const { accommodationUrl } = await getAffiliateTargets()
   const { cil } = await params
   const segments = cil ?? []
 
   const isValidPath =
     segments.length > 0 && segments.length <= 5 && segments.every((s) => SEGMENT_PATTERN.test(s))
 
-  const destination = isValidPath
-    ? `${BOOKING_CJ_CLICK}?url=${encodeURIComponent(`https://www.booking.com/${segments.join('/')}`)}`
-    : BOOKING_CJ_CLICK
+  const destination =
+    isValidPath && isCjClickUrl(accommodationUrl)
+      ? `${accommodationUrl}?url=${encodeURIComponent(`https://www.booking.com/${segments.join('/')}`)}`
+      : accommodationUrl
 
   return NextResponse.redirect(destination, 302)
 }
