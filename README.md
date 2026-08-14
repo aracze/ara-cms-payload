@@ -330,8 +330,12 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   z Krakova/Vídně; inzerovat je Čechům by bylo zavádějící) — proto může mít
   destinace jen kartu letenky (např. Malta).
 - **Nasazení na produkci:** do `/opt/aracze/.env` přidat
-  `KIWI_TEQUILA_API_KEY`; schéma doplnit SQL (POZOR — i verzní tabulka
-  `_pages_v`, bez jejích sloupců spadne publikování stránek v adminu):
+  `KIWI_TEQUILA_API_KEY` **a přidat pro něj řádek do `environment:` služby
+  `cms`** v serverovém `/opt/aracze/docker-compose.yml` (compose proměnné
+  vyjmenovává, samotné `.env` nestačí — viz `deploy/docker-compose.yml`);
+  schéma doplnit SQL **ještě PŘED nasazením kódu** (nový kód sloupce čte,
+  takže po deployi by stránky hlásily chybu) — POZOR i na verzní tabulku
+  `_pages_v`, bez jejích sloupců spadne publikování stránek v adminu:
 
   ```sql
   ALTER TABLE pages
