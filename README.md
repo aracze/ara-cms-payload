@@ -283,8 +283,12 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
 - Spouští GitHub Actions cron denně ve 3:41 UTC
   (`.github/workflows/sync-affiliate-deals.yml`, ruční běh přes _Run
   workflow_); autentizace hlavičkou `X-Sync-Secret` = `ANALYTICS_SYNC_SECRET`
-  (sdílené se sync-analytics) nebo admin session. `?dryRun=1` jen vypíše, co
-  by se zapsalo.
+  (sdílené se sync-analytics) nebo admin session.
+- Endpoint odpoví **hned 202** a sync doběhne na pozadí (`after()` z Next) —
+  stahování trvá přes minutu a Cloudflare utíná spojení po 100 s (HTTP 524).
+  Souhrn běhu je v logu serveru:
+  `docker compose logs cms | grep sync-affiliate-deals`. Jen `?dryRun=1`
+  zůstává synchronní a vypíše, co by se zapsalo (nic neukládá).
 - Zápis jde **přímým SQL mimo Payload hooky** (stránky mají drafts — denní
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou

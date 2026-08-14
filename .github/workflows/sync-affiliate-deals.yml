@@ -22,8 +22,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Zavolat /api/sync-affiliate-deals
-        # Sync stahuje z Kiwi s rozestupy kvůli kvótě (30 dotazů/min) —
-        # při ~20 destinacích běží požadavek i přes minutu, proto max-time 300.
+        # Endpoint odpoví hned 202 a sync doběhne na pozadí — samotné stahování
+        # trvá přes minutu (rozestupy kvůli Kiwi kvótě) a Cloudflare utíná
+        # spojení po 100 s (HTTP 524, zjištěno 14. 8. 2026). Výsledek běhu je
+        # v logu serveru: docker compose logs cms | grep sync-affiliate-deals.
         # Secrets jdou přes env, ne přímo do příkazu (neobjeví se v command line
         # procesu a zvláštní znaky nerozbijí quoting).
         env:
@@ -32,4 +34,4 @@ jobs:
         run: |
           curl -fsS -X POST "$SYNC_URL/api/sync-affiliate-deals" \
             -H "X-Sync-Secret: $SYNC_SECRET" \
-            --connect-timeout 10 --max-time 300 --retry 2 --retry-delay 30
+            --connect-timeout 10 --max-time 60 --retry 2 --retry-delay 30

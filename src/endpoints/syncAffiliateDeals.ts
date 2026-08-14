@@ -218,82 +218,111 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       (p) => p.affiliate?.kiwiIataCode?.trim() || p.affiliate?.inviaFeedUrl?.trim(),
     )
 
-    const errors: string[] = []
-    const results: { id: number; fullSlug: string | null; deals: AffiliateDeals }[] = []
-
-    // Sekvenčně s rozestupy — kvóta Kiwi (30/min) a slušnost k Invii. Jeden
-    // Invia feed se může sdílet mezi stránkami (země + město) → cache po URL.
-    const inviaCache = new Map<string, AffiliateDealInvia | null | Error>()
-    for (const page of pages) {
-      const previous = (page.affiliate?.deals ?? {}) as AffiliateDeals
-      const deals: AffiliateDeals = { updatedAt: new Date().toISOString() }
-
-      const iata = page.affiliate?.kiwiIataCode?.trim()
-      if (iata) {
-        try {
-          deals.kiwi = await fetchKiwiDeal(iata)
-        } catch (err) {
-          deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
-          errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)
-        }
-        await sleep(KIWI_DELAY_MS)
-      }
-
-      const feedUrl = page.affiliate?.inviaFeedUrl?.trim()
-      if (feedUrl) {
-        if (!inviaCache.has(feedUrl)) {
-          try {
-            inviaCache.set(feedUrl, await fetchInviaDeal(feedUrl))
-          } catch (err) {
-            inviaCache.set(feedUrl, err instanceof Error ? err : new Error(String(err)))
-          }
-          await sleep(INVIA_DELAY_MS)
-        }
-        const cachedDeal = inviaCache.get(feedUrl)
-        if (cachedDeal instanceof Error) {
-          deals.invia = previous.invia ?? null
-          errors.push(`${page.fullSlug} invia: ${cachedDeal.message}`)
-        } else {
-          deals.invia = cachedDeal ?? null
-        }
-      }
-
-      results.push({ id: page.id, fullSlug: page.fullSlug ?? null, deals })
-    }
-
     if (dryRun) {
+      // Ladicí režim zůstává synchronní — volá se ručně a chce vidět výsledky.
+      const { results, errors } = await collectDeals(pages)
       return Response.json({ ok: true, dryRun: true, pages: results, errors })
     }
 
-    // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
-    // s try-advisory lockem proti souběhu (curl --retry umí poslat druhý běh).
-    const db = req.payload.db as unknown as { drizzle: DrizzleLike }
-    await db.drizzle.transaction(async (tx) => {
-      const lockResult = (await tx.execute(
-        sql`SELECT pg_try_advisory_xact_lock(hashtext('aracze:sync-affiliate-deals')) AS acquired`,
-      )) as { rows: { acquired: boolean }[] }
-      if (!lockResult.rows[0]?.acquired) {
-        throw new APIError('Sync už běží (souběžný požadavek) — zkus to za chvíli znovu', 409)
-      }
-      for (const r of results) {
-        await tx.execute(
-          sql`UPDATE pages SET affiliate_deals = ${JSON.stringify(r.deals)}::jsonb WHERE id = ${r.id}`,
-        )
+    // Odpověď se vrací HNED (202) a práce doběhne na pozadí: sync trvá přes
+    // minutu (rozestupy kvůli Kiwi kvótě) a Cloudflare utíná spojení po 100 s
+    // — noční cron by tak svítil červeně, i když sync doběhl (HTTP 524,
+    // zjištěno při nasazení 14. 8. 2026). `after` se importuje líně
+    // s příponou ze stejného důvodu jako next/cache v revalidation.ts.
+    const { after } = await import('next/server.js')
+    after(async () => {
+      try {
+        const summary = await runSync(req, pages)
+        console.log('[sync-affiliate-deals] hotovo:', JSON.stringify(summary))
+      } catch (err) {
+        console.error('[sync-affiliate-deals] selhal:', err)
       }
     })
-
-    // Zápis šel mimo hooky → invalidace cache stránek ručně (vzor revalidation.ts).
-    await safeRevalidate([
-      'pages',
-      ...results.filter((r) => r.fullSlug).map((r) => 'page_' + r.fullSlug),
-    ])
-
-    return Response.json({
-      ok: true,
-      pages: results.length,
-      withKiwi: results.filter((r) => r.deals.kiwi).length,
-      withInvia: results.filter((r) => r.deals.invia).length,
-      errors,
-    })
+    return Response.json({ ok: true, accepted: true, pages: pages.length }, { status: 202 })
   },
+}
+
+/** Stažení nabídek pro všechny stránky (bez zápisu) — sdílí ostrý běh i dryRun. */
+async function collectDeals(pages: DealPage[]): Promise<{
+  results: { id: number; fullSlug: string | null; deals: AffiliateDeals }[]
+  errors: string[]
+}> {
+  const errors: string[] = []
+  const results: { id: number; fullSlug: string | null; deals: AffiliateDeals }[] = []
+
+  // Sekvenčně s rozestupy — kvóta Kiwi (30/min) a slušnost k Invii. Jeden
+  // Invia feed se může sdílet mezi stránkami (země + město) → cache po URL.
+  const inviaCache = new Map<string, AffiliateDealInvia | null | Error>()
+  for (const page of pages) {
+    const previous = (page.affiliate?.deals ?? {}) as AffiliateDeals
+    const deals: AffiliateDeals = { updatedAt: new Date().toISOString() }
+
+    const iata = page.affiliate?.kiwiIataCode?.trim()
+    if (iata) {
+      try {
+        deals.kiwi = await fetchKiwiDeal(iata)
+      } catch (err) {
+        deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
+        errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)
+      }
+      await sleep(KIWI_DELAY_MS)
+    }
+
+    const feedUrl = page.affiliate?.inviaFeedUrl?.trim()
+    if (feedUrl) {
+      if (!inviaCache.has(feedUrl)) {
+        try {
+          inviaCache.set(feedUrl, await fetchInviaDeal(feedUrl))
+        } catch (err) {
+          inviaCache.set(feedUrl, err instanceof Error ? err : new Error(String(err)))
+        }
+        await sleep(INVIA_DELAY_MS)
+      }
+      const cachedDeal = inviaCache.get(feedUrl)
+      if (cachedDeal instanceof Error) {
+        deals.invia = previous.invia ?? null
+        errors.push(`${page.fullSlug} invia: ${cachedDeal.message}`)
+      } else {
+        deals.invia = cachedDeal ?? null
+      }
+    }
+
+    results.push({ id: page.id, fullSlug: page.fullSlug ?? null, deals })
+  }
+  return { results, errors }
+}
+
+/** Ostrý běh: stažení + zápis + invalidace cache; souhrn jde do server logu. */
+async function runSync(req: Parameters<Endpoint['handler']>[0], pages: DealPage[]) {
+  const { results, errors } = await collectDeals(pages)
+
+  // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
+  // s try-advisory lockem proti souběhu (curl --retry umí poslat druhý běh).
+  const db = req.payload.db as unknown as { drizzle: DrizzleLike }
+  await db.drizzle.transaction(async (tx) => {
+    const lockResult = (await tx.execute(
+      sql`SELECT pg_try_advisory_xact_lock(hashtext('aracze:sync-affiliate-deals')) AS acquired`,
+    )) as { rows: { acquired: boolean }[] }
+    if (!lockResult.rows[0]?.acquired) {
+      throw new Error('Sync už běží (souběžný požadavek) — tenhle běh se přeskakuje')
+    }
+    for (const r of results) {
+      await tx.execute(
+        sql`UPDATE pages SET affiliate_deals = ${JSON.stringify(r.deals)}::jsonb WHERE id = ${r.id}`,
+      )
+    }
+  })
+
+  // Zápis šel mimo hooky → invalidace cache stránek ručně (vzor revalidation.ts).
+  await safeRevalidate([
+    'pages',
+    ...results.filter((r) => r.fullSlug).map((r) => 'page_' + r.fullSlug),
+  ])
+
+  return {
+    pages: results.length,
+    withKiwi: results.filter((r) => r.deals.kiwi).length,
+    withInvia: results.filter((r) => r.deals.invia).length,
+    errors,
+  }
 }
