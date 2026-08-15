@@ -299,8 +299,11 @@
     line-height: 1;
     cursor: help;
     padding: 0;
-    width: 18px;
-    height: 18px;
+    /* 30px = dostatečná plocha pro prst (WCAG 2.2 min. 24px); záporný svislý
+       margin drží řádek popisku stejně vysoký jako s původními 18px. */
+    width: 30px;
+    height: 30px;
+    margin: -6px 0;
     border-radius: 9999px;
     display: inline-flex;
     align-items: center;
@@ -349,10 +352,48 @@
   }
 
   .prose .image-wrapper .image-attribution-tooltip:hover .image-attribution-content,
-  .prose .image-wrapper .image-attribution-tooltip:focus-within .image-attribution-content {
+  .prose .image-wrapper .image-attribution-tooltip:focus-within .image-attribution-content,
+  .prose .image-wrapper .image-attribution-tooltip.open .image-attribution-content {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+  }
+
+  /* Mobil: bublina kotvená k celému popisku (figcaption má position: relative),
+     ne na střed pod ikonku. Centrovaná bublina u ikonky na kraji přetékala mimo
+     displej — a protože je v layoutu i skrytá (visibility: hidden), prohlížeč si
+     kvůli ní při načtení trvale oddálil celou stránku (layout 451 px místo 390). */
+  @media (max-width: 640px) {
+    .prose .image-wrapper .image-attribution-tooltip {
+      position: static;
+    }
+    .prose .image-wrapper .image-attribution-content {
+      left: 12px;
+      right: 12px;
+      transform: none;
+      width: auto;
+      max-width: none;
+    }
+  }
+
+  /* Sekundární navigace (záložky pod hero fotkou): posuvný pruh bez viditelného
+     scrollbaru + „scrolling shadows" — jemný stín na straně, kde pokračuje obsah.
+     Trik s background-attachment: bílé krycí gradienty (local) se posouvají
+     s obsahem a na krajích stín překryjí; stínové gradienty (scroll) stojí.
+     Když se záložky vejdou, žádný stín není vidět. Čistě CSS, bez JS. */
+  .subnav-scroll {
+    scrollbar-width: none;
+    background:
+      linear-gradient(to right, #fff 40%, rgba(255, 255, 255, 0)) 0 0 / 44px 100%,
+      linear-gradient(to left, #fff 40%, rgba(255, 255, 255, 0)) 100% 0 / 44px 100%,
+      radial-gradient(farthest-side at 0 50%, rgba(26, 63, 108, 0.2), transparent) 0 0 / 16px 100%,
+      radial-gradient(farthest-side at 100% 50%, rgba(26, 63, 108, 0.2), transparent) 100% 0 / 16px
+        100%;
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
+  .subnav-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   .prose .image-wrapper .image-attribution-content a {

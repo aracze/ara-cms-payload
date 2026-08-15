@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PageChild, PageCategory } from '@/types/payload'
+import { SubnavScroller } from '@/components/layout/page/subnav-scroller'
 
 const hiddenCategories: string[] = [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil]
 
@@ -90,8 +91,11 @@ export const Subnavigation = ({
     <nav aria-label="Sekundární navigace" className="bg-white relative z-30">
       {/* Oddělovací linka jen do šířky obsahu (parita se starým webem), ne přes
           celý viewport — proto border na vnitřním kontejneru, ne na <nav>. */}
-      <div className="max-w-7xl mx-auto border-b border-gray-100 overflow-x-auto whitespace-nowrap">
-        <div className="flex gap-0 justify-center text-xs md:text-base font-semibold font-heading px-4 md:px-12">
+      <SubnavScroller className="max-w-7xl mx-auto border-b border-gray-100 overflow-x-auto whitespace-nowrap subnav-scroll">
+        {/* w-max + mx-auto místo justify-center: vycentruje, jen když se záložky
+            vejdou. justify-center + overflow by levý kraj ořízl NEDOSAŽITELNĚ
+            (scroll začíná na nule) — na mobilu tak mizely první položky. */}
+        <div className="flex w-max mx-auto gap-0 text-xs md:text-base font-semibold font-heading px-4 md:px-12">
           {/* Context page (the Place that owns this menu) */}
           <Link
             href={contextFullSlug}
@@ -159,7 +163,7 @@ export const Subnavigation = ({
               </Link>
             ))}
         </div>
-      </div>
+      </SubnavScroller>
     </nav>
   )
 }
