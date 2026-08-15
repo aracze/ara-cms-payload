@@ -96,7 +96,7 @@ function useLazyAd(ref: React.RefObject<HTMLElement | null>) {
     const prestat = () => {
       if (naplanovano) cancelAnimationFrame(naplanovano)
       naplanovano = 0
-      window.removeEventListener('scroll', naplanovat)
+      document.removeEventListener('scroll', naplanovat, true)
       window.removeEventListener('resize', naplanovat)
     }
 
@@ -125,7 +125,11 @@ function useLazyAd(ref: React.RefObject<HTMLElement | null>) {
 
     zkusit()
     if (!done) {
-      window.addEventListener('scroll', naplanovat, { passive: true })
+      // Zachytávací fáze na document: rolování NEBUBLÁ, takže posluchač na
+      // `window` by minul pohyb uvnitř lepivého sloupce s vlastním posuvníkem —
+      // a právě v něm postranní reklamy sedí (ověřeno: window 0 událostí,
+      // document v zachytávací fázi 1).
+      document.addEventListener('scroll', naplanovat, { capture: true, passive: true })
       window.addEventListener('resize', naplanovat)
     }
     return prestat
