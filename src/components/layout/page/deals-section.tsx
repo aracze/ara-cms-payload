@@ -4,8 +4,8 @@ import { DealCardImage } from './deal-card-image'
 
 /**
  * Sekce „Akční nabídky {genitive}" (nástupce legacy `_highlights.gsp`):
- * nejlevnější letenka Praha → destinace (Kiwi) a nejlevnější zájezd s odletem
- * z Prahy (Invia) jako kompaktní řádkové karty s miniaturou (finální
+ * nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace (Kiwi) a nejlevnější zájezd
+ * s odletem z Prahy (Invia) jako kompaktní řádkové karty s miniaturou (finální
  * „varianta B" z výběru 14. 8. 2026). Zobrazuje se jen na místech k navštívení
  * NAD sekcí „Co vidět" a jen když má stránka data (`affiliate.deals`, plní
  * denní sync /api/sync-affiliate-deals; místo bez vlastních dat dědí od
@@ -14,9 +14,7 @@ import { DealCardImage } from './deal-card-image'
  * Fotky: letenka nese fotku místa (Cloudinary), zájezd fotku hotelu z Invia
  * feedu (fallback na fotku místa) — karty tak nesdílí stejný obrázek. Odkazy
  * vedou přímo na kiwi.com/invia.cz (důvěryhodné domény, provizní parametry
- * nesou deep-linky samotné) a zdroj je přiznaný v drobném popisku. Letenka je
- * JEDNOSMĚRNÁ (sync hledá bez návratu) → v trase je jednoduchá šipka →,
- * u zájezdu obousměrná ⇄.
+ * nesou deep-linky samotné) a zdroj je přiznaný v drobném popisku.
  */
 
 interface DealsSectionProps {
@@ -60,6 +58,10 @@ export function parseAffiliateDeals(raw: unknown): AffiliateDeals | null {
           price: value.kiwi!.price,
           deepLink: value.kiwi!.deepLink,
           departureDate: str(value.kiwi!.departureDate) ?? '',
+          nights:
+            typeof value.kiwi!.nights === 'number' && value.kiwi!.nights > 0
+              ? value.kiwi!.nights
+              : null,
         }
       : null,
     invia: inviaValid
@@ -92,11 +94,22 @@ function formatDate(iso: string): string | null {
   return `${Number(match[3])}. ${Number(match[2])}. ${match[1]}`
 }
 
-// Pozor: sync hledá bez zpátečního termínu → cena je JEDNOSMĚRNÁ. Popisek
-// to nesmí tvrdit jinak („zpáteční" by byla klamavá reklama).
+/** České skloňování délky pobytu: 1 noc, 2–4 noci, 5+ nocí. */
+export function nightCount(nights: number): string {
+  return `${nights} ${nights === 1 ? 'noc' : nights <= 4 ? 'noci' : 'nocí'}`
+}
+
+// Sync hledá s délkou pobytu → cena je ZPÁTEČNÍ (viz fetchKiwiDeal).
 function kiwiMeta(kiwi: AffiliateDealKiwi): string {
   const date = kiwi.departureDate ? formatDate(kiwi.departureDate) : null
-  return [date ? `odlet ${date}` : null, 'jednosměrná', 'Kiwi.com'].filter(Boolean).join(' · ')
+  return [
+    'zpáteční',
+    date ? `odlet ${date}` : null,
+    kiwi.nights ? nightCount(kiwi.nights) : null,
+    'Kiwi.com',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function inviaMeta(invia: AffiliateDealInvia): string {
@@ -180,22 +193,14 @@ export function Badge({ kind, onPhoto = false }: { kind: 'flight' | 'tour'; onPh
   )
 }
 
-/** Trasa: letenka je jednosměrná → jednoduchá šipka; zájezd tam a zpět ⇄. */
-function Route({
-  kind,
-  placeTitle,
-  className,
-}: {
-  kind: 'flight' | 'tour'
-  placeTitle: string
-  className?: string
-}) {
+/** Trasa Praha ⇄ destinace — letenka i zájezd jsou tam a zpět. */
+function Route({ placeTitle, className }: { placeTitle: string; className?: string }) {
   return (
     <span
       className={`flex items-center gap-1.5 leading-snug font-bold text-[#252a31] ${className ?? ''}`}
     >
       Praha
-      {kind === 'flight' ? <ArrowIcon className="h-4 w-4" /> : <SwapIcon className="h-4 w-4" />}
+      <SwapIcon className="h-4 w-4" />
       <span className="truncate">{placeTitle}</span>
     </span>
   )
@@ -231,7 +236,7 @@ function DealRowCard({
         <span>
           <Badge kind={badge} />
         </span>
-        <Route kind={badge} placeTitle={placeTitle} className="text-[15px]" />
+        <Route placeTitle={placeTitle} className="text-[15px]" />
         <p className="text-[17px] leading-snug font-semibold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
           {priceLine}
         </p>
@@ -266,19 +271,6 @@ function UmbrellaIcon({ className }: { className?: string }) {
       aria-hidden="true"
     >
       <path d="M13.127 14.56l1.43-1.43 6.44 6.443L19.57 21zm4.293-5.73l2.86-2.86c-3.95-3.95-10.35-3.96-14.3-.02 3.93-1.3 8.31-.25 11.44 2.88zM5.95 5.98c-3.94 3.95-3.93 10.35.02 14.3l2.86-2.86C5.7 14.29 4.65 9.91 5.95 5.98zm.02-.02l-.01.01c-.38 3.01 1.17 6.88 4.3 10.02l5.73-5.73c-3.13-3.13-7.01-4.68-10.02-4.3z" />
-    </svg>
-  )
-}
-
-/** Jednoduchá šipka → pro jednosměrnou letenku. */
-function ArrowIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className={`shrink-0 fill-current ${className ?? ''}`}
-      aria-hidden="true"
-    >
-      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z" />
     </svg>
   )
 }

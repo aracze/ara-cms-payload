@@ -1316,6 +1316,8 @@ export type TopAffiliateDeal = {
   price: number
   /** Letenka: ISO datum odletu. */
   departureDate?: string | null
+  /** Letenka: počet nocí v destinaci (zpáteční hledání). */
+  nights?: number | null
   /** Zájezd: hotel + délka. */
   hotel?: string | null
   days?: number | null
@@ -1384,7 +1386,12 @@ async function fetchTopAffiliateDealsUncached(
 
   for (const page of enriched) {
     const deals = (page.affiliate?.deals ?? null) as {
-      kiwi?: { price: number; deepLink: string; departureDate?: string } | null
+      kiwi?: {
+        price: number
+        deepLink: string
+        departureDate?: string
+        nights?: number | null
+      } | null
       invia?: {
         price: number
         deepLink: string
@@ -1404,6 +1411,7 @@ async function fetchTopAffiliateDealsUncached(
           deepLink: kiwi.deepLink,
           price: kiwi.price,
           departureDate: kiwi.departureDate ?? null,
+          nights: typeof kiwi.nights === 'number' && kiwi.nights > 0 ? kiwi.nights : null,
           imageUrl: placeImageOf(page),
           specificity,
         })

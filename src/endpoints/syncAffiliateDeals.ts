@@ -46,7 +46,19 @@ function kiwiDate(d: Date): string {
   return `${dd}/${mm}/${d.getFullYear()}`
 }
 
-/** Nejlevnější letenka Praha → destinace v okně dnes až +6 měsíců, v CZK. */
+/**
+ * Dálkové destinace — na tři noci tam nikdo neletí, takže mají delší okno
+ * pobytu. Kódy odpovídají hodnotám `Kiwi Fly To` v adminu.
+ */
+const LONG_HAUL = new Set(['US', 'BR', 'PE', 'CN', 'JP', 'VN', 'LK', 'TH', 'CV'])
+
+/**
+ * Nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace v okně dnes až +6 měsíců,
+ * v CZK. Zpáteční (ne jednosměrná) záměrně: cena je to, co člověk opravdu
+ * zaplatí, sedí k ceně zájezdu na vedlejší kartě a provize se počítá
+ * z rezervace — jednosměrná cena láká na klik, ale po zjištění celkové ceny
+ * odrazuje (rozhodnutí uživatele 15. 8. 2026).
+ */
 async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
   const apiKey = process.env.KIWI_TEQUILA_API_KEY
   if (!apiKey) throw new Error('KIWI_TEQUILA_API_KEY není nastaveno')
@@ -54,11 +66,17 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
   const now = new Date()
   const to = new Date(now)
   to.setMonth(to.getMonth() + 6)
+  const longHaul = LONG_HAUL.has(iataCode.trim().toUpperCase())
   const params = new URLSearchParams({
     fly_from: 'PRG',
     fly_to: iataCode,
     date_from: kiwiDate(now),
     date_to: kiwiDate(to),
+    // Délka pobytu = zároveň přepínač na zpáteční hledání (bez ní vrací
+    // Kiwi jednosměrné lety). Okno je široké schválně — čím víc kombinací,
+    // tím nižší nalezená cena; užší okno cenu zvedá bez užitku.
+    nights_in_dst_from: longHaul ? '7' : '3',
+    nights_in_dst_to: longHaul ? '21' : '14',
     curr: 'CZK',
     sort: 'price',
     limit: '3',
@@ -69,7 +87,12 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
   })
   if (!res.ok) throw new Error(`Kiwi API ${res.status}`)
   const json = (await res.json()) as {
-    data?: { price?: number; deep_link?: string; local_departure?: string }[]
+    data?: {
+      price?: number
+      deep_link?: string
+      local_departure?: string
+      nightsInDest?: number | null
+    }[]
   }
   const flights = (json.data ?? []).filter(
     (f) => typeof f.price === 'number' && f.price > 0 && typeof f.deep_link === 'string',
@@ -81,6 +104,10 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
     price: Math.round(cheapest.price!),
     deepLink: cheapest.deep_link!,
     departureDate: (cheapest.local_departure ?? '').slice(0, 10),
+    nights:
+      typeof cheapest.nightsInDest === 'number' && cheapest.nightsInDest > 0
+        ? cheapest.nightsInDest
+        : null,
   }
 }
 

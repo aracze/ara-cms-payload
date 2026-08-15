@@ -309,7 +309,7 @@ curl -X PUT http://localhost:3000/api/weather \
 ### `POST /api/sync-affiliate-deals`
 
 Denní obnova sekce **„Akční nabídky"** na stránkách míst: pro stránky
-s vyplněným polem Affiliate stáhne **nejlevnější letenku Praha ⇄ destinace**
+s vyplněným polem Affiliate stáhne **nejlevnější ZPÁTEČNÍ letenku Praha ⇄ destinace**
 (Kiwi Tequila Search API, ceny v CZK) a **nejlevnější zájezd s odletem
 z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
 (viz `src/endpoints/syncAffiliateDeals.ts`).
@@ -334,6 +334,12 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
   nabídku beze změny.
+- Letenky jsou **zpáteční**, ne jednosměrné: cena je to, co člověk opravdu
+  zaplatí, sedí k ceně zájezdu na vedlejší kartě a provize se počítá
+  z rezervace (jednosměrná cena láká na klik, ale po zjištění celkové ceny
+  odrazuje). Délka pobytu 3–14 nocí, u dálek (`LONG_HAUL` v endpointu:
+  US, BR, PE, CN, JP, VN, LK, TH, CV) 7–21 nocí. Karta délku ukazuje
+  („zpáteční · odlet 12. 11. 2026 · 7 nocí · Kiwi.com").
 - Kiwi kvóty: 30 dotazů/min a **look-to-book ratio 1 rezervace / 5000
   dotazů** (jinak hrozí vypnutí účtu) — proto rozestupy mezi dotazy a jen
   jeden běh denně.

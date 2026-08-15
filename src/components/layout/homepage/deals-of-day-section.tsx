@@ -1,6 +1,6 @@
 import React from 'react'
 import type { TopAffiliateDeal } from '@/lib/payload'
-import { Badge, dayCount, priceCzk } from '../page/deals-section'
+import { Badge, dayCount, nightCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
 /**
@@ -9,7 +9,7 @@ import { DealCardImage } from '../page/deal-card-image'
  * finální „ukázka 1" z výběru 14. 8. 2026). Data plní denní sync
  * /api/sync-affiliate-deals přes fetchTopAffiliateDeals; bez dat se sekce
  * nezobrazí. Letenky nesou fotku destinace, zájezdy fotku hotelu; ceny letenek
- * jsou JEDNOSMĚRNÉ (přiznané v popisku dlaždice).
+ * jsou ZPÁTEČNÍ včetně délky pobytu (viz fetchKiwiDeal).
  */
 
 /** „2026-11-12" → „12. 11." (rok se na kompaktní dlaždici vynechává). */
@@ -64,10 +64,15 @@ export function DealsOfDaySection({
 }
 
 function flightMeta(deal: TopAffiliateDeal): string {
-  // shortDate umí vrátit null (neparsovatelné datum) — bez kontroly výsledku
-  // by se vykreslilo „odlet null".
+  // Dlaždice je úzká, tak jen to nejdůležitější: že je cena zpáteční a jak
+  // dlouhý pobyt. Datum odletu se vejde až na detailu místa.
+  // (shortDate umí vrátit null — bez kontroly by se vykreslilo „odlet null".)
   const departure = deal.departureDate ? shortDate(deal.departureDate) : null
-  return [departure ? `odlet ${departure}` : null, 'jednosměrná', 'Kiwi.com']
+  return [
+    'zpáteční',
+    deal.nights ? nightCount(deal.nights) : departure ? `odlet ${departure}` : null,
+    'Kiwi.com',
+  ]
     .filter(Boolean)
     .join(' · ')
 }
