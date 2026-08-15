@@ -46,8 +46,29 @@ function kiwiDate(d: Date): string {
   return `${dd}/${mm}/${d.getFullYear()}`
 }
 
-/** Nejlevnější letenka Praha → destinace v okně dnes až +6 měsíců, v CZK. */
-async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
+/**
+ * Dálková destinace = leží mimo Evropu. Bere se z PRVNÍHO drobečku stránky
+ * (kontinent, např. `/asie`), ne ze seznamu kódů: pole `Kiwi Fly To` přijímá
+ * kódy zemí i měst (LON, PAR, BCN) a proti seznamu kódů by se dálkové MĚSTO
+ * (BKK, NYC) tiše vyhodnotilo jako blízké a dostalo okno na tři noci.
+ */
+const EUROPE_CRUMB = '/evropa'
+
+function isLongHaul(page: DealPage): boolean {
+  const continent = page.breadcrumbs?.[0]?.url?.trim().toLowerCase()
+  // Bez drobečků radši kratší okno — širší by u evropské destinace vypadlo
+  // jako „nejlevnější letenka na tři týdny", což nedává smysl.
+  return Boolean(continent) && continent !== EUROPE_CRUMB
+}
+
+/**
+ * Nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace v okně dnes až +6 měsíců,
+ * v CZK. Zpáteční (ne jednosměrná) záměrně: cena je to, co člověk opravdu
+ * zaplatí, sedí k ceně zájezdu na vedlejší kartě a provize se počítá
+ * z rezervace — jednosměrná cena láká na klik, ale po zjištění celkové ceny
+ * odrazuje (rozhodnutí uživatele 15. 8. 2026).
+ */
+async function fetchKiwiDeal(iataCode: string, longHaul: boolean): Promise<AffiliateDealKiwi> {
   const apiKey = process.env.KIWI_TEQUILA_API_KEY
   if (!apiKey) throw new Error('KIWI_TEQUILA_API_KEY není nastaveno')
 
@@ -59,6 +80,11 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
     fly_to: iataCode,
     date_from: kiwiDate(now),
     date_to: kiwiDate(to),
+    // Délka pobytu = zároveň přepínač na zpáteční hledání (bez ní vrací
+    // Kiwi jednosměrné lety). Okno je široké schválně — čím víc kombinací,
+    // tím nižší nalezená cena; užší okno cenu zvedá bez užitku.
+    nights_in_dst_from: longHaul ? '7' : '3',
+    nights_in_dst_to: longHaul ? '21' : '14',
     curr: 'CZK',
     sort: 'price',
     limit: '3',
@@ -69,7 +95,12 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
   })
   if (!res.ok) throw new Error(`Kiwi API ${res.status}`)
   const json = (await res.json()) as {
-    data?: { price?: number; deep_link?: string; local_departure?: string }[]
+    data?: {
+      price?: number
+      deep_link?: string
+      local_departure?: string
+      nightsInDest?: number | null
+    }[]
   }
   const flights = (json.data ?? []).filter(
     (f) => typeof f.price === 'number' && f.price > 0 && typeof f.deep_link === 'string',
@@ -81,6 +112,11 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
     price: Math.round(cheapest.price!),
     deepLink: cheapest.deep_link!,
     departureDate: (cheapest.local_departure ?? '').slice(0, 10),
+    // Celé noci: zlomek by se vykreslil jako „3.5 nocí".
+    nights:
+      Number.isInteger(cheapest.nightsInDest) && (cheapest.nightsInDest as number) > 0
+        ? (cheapest.nightsInDest as number)
+        : null,
   }
 }
 
@@ -164,6 +200,8 @@ async function fetchInviaDeal(feedUrl: string): Promise<AffiliateDealInvia | nul
 type DealPage = {
   id: number
   fullSlug?: string | null
+  /** Řetěz předků; první položka je kontinent — viz isLongHaul. */
+  breadcrumbs?: { url?: string | null }[] | null
   affiliate?: {
     kiwiIataCode?: string | null
     inviaFeedUrl?: string | null
@@ -233,7 +271,7 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       depth: 0,
       limit: 0,
       pagination: false,
-      select: { fullSlug: true, affiliate: true },
+      select: { fullSlug: true, affiliate: true, breadcrumbs: true },
       joins: false,
     })
     const pages = (pagesRes.docs as unknown as DealPage[]).filter(
@@ -295,7 +333,7 @@ async function collectDeals(pages: DealPage[]): Promise<{
     const iata = page.affiliate?.kiwiIataCode?.trim()
     if (iata) {
       try {
-        deals.kiwi = await fetchKiwiDeal(iata)
+        deals.kiwi = await fetchKiwiDeal(iata, isLongHaul(page))
       } catch (err) {
         deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
         errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)
