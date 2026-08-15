@@ -217,14 +217,24 @@ function sortDayParts(parts: (WeatherDayPart & { dt: number })[]): WeatherDayPar
     .map(({ label, emoji, temp }) => ({ label, emoji, temp }))
 }
 
-/** Společné nastavení fetchů: timeout + cache 15 min per URL (souřadnice). */
-const FETCH_INIT = {
-  // Timeout, ať se render nezasekne na pomalém upstreamu; cache 15 min
-  // per souřadnice — víc návštěvníků stejného místa = jeden dotaz
-  // (strop účtu je 1 000 volání/den pro ~174 stránek počasí).
-  signal: AbortSignal.timeout(10_000),
-  next: { revalidate: 900 },
-} as const
+/**
+ * Nastavení fetchů: timeout + cache 15 min per URL (souřadnice).
+ *
+ * MUSÍ to být funkce, ne sdílená konstanta: `AbortSignal.timeout()` začíná
+ * odpočítávat v okamžiku VYTVOŘENÍ. Jako konstanta v modulu by se signál
+ * vyrobil jednou při startu, po deseti vteřinách by byl trvale „aborted"
+ * a každý další dotaz na počasí by okamžitě spadl — včetně záložní cesty,
+ * takže by počasí na webu tiše zmizelo až do restartu procesu.
+ */
+function fetchInit(): RequestInit & { next: { revalidate: number } } {
+  return {
+    // Timeout, ať se render nezasekne na pomalém upstreamu; cache 15 min
+    // per souřadnice — víc návštěvníků stejného místa = jeden dotaz
+    // (strop účtu je 1 000 volání/den pro ~174 stránek počasí).
+    signal: AbortSignal.timeout(10_000),
+    next: { revalidate: 900 },
+  }
+}
 
 /** Popis stavu s velkým prvním písmenem („polojasno" → „Polojasno"). */
 function capitalize(text: string): string {
@@ -274,7 +284,7 @@ async function fetchViaOneCall(
     lang: 'cz',
     exclude: 'minutely,alerts',
   })
-  const res = await fetch(`https://api.openweathermap.org/data/3.0/onecall?${params}`, FETCH_INIT)
+  const res = await fetch(`https://api.openweathermap.org/data/3.0/onecall?${params}`, fetchInit())
   if (!res.ok) return null
   const data = (await res.json()) as OneCallResponse
 
@@ -369,8 +379,8 @@ async function fetchViaFreeEndpoints(
     lang: 'cz',
   })
   const [currentRes, forecastRes] = await Promise.all([
-    fetch(`https://api.openweathermap.org/data/2.5/weather?${query}`, FETCH_INIT),
-    fetch(`https://api.openweathermap.org/data/2.5/forecast?${query}`, FETCH_INIT),
+    fetch(`https://api.openweathermap.org/data/2.5/weather?${query}`, fetchInit()),
+    fetch(`https://api.openweathermap.org/data/2.5/forecast?${query}`, fetchInit()),
   ])
   if (!currentRes.ok) return null
   const currentData = (await currentRes.json()) as FreeCurrentResponse

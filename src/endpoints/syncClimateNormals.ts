@@ -6,10 +6,25 @@ import { safeRevalidate } from '@/hooks/revalidation'
 import { PageCategory, type ClimateNormalMonth, type ClimateNormals } from '@/types/payload'
 
 /**
- * Měsíční sync klimatických normálů: pro publikované stránky kategorie
- * „Počasí" stáhne z Meteostat API (point/normals) dlouhodobé měsíční průměry
- * — min/max teplotu a srážky — a uloží je do JSON pole `climateNormals`.
+ * Sync dlouhodobých měsíčních průměrů počasí: pro publikované stránky kategorie
+ * „Počasí" spočítá z Meteostat API průměrné denní teploty a srážky za
+ * **posledních 20 ukončených let** a uloží je do JSON pole `climateNormals`.
  * Souřadnice se berou z rodičovského místa (stránka počasí vlastní nemá).
+ *
+ * PROČ KLOUZAVÉ OKNO A NE OFICIÁLNÍ NORMÁLY: endpoint `point/normals` vrací
+ * třicetiletá období podle pravidel WMO, nejnovější 1991–2020 — a to se nezmění
+ * až do roku 2031. Na webu, který radí „kdy tam jet", pak trvale svítí období
+ * končící rokem 2020 a působí zastarale. Klouzavé okno se každý rok posune
+ * a v popisku stojí skutečný rozsah („průměr 2006–2025").
+ *
+ * PROČ DENNÍ DATA A NE MĚSÍČNÍ AGREGÁTY: `point/monthly` zvládne celé okno
+ * jedním dotazem, ale srážky v něm chybí u většiny měsíců (Londýn 24 %
+ * použitelných měsíců). Když se stejné období vezme po dnech a měsíce se
+ * spočítají tady, vyjde srážek trojnásobek (75 %). Za ten druhý dotaz to stojí.
+ *
+ * PROČ 20 LET: u kratšího okna stojí srážky na pár letech a skáčou (Londýn
+ * ±13 mm u desetiletky vs ±8 mm u dvacetiletky, měřeno na červenci); delší
+ * okno by potřebovalo tři dotazy na místo a nevešlo by se do měsíční kvóty.
  *
  * Stejný vzor jako /api/sync-affiliate-deals: spouští GitHub Actions cron
  * (.github/workflows/sync-climate-normals.yml) se sdíleným tajemstvím
@@ -20,10 +35,12 @@ import { PageCategory, type ClimateNormalMonth, type ClimateNormals } from '@/ty
  * Selhání jednoho místa NEMAŽE minulá data: stránka drží poslední úspěšně
  * stažené normály a chyba se jen vrátí v odpovědi.
  *
- * Meteostat kvóty (RapidAPI Basic zdarma): 500 dotazů/měsíc → sync se pouští
- * 1× měsíčně (~174 stránek počasí) a mezi dotazy se čeká. Normály jsou
- * třicetileté průměry, častější obnova nemá smysl. Licence dat: CC BY 4.0 —
- * web u grafu uvádí „Zdroj: Meteostat" (viz climate-section.tsx).
+ * Kvóta Meteostatu (RapidAPI Basic zdarma) je 500 dotazů/měsíc a jedno místo
+ * stojí dva, takže běh je PŘÍRŮSTKOVÝ: bere jen stránky bez dat (nové
+ * destinace) a ty starší než REFRESH_AFTER_DAYS, nejvýš MAX_PLACES_PER_RUN za
+ * běh. Cron může jezdit klidně měsíčně — většinou nemá co dělat a zbytek
+ * dopočítá příští běh (`deferred` v odpovědi). Licence dat: CC BY 4.0 — web
+ * u grafu uvádí „Zdroj: Meteostat" (viz climate-section.tsx).
  */
 
 /** Porovnání secretu časově konstantní — obyčejné `!==` by šlo uhodnout po znacích z doby odezvy. */
@@ -38,66 +55,133 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const METEOSTAT_DELAY_MS = 1200 // slušný rozestup pod rate limitem RapidAPI
 const FETCH_TIMEOUT_MS = 30_000
+/**
+ * Kolik míst zvládne jeden běh. Jedno místo = 2 dotazy (okno 20 let se nevejde
+ * do limitu 3 650 dní na dotaz), kvóta RapidAPI je 500 dotazů/měsíc — 200 míst
+ * = 400 dotazů nechává rezervu na ruční doběhy. Až destinací přibude, práce se
+ * rozloží do víc běhů (viz `deferred` v odpovědi); přebít lze `?maxPlaces=`.
+ */
+const MAX_PLACES_PER_RUN = 200
+/** Data starší než tohle se přepočítají — okno se každý leden posune o rok. */
+const REFRESH_AFTER_DAYS = 330
 
-/** Řádek odpovědi Meteostat point/normals (jeden měsíc jednoho období). */
-type MeteostatNormalRow = {
-  start?: number
-  end?: number
-  month?: number
+/** Řádek odpovědi Meteostat point/daily (jeden den). */
+type MeteostatDailyRow = {
+  date?: string
   tmin?: number | null
   tmax?: number | null
   prcp?: number | null
 }
 
+/** Délka klouzavého okna v letech — viz WINDOW_YEARS v hlavičce souboru. */
+const WINDOW_YEARS = 20
+/** Meteostat pouští nejvýš 3 650 dní na jeden dotaz → okno se dělí na části. */
+const MAX_DAYS_PER_REQUEST = 3650
+/** Měsíc se počítá jen z roku, kde má aspoň 90 % dní (jinak by chyběl týden srážek). */
+const MIN_DAYS_RATIO = 0.9
+/** Míň let než tohle = hodnota by byla jednoletý výkyv, ne průměr. */
+const MIN_YEARS_FOR_PRECIPITATION = 5
+
+const ymd = (d: Date): string => d.toISOString().slice(0, 10)
+
+/** Rozsahy dní pokrývající okno, každý pod limitem API. */
+function requestRanges(from: Date, to: Date): { start: string; end: string }[] {
+  const ranges: { start: string; end: string }[] = []
+  const cursor = new Date(from)
+  while (cursor <= to) {
+    const chunkEnd = new Date(cursor)
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + MAX_DAYS_PER_REQUEST - 1)
+    ranges.push({ start: ymd(cursor), end: ymd(chunkEnd < to ? chunkEnd : to) })
+    cursor.setUTCDate(cursor.getUTCDate() + MAX_DAYS_PER_REQUEST)
+  }
+  return ranges
+}
+
+async function fetchDailyRange(
+  lat: number,
+  lon: number,
+  start: string,
+  end: string,
+  apiKey: string,
+): Promise<MeteostatDailyRow[]> {
+  const params = new URLSearchParams({ lat: String(lat), lon: String(lon), start, end })
+  const res = await fetch(`https://meteostat.p.rapidapi.com/point/daily?${params}`, {
+    headers: { 'x-rapidapi-key': apiKey, 'x-rapidapi-host': 'meteostat.p.rapidapi.com' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  })
+  if (!res.ok) throw new Error(`Meteostat API ${res.status} (${start}..${end})`)
+  const json = (await res.json()) as { data?: MeteostatDailyRow[] }
+  return json.data ?? []
+}
+
 /**
- * Normály pro souřadnice z Meteostat API. Odpověď může obsahovat víc
- * referenčních období (např. 1961–1990 i 1991–2020) — bere se nejnovější.
- * Bez kompletních teplot (tmin/tmax všech 12 měsíců) vyhazuje chybu — graf
- * s dírou v čáře by vypadal rozbitě; srážky smí chybět (sloupec se vynechá).
+ * Měsíční průměry za posledních WINDOW_YEARS ukončených let, spočítané
+ * z DENNÍCH dat (viz hlavička souboru — měsíční agregáty Meteostatu mají
+ * srážky jen u zlomku měsíců).
+ *
+ * Postup: denní hodnoty se seskupí na (rok, měsíc); měsíc se použije jen když
+ * má aspoň 90 % dní s hodnotou (jinak by chyběl kus srážkového úhrnu). Z těchto
+ * měsíců se pak udělá průměr přes roky. Teploty musí vyjít pro všech 12 měsíců,
+ * jinak jde o místo bez použitelné stanice a sync ho přeskočí; srážky smí
+ * chybět (graf u toho měsíce proužek nekreslí).
  */
-async function fetchMeteostatNormals(lat: number, lon: number): Promise<ClimateNormals> {
+async function fetchRollingAverages(lat: number, lon: number, now: Date): Promise<ClimateNormals> {
   const apiKey = process.env.METEOSTAT_RAPIDAPI_KEY
   if (!apiKey) throw new Error('METEOSTAT_RAPIDAPI_KEY není nastaveno')
 
-  const params = new URLSearchParams({ lat: String(lat), lon: String(lon) })
-  const res = await fetch(`https://meteostat.p.rapidapi.com/point/normals?${params}`, {
-    headers: {
-      'x-rapidapi-key': apiKey,
-      'x-rapidapi-host': 'meteostat.p.rapidapi.com',
-    },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  })
-  if (!res.ok) throw new Error(`Meteostat API ${res.status}`)
-  const json = (await res.json()) as { data?: MeteostatNormalRow[] }
-  const rows = json.data ?? []
-  if (rows.length === 0) throw new Error('Meteostat nevrátil žádné normály')
+  // Okno končí POSLEDNÍM UKONČENÝM rokem — probíhající rok by měl jen část
+  // měsíců a zkreslil by průměry (v srpnu chybí celá zima).
+  const lastYear = now.getUTCFullYear() - 1
+  const firstYear = lastYear - WINDOW_YEARS + 1
+  const from = new Date(Date.UTC(firstYear, 0, 1))
+  const to = new Date(Date.UTC(lastYear, 11, 31))
 
-  // Nejnovější období = největší koncový rok (při shodě největší počáteční).
-  let latest: { start: number; end: number } | null = null
+  const rows: MeteostatDailyRow[] = []
+  for (const range of requestRanges(from, to)) {
+    rows.push(...(await fetchDailyRange(lat, lon, range.start, range.end, apiKey)))
+    await sleep(METEOSTAT_DELAY_MS)
+  }
+  if (rows.length === 0) throw new Error('Meteostat nevrátil žádná denní data')
+
+  // (rok, měsíc) → hodnoty daného měsíce
+  type Bucket = { days: number; tmax: number[]; tmin: number[]; prcp: number[] }
+  const buckets = new Map<string, Bucket>()
   for (const row of rows) {
-    const start = Number(row.start)
-    const end = Number(row.end)
-    if (!Number.isFinite(start) || !Number.isFinite(end)) continue
-    if (!latest || end > latest.end || (end === latest.end && start > latest.start)) {
-      latest = { start, end }
-    }
+    const date = row.date ?? ''
+    const year = Number(date.slice(0, 4))
+    const month = Number(date.slice(5, 7))
+    if (!Number.isInteger(year) || !Number.isInteger(month)) continue
+    const key = `${year}-${month}`
+    const bucket = buckets.get(key) ?? { days: 0, tmax: [], tmin: [], prcp: [] }
+    bucket.days++
+    if (typeof row.tmax === 'number') bucket.tmax.push(row.tmax)
+    if (typeof row.tmin === 'number') bucket.tmin.push(row.tmin)
+    if (typeof row.prcp === 'number') bucket.prcp.push(row.prcp)
+    buckets.set(key, bucket)
   }
 
-  const monthRows = latest
-    ? rows.filter((r) => Number(r.start) === latest.start && Number(r.end) === latest.end)
-    : rows
-
-  const numberOrNull = (value: unknown): number | null =>
-    typeof value === 'number' && Number.isFinite(value) ? value : null
+  const mean = (values: number[]): number => values.reduce((a, b) => a + b, 0) / values.length
+  const round1 = (value: number): number => Math.round(value * 10) / 10
 
   const months: ClimateNormalMonth[] = []
   for (let month = 1; month <= 12; month++) {
-    const row = monthRows.find((r) => Number(r.month) === month)
+    const tmaxYears: number[] = []
+    const tminYears: number[] = []
+    const prcpYears: number[] = []
+    for (let year = firstYear; year <= lastYear; year++) {
+      const bucket = buckets.get(`${year}-${month}`)
+      if (!bucket || bucket.days === 0) continue
+      const enough = (values: number[]) => values.length >= bucket.days * MIN_DAYS_RATIO
+      if (enough(bucket.tmax)) tmaxYears.push(mean(bucket.tmax))
+      if (enough(bucket.tmin)) tminYears.push(mean(bucket.tmin))
+      // Srážky se sčítají (měsíční úhrn), teploty průměrují.
+      if (enough(bucket.prcp)) prcpYears.push(bucket.prcp.reduce((a, b) => a + b, 0))
+    }
     months.push({
       month,
-      tmin: numberOrNull(row?.tmin),
-      tmax: numberOrNull(row?.tmax),
-      prcp: numberOrNull(row?.prcp),
+      tmax: tmaxYears.length > 0 ? round1(mean(tmaxYears)) : null,
+      tmin: tminYears.length > 0 ? round1(mean(tminYears)) : null,
+      prcp: prcpYears.length >= MIN_YEARS_FOR_PRECIPITATION ? Math.round(mean(prcpYears)) : null,
     })
   }
 
@@ -107,7 +191,7 @@ async function fetchMeteostatNormals(lat: number, lon: number): Promise<ClimateN
 
   return {
     months,
-    period: latest,
+    period: { start: firstYear, end: lastYear },
     updatedAt: new Date().toISOString(),
   }
 }
@@ -184,10 +268,46 @@ export const syncClimateNormalsEndpoint: Endpoint = {
     const results: { id: number; fullSlug: string | null; normals: ClimateNormals }[] = []
     let skipped = 0
 
+    // DÁVKOVÁNÍ: kvóta Meteostatu je 500 dotazů/měsíc a jedno místo stojí dva
+    // (okno 20 let se nevejde do limitu 3 650 dní na dotaz). Jeden běh proto
+    // obslouží nejvýš MAX_PLACES_PER_RUN míst — s přibývajícími destinacemi
+    // se práce rozloží do několika běhů místo aby narazila na kvótu.
+    const now = new Date()
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const maxPlaces = Math.max(
+      1,
+      Number.parseInt(url.searchParams.get('maxPlaces') ?? '', 10) || MAX_PLACES_PER_RUN,
+    )
+
+    // `?force=1` přepočítá i čerstvá data — po změně metodiky (jiné okno, jiný
+    // výpočet) je jinak stará hodnota „dost čerstvá" a nikdy by se nepřepsala.
+    const force = url.searchParams.get('force') === '1'
+    // `?slug=/anglie/londyn/pocasi` omezí běh na jedinou stránku — po přidání
+    // destinace nebo při ověřování se nemusí čekat na celou frontu.
+    const slugFilter = url.searchParams.get('slug')
+
+    // Nejdřív stránky BEZ dat (nová destinace), pak nejstarší — data starší než
+    // rok se přepočítají (okno se posunulo), čerstvá se přeskočí zadarmo.
+    const staleBefore = new Date(now.getTime() - REFRESH_AFTER_DAYS * 86_400_000)
+    const candidates = pages
+      .map((page) => {
+        const stored = page.climateNormals as { updatedAt?: unknown } | null | undefined
+        const updatedAt =
+          stored && typeof stored.updatedAt === 'string' ? new Date(stored.updatedAt) : null
+        return { page, updatedAt }
+      })
+      .filter(({ page }) => !slugFilter || page.fullSlug === slugFilter)
+      .filter(({ updatedAt }) => force || !updatedAt || updatedAt < staleBefore)
+      .sort((a, b) => (a.updatedAt?.getTime() ?? 0) - (b.updatedAt?.getTime() ?? 0))
+
+    const upToDate = pages.length - candidates.length
+    const queue = candidates.slice(0, maxPlaces)
+    const deferred = candidates.length - queue.length
+
     // Sekvenčně s rozestupy (rate limit RapidAPI). Kdyby víc stránek sdílelo
     // souřadnice, druhá se obslouží z cache — kvóta je jen 500 dotazů/měsíc.
     const normalsCache = new Map<string, ClimateNormals | Error>()
-    for (const page of pages) {
+    for (const { page } of queue) {
       const parentId = typeof page.parent === 'object' ? page.parent?.id : page.parent
       const parent = typeof parentId === 'number' ? parentById.get(parentId) : undefined
       const lat = Number.parseFloat(parent?.detail?.latitude ?? '')
@@ -201,11 +321,10 @@ export const syncClimateNormalsEndpoint: Endpoint = {
       const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`
       if (!normalsCache.has(cacheKey)) {
         try {
-          normalsCache.set(cacheKey, await fetchMeteostatNormals(lat, lon))
+          normalsCache.set(cacheKey, await fetchRollingAverages(lat, lon, now))
         } catch (err) {
           normalsCache.set(cacheKey, err instanceof Error ? err : new Error(String(err)))
         }
-        await sleep(METEOSTAT_DELAY_MS)
       }
       const cached = normalsCache.get(cacheKey)
       if (!cached || cached instanceof Error) {
@@ -220,7 +339,15 @@ export const syncClimateNormalsEndpoint: Endpoint = {
     }
 
     if (dryRun) {
-      return Response.json({ ok: true, dryRun: true, pages: results, skipped, errors })
+      return Response.json({
+        ok: true,
+        dryRun: true,
+        pages: results,
+        upToDate,
+        deferred,
+        skipped,
+        errors,
+      })
     }
 
     // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
@@ -250,6 +377,8 @@ export const syncClimateNormalsEndpoint: Endpoint = {
       ok: true,
       pages: pages.length,
       updated: results.length,
+      upToDate,
+      deferred,
       skipped,
       errors,
     })

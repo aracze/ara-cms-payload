@@ -22,17 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     # Job jen volá HTTP endpoint — GITHUB_TOKEN nepotřebuje žádná práva.
     permissions: {}
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - name: Zavolat /api/sync-climate-normals
-        # Sync stahuje z Meteostatu s rozestupy (rate limit RapidAPI) —
-        # při ~174 stránkách počasí běží požadavek několik minut, proto
-        # max-time 720. Secrets jdou přes env, ne přímo do příkazu (neobjeví
-        # se v command line procesu a zvláštní znaky nerozbijí quoting).
+        # Sync počítá průměry z DENNÍCH dat: 2 dotazy na místo a rozestupy kvůli
+        # rate limitu RapidAPI, takže jedno místo trvá ~5 s (naměřeno). Plný běh
+        # ~174 míst je tedy ~15 min — proto max-time 2400 a timeout 45 min.
+        # Běžný běh je ale krátký: přírůstkově se obnovují jen chybějící a stará
+        # data. Secrets jdou přes env, ne přímo do příkazu (neobjeví se
+        # v command line procesu a zvláštní znaky nerozbijí quoting).
+        #
+        # ŽÁDNÉ `--retry`: plný běh spotřebuje ~348 z 500 dotazů měsíční kvóty
+        # RapidAPI, takže opakované pokusy po timeoutu by ji přetáhly a zbytek
+        # měsíce by končil chybou. Když běh selže, spustí se ručně přes
+        # „Run workflow" — zbytek fronty stejně dopočítá příští běh.
         env:
           SYNC_URL: ${{ secrets.SYNC_ANALYTICS_URL }}
           SYNC_SECRET: ${{ secrets.ANALYTICS_SYNC_SECRET }}
         run: |
           curl -fsS -X POST "$SYNC_URL/api/sync-climate-normals" \
             -H "X-Sync-Secret: $SYNC_SECRET" \
-            --connect-timeout 10 --max-time 720 --retry 2 --retry-delay 60
+            --connect-timeout 10 --max-time 2400

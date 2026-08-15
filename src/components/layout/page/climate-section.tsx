@@ -193,8 +193,11 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
               <div className="whitespace-nowrap text-[11.5px] text-[#8a94a0]">
                 noc {Math.round(m.tmin ?? 0)}°
               </div>
+              {/* Srážky se u některých míst nedají spočítat (stanice je pro
+                  část okna nemá) — pak se číslo ani proužek nekreslí, aby
+                  graf nepředstíral, že v tom měsíci neprší. */}
               <div className="whitespace-nowrap text-[11.5px] text-[#8a94a0]">
-                💧&nbsp;{Math.round(m.prcp ?? 0)}&nbsp;mm
+                {m.prcp === null ? ' ' : `💧 ${Math.round(m.prcp)} mm`}
               </div>
               {/* Srážky ještě jako tenký proužek pod číslem — porovnání mezi
                   měsíci na jeden pohled, ve modré kapky, aby byla souvislost
@@ -266,7 +269,7 @@ export function ClimateSection({
           v nadpisu by spolu s dobou návštěvy bylo dlouhé a upovídané. */}
       <p className="mt-1.5 text-[14px] text-[#8a94a0]">
         Počasí {locative} po měsících — průměrné denní teploty a srážky
-        {normals.period ? ` za období ${normals.period.start}–${normals.period.end}` : ''}.
+        {normals.period ? ` za roky ${normals.period.start}–${normals.period.end}` : ''}.
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-[#4a4a4a]">

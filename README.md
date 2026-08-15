@@ -378,37 +378,56 @@ curl -X POST 'http://localhost:3000/api/sync-affiliate-deals?dryRun=1' \
 
 ### `POST /api/sync-climate-normals`
 
-Měsíční obnova sekce **„Průměrné měsíční teploty a srážky"** na stránkách
+Dlouhodobé měsíční průměry pro sekci **„Nejlepší doba na cestu…"** na stránkách
 kategorie **Počasí**: pro každou publikovanou stránku počasí stáhne
-z [Meteostat API](https://dev.meteostat.net/api/point/normals) klimatické
-normály (třicetileté měsíční průměry min/max teploty a srážek) podle
-souřadnic **rodičovského místa** a uloží je do JSON pole `climateNormals`
-(viz `src/endpoints/syncClimateNormals.ts`). Graf kreslí
-`climate-section.tsx` — dva panely (teploty čárami, srážky sloupci), CSS
-tooltipy bez klientského JS, pod grafem tabulka pro čtečky.
+z [Meteostat API](https://dev.meteostat.net/api/point/daily) **denní** data za
+posledních 20 ukončených let podle souřadnic **rodičovského místa**, spočítá
+z nich měsíční průměry teplot a úhrny srážek a uloží je do JSON pole
+`climateNormals` (viz `src/endpoints/syncClimateNormals.ts`). Graf kreslí
+`climate-section.tsx` — měsíce obarvené podle vhodnosti návštěvy, CSS tooltipy
+bez klientského JS, pod grafem tabulka pro čtečky.
 
+- **Proč klouzavé okno místo oficiálních normálů:** `point/normals` vrací
+  třicetiletá období WMO, nejnovější 1991–2020 — nezmění se do roku 2031 a na
+  webu by trvale svítilo „období 1991–2020". Klouzavé okno se každý rok posune
+  („za roky 2006–2025"). **Proč denní data:** měsíční agregáty Meteostatu mají
+  srážky jen u zlomku měsíců (Londýn 24 %), z denních vyjde 75 %.
 - Klíč `METEOSTAT_RAPIDAPI_KEY`: [rapidapi.com](https://rapidapi.com) →
   vyhledat „Meteostat" → **Subscribe** (plán Basic, zdarma) → zkopírovat
-  `X-RapidAPI-Key`. Kvóta 500 dotazů/měsíc; jeden běh = ~1 dotaz na stránku
-  počasí (~174), proto **cron jen 1× měsíčně** (3. den ve 4:17 UTC,
-  `.github/workflows/sync-climate-normals.yml`, ruční běh přes _Run
-  workflow_ — např. po přidání nové stránky počasí).
+  `X-RapidAPI-Key`. Kvóta 500 dotazů/měsíc, jedno místo stojí **2 dotazy**
+  (API pouští max. 3 650 dní na dotaz).
+- **Běh je přírůstkový**, takže kvótu nepřeteče ani s přibývajícími
+  destinacemi: bere jen stránky bez dat a starší než 330 dní, nejvýš 200 míst
+  za běh; zbytek ohlásí jako `deferred` a dopočítá ho příští běh. Cron jede
+  měsíčně (3. den ve 4:17 UTC) a většinou nemá co dělat — nové destinace se
+  tak doplní samy do měsíce.
+- Parametry pro ruční běh: `?dryRun=1` (jen vypíše), `?force=1` (přepočítá
+  i čerstvá data — nutné po změně metodiky), `?slug=/anglie/londyn/pocasi`
+  (jediná stránka), `?maxPlaces=N` (jiný strop na běh).
 - Autentizace a chování stejné jako sync-affiliate-deals: hlavička
   `X-Sync-Secret` = `ANALYTICS_SYNC_SECRET` nebo admin session; `?dryRun=1`
   jen vypíše, co by se zapsalo; zápis přímým SQL mimo hooky + ruční
   `revalidateTag`; selhání místa nechá poslední úspěšná data.
 - Licence dat **CC BY 4.0** — web u grafu uvádí „Zdroj: Meteostat"
   (nemazat, je to podmínka licence).
-- **Nasazení na produkci:** do `/opt/aracze/.env` přidat
-  `METEOSTAT_RAPIDAPI_KEY`; schéma doplnit SQL (POZOR — i verzní tabulka
-  `_pages_v`, bez jejího sloupce spadne publikování stránek v adminu):
+- **Nasazení na produkci — SQL MUSÍ BÝT DŘÍV NEŽ MERGE.** Merge do `main`
+  spouští automatický deploy a nová aplikace čte `climate_normals` v každém
+  dotazu na stránky; dokud sloupec v produkční databázi není, Postgres vrací
+  chybu a **spadne celý web**, ne jen počasí. Pořadí tedy:
 
-  ```sql
-  ALTER TABLE pages ADD COLUMN IF NOT EXISTS climate_normals jsonb;
-  ALTER TABLE _pages_v ADD COLUMN IF NOT EXISTS version_climate_normals jsonb;
-  ```
+  1. SQL na produkční databázi (POZOR — i verzní tabulka `_pages_v`, bez
+     jejího sloupce spadne publikování stránek v adminu):
 
-  Pak force-recreate cms a ruční spuštění workflow _Sync climate normals_.
+     ```sql
+     ALTER TABLE pages ADD COLUMN IF NOT EXISTS climate_normals jsonb;
+     ALTER TABLE _pages_v ADD COLUMN IF NOT EXISTS version_climate_normals jsonb;
+     ```
+
+  2. `METEOSTAT_RAPIDAPI_KEY` a `OPENWEATHER_API_KEY` do `/opt/aracze/.env`
+     (a hlídat, že je vyjmenovává i `deploy/docker-compose.yml` — jinak se do
+     kontejneru nedostanou).
+  3. Teprve pak merge PR, force-recreate `cms` a ruční spuštění workflow
+     _Sync climate normals_.
 
 ```bash
 curl -X POST 'http://localhost:3000/api/sync-climate-normals?dryRun=1' \
