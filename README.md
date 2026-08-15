@@ -149,6 +149,45 @@ To build and run the production-optimized Docker image:
 > [!TIP]
 > This image uses Next.js **Standalone Output**, meaning it is extremely lightweight and ready for production deployment. It does not require volume mounts for source code or `node_modules`.
 
+### Jednorázové doběhy proti produkční databázi — čtyři pasti
+
+Ověřeno naostro při doplňování affiliate deep-linků (14. 8. 2026, 657 stránek). Každá
+z těchto pastí jeden běh shodila, proto stojí za zapsání:
+
+1. **Skript pouštěj z verze kódu, která odpovídá NASAZENÉ**, ne z pracovní kopie:
+
+   ```bash
+   git worktree add --detach /tmp/wt-prod origin/main
+   ln -s "$PWD/node_modules" /tmp/wt-prod/node_modules && cp .env /tmp/wt-prod/.env
+   ```
+
+   Pracovní kopie obvykle obsahuje rozpracovaná pole, která na produkci ještě nejsou
+   (dev si sloupce přidává sám přes `push: true`, produkce ne) — Payload pak padá na
+   chybějící sloupec. `DATABASE_URL` stačí exportovat, `dotenv` proměnnou z prostředí
+   nepřepisuje.
+
+2. **Postgres není zvenčí dostupný** (žádné `ports`, jen docker síť), takže tunel na IP
+   kontejneru. IP se MUSÍ zjistit na serveru — `$(…)` přímo v příkazu `ssh -L` by se
+   vyhodnotilo lokálně a vzalo IP místního kontejneru:
+
+   ```bash
+   PG_IP="$(ssh root@<server> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <pg-container>")"
+   ssh -f -N -o ServerAliveInterval=30 -L "15432:${PG_IP}:5432" root@<server>
+   ```
+
+   Bez `ServerAliveInterval` tunel během dlouhého běhu odejde (`ECONNRESET`).
+
+3. **Dlouhé ověřování odděl od zápisu.** Když skript nejdřív dvacet minut osahává cizí
+   weby, spojení do DB mezitím zahálí a padne. Osvědčené: fáze 1 vypíše výsledky do JSON
+   (`--report=…`), fáze 2 je z něj jen zapíše. Zápisový krok dělej **idempotentní** (co
+   už sedí, přeskoč) — pak se dá po přerušení prostě spustit znovu.
+4. **NIKDY neukládej stránky paralelně.** Souběh 5 skončil deadlockem: uložení stránky
+   sahá i na řetězec předků (plugin nested-docs), takže dvě místa pod stejnou zemí se
+   navzájem zablokují. Sekvenčně to je ~3 s/stránka a je to jediná bezpečná cesta.
+
+Po zápisu do CMS mimo admin **vždy** `docker compose up -d --force-recreate cms`
+(cache se invalidují jen z hooků v adminu).
+
 ### Ochrana e-mailu proti robotům — řeší Cloudflare, ne kód
 
 **Na zóně `ara.cz` je Scrape Shield → Email Address Obfuscation už ZAPNUTÝ** (ověřeno 6. 8. 2026: `https://ara.cz/kontakt` nemá v HTML `mailto:` ani samotnou adresu, odkaz vede na
@@ -288,8 +327,14 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
 - Spouští GitHub Actions cron denně ve 3:41 UTC
   (`.github/workflows/sync-affiliate-deals.yml`, ruční běh přes _Run
   workflow_); autentizace hlavičkou `X-Sync-Secret` = `ANALYTICS_SYNC_SECRET`
-  (sdílené se sync-analytics) nebo admin session. `?dryRun=1` jen vypíše, co
-  by se zapsalo.
+  (sdílené se sync-analytics) nebo admin session.
+- Endpoint odpoví **hned 202** a sync doběhne na pozadí (`after()` z Next) —
+  stahování trvá přes minutu a Cloudflare utíná spojení po 100 s (HTTP 524).
+  Souhrn běhu je v logu serveru:
+  `docker compose logs cms | grep sync-affiliate-deals`. Jen `?dryRun=1`
+  zůstává synchronní a vypíše, co by se zapsalo (nic neukládá).
+- Souběžný běh (ruční spuštění přes běžící cron) endpoint odmítne hned
+  **409** — jinak by obě volání zbytečně stáhla vše proti kvótě Kiwi.
 - Zápis jde **přímým SQL mimo Payload hooky** (stránky mají drafts — denní
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
@@ -301,8 +346,12 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   z Krakova/Vídně; inzerovat je Čechům by bylo zavádějící) — proto může mít
   destinace jen kartu letenky (např. Malta).
 - **Nasazení na produkci:** do `/opt/aracze/.env` přidat
-  `KIWI_TEQUILA_API_KEY`; schéma doplnit SQL (POZOR — i verzní tabulka
-  `_pages_v`, bez jejích sloupců spadne publikování stránek v adminu):
+  `KIWI_TEQUILA_API_KEY` **a přidat pro něj řádek do `environment:` služby
+  `cms`** v serverovém `/opt/aracze/docker-compose.yml` (compose proměnné
+  vyjmenovává, samotné `.env` nestačí — viz `deploy/docker-compose.yml`);
+  schéma doplnit SQL **ještě PŘED nasazením kódu** (nový kód sloupce čte,
+  takže po deployi by stránky hlásily chybu) — POZOR i na verzní tabulku
+  `_pages_v`, bez jejích sloupců spadne publikování stránek v adminu:
 
   ```sql
   ALTER TABLE pages
@@ -610,7 +659,7 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   - **Vlákna**: sebe-referenční pole `parentComment` (odpověď na jiný komentář). Zobrazují se s jednou úrovní odsazení + spojovací linkou; odpověď na odpověď spadne také pod kořen. Autor článku (shoda `author` s `createdBy`) má u svých komentářů štítek „autor".
   - **Vkládání z webu**: běží přes Server Action (`src/lib/comment-actions.ts`) a Local API s `overrideAccess: true` — kolekce má `create: isAdmin`, takže bezpečná pole (typ, stav, cíl, `parentComment`) vynucuje action. Tlačítko „Odpovědět" předá cíl → nové odpovědi mají skutečnou vazbu. Autor je anonymní (jen jméno); registrovaní autoři migrovaných komentářů se zobrazují přes virtuální `authorPublic` (bezpečná podmnožina — username + avatar).
   - **Anti-spam**: honeypot + rate-limit + heuristika odkazů, volitelně Cloudflare Turnstile (`src/lib/comment-spam.ts`, viz `TURNSTILE_*` proměnné výše).
-  - **Recenze na webu**: na stránkách kategorie **Turistický cíl** se pod obsahem zobrazuje sekce recenzí: lišta „Byl jsi zde? Ohodnoť to!" s hvězdičkovým vstupem a sbaleným formulářem, výpis recenzí (**nejnovější nahoře**, hvězdičky + „Recenzováno: dd.MM.yyyy", mikrodata schema.org/Review). Detail cíle má navíc **hodnocení v hero vedle názvu** (na mobilu pod ním; odkaz na `#recenze`), v pravém sloupci **praktické informace** (adresa, oficiální web, mapa s pinem cíle přes `MapLibreMap height`, autor — vzdušné legacy rozložení bez rámečku), pod recenzemi pás **„Co dalšího vidět…"** se sousedními cíli (`fetchTouristPointSiblings`, zobrazuje se při více než 2 sousedech) a vydává **JSON-LD `TouristAttraction` s `AggregateRating`** a recenzemi (hvězdičky ve výsledcích vyhledávání). Fotky v textu cíle mají stropovanou výšku (`poi-prose`). Spodní responzivní reklamní pruh (`LeaderboardAd`, legacy slot) se vykresluje na všech stránkách a článcích kromě homepage a statických stránek (viz Pages níže). Data načítá `fetchPageReviews` (`src/lib/payload.ts`, cache tag `page_reviews_<id>`), vkládání řeší Server Action `src/lib/review-actions.ts` (stejné anti-spam vrstvy jako komentáře; hodnocení 1–5 povinné), komponenty jsou v `src/components/features/reviews/`. Reklamní sloupec vpravo přepíná 300×250 / 300×600 podle počtu recenzí (jako legacy). Ve výpisu cílů na stránce místa („Co vidět…") se u každého cíle zobrazují vpravo vedle názvu hvězdičky (průměr zaokrouhlený na půl hvězdičky) s počtem recenzí — data dodává `fetchPageReviewStats` (jeden hromadný dotaz pro všechny cíle) — a pod názvem řádek s adresou (`detail.googleMapsAddress`) a oficiálním webem (`detail.website`); po rozbalení se vpravo u „Zobrazit méně" ukáže autor cíle (avatar + jméno z virtuálního `createdByPublic`, které se pro děti stránky tahá přes `PAGE_CHILDREN_SELECT`). Rozbalení cíle („Zobrazit více", klik na hodnocení, nebo kotva `#slug` v URL) ukáže pod textem i recenze cíle s formulářem přímo na stránce místa (`InlineReviews`): načítají se líně přes server action `getPageReviews` až po rozbalení, zobrazují se první 3 + „Zobrazit další" a formulář (vč. Turnstile) se otevírá až na kliknutí. Hvězdičky v liště „Byl jsi zde?" i u cílů bez recenzí („Ohodnoť jako první" vedle názvu) fungují jako přímý vstup — kliknutí otevře formulář s předvyplněným počtem hvězd (sdílená komponenta `StarInput`; plné šedé hvězdičky `StarRating` naopak jen zobrazují průměr).
+  - **Recenze na webu**: na stránkách kategorie **Turistický cíl** se pod obsahem zobrazuje sekce recenzí: lišta „Byl jsi zde? Ohodnoť to!" s hvězdičkovým vstupem a sbaleným formulářem, výpis recenzí (**nejnovější nahoře**, hvězdičky + „Recenzováno: dd.MM.yyyy"). Detail cíle má navíc **hodnocení v hero vedle názvu** (na mobilu pod ním; odkaz na `#recenze`), v pravém sloupci **praktické informace** (adresa, oficiální web, mapa s pinem cíle přes `MapLibreMap height`, autor — vzdušné legacy rozložení bez rámečku), pod recenzemi pás **„Co dalšího vidět…"** se sousedními cíli (`fetchTouristPointSiblings`, zobrazuje se při více než 2 sousedech) a vydává **JSON-LD `TouristAttraction` + `LocalBusiness` s `AggregateRating`** a recenzemi (hvězdičky ve výsledcích vyhledávání; samotný `TouristAttraction` Google pro review snippets nepodporuje, proto dvojí `@type` — dřívější legacy mikrodata u výpisu recenzí byla odstraněna, Google je odmítal). Povinnou `address` (`PostalAddress`) k `LocalBusiness` skládáme z **hierarchie** (drobečky = země → … → město), ne z volného textu `detail.googleMapsAddress` — ten u poloviny cílů není adresa, ale jen název („Eiffelova věž"); cíl bez země zůstane jen `TouristAttraction` (bez hvězdiček, ale s validní značkou). Fotky v textu cíle mají stropovanou výšku (`poi-prose`). Spodní responzivní reklamní pruh (`LeaderboardAd`, legacy slot) se vykresluje na všech stránkách a článcích kromě homepage a statických stránek (viz Pages níže). Data načítá `fetchPageReviews` (`src/lib/payload.ts`, cache tag `page_reviews_<id>`), vkládání řeší Server Action `src/lib/review-actions.ts` (stejné anti-spam vrstvy jako komentáře; hodnocení 1–5 povinné), komponenty jsou v `src/components/features/reviews/`. Reklamní sloupec vpravo přepíná 300×250 / 300×600 podle počtu recenzí (jako legacy). Ve výpisu cílů na stránce místa („Co vidět…") se u každého cíle zobrazují vpravo vedle názvu hvězdičky (průměr zaokrouhlený na půl hvězdičky) s počtem recenzí — data dodává `fetchPageReviewStats` (jeden hromadný dotaz pro všechny cíle) — a pod názvem řádek s adresou (`detail.googleMapsAddress`) a oficiálním webem (`detail.website`); po rozbalení se vpravo u „Zobrazit méně" ukáže autor cíle (avatar + jméno z virtuálního `createdByPublic`, které se pro děti stránky tahá přes `PAGE_CHILDREN_SELECT`). Rozbalení cíle („Zobrazit více", klik na hodnocení, nebo kotva `#slug` v URL) ukáže pod textem i recenze cíle s formulářem přímo na stránce místa (`InlineReviews`): načítají se líně přes server action `getPageReviews` až po rozbalení, zobrazují se první 3 + „Zobrazit další" a formulář (vč. Turnstile) se otevírá až na kliknutí. Hvězdičky v liště „Byl jsi zde?" i u cílů bez recenzí („Ohodnoť jako první" vedle názvu) fungují jako přímý vstup — kliknutí otevře formulář s předvyplněným počtem hvězd (sdílená komponenta `StarInput`; plné šedé hvězdičky `StarRating` naopak jen zobrazují průměr).
   - **Odvozené hodnocení míst**: recenze se píšou **jen k turistickým cílům** (jako na legacy webu), ale **místa** hvězdičky přebírají z cílů pod sebou — průměr ze **všech jednotlivých recenzí** (ne průměr průměrů, takže cíl s 30 recenzemi váží víc než cíl s jednou). Zobrazí se v **hero vedle názvu** místa jako „N recenzí cílů" (odkaz na `#mista`, tedy výpis cílů — místo vlastní sekci recenzí nemá) a na **dlaždicích v „Co vidět"** pod názvem. Nárok má místo, které se v seznamu chová jako koncová dlaždice: buď pod sebou nemá další místa (Budapešť), nebo má zapnuté `stopDisplayingChildPlaces` (ostrov — pak se sečtou i cíle v jeho podřazených místech). **Země, regiony ani kontinenty hodnocení nemají nikde** (ani jako dlaždice v nadřazeném seznamu) — průměr přes celou zemi se vždy usadí kolem 4,5 a nenese informaci; kontinent se proto ani nepočítá (zkratka `!page.parent`, jinak by se zbytečně procházely děti všech zemí). Hranice **3 recenzí** brání tomu, aby místo s jedinou nadšenou recenzí vypadalo jako nejlépe hodnocená destinace webu (`MIN_DERIVED_PLACE_REVIEWS`); dlaždice samotných **cílů** naopak ukazují hvězdičky od první recenze jako všude jinde. Data dodává `fetchDerivedPlaceRatings` (`src/lib/payload.ts`): dávkové BFS po úrovních (jeden dotaz na úroveň stromu, ne na dlaždici) + hromadný `fetchPageReviewStats`. Hierarchie se jde po `parent`, **ne** prefixem `fullSlug` — místo se může z URL potomků vynechat (`includeInChildUrlPaths`), takže cesta potomka nemusí začínat cestou předka.
   - Data přenesl jednorázový migrační doběh z legacy MySQL databáze. Legacy web vlákna neměl — vazby odpovědí dopočítala kontextová analýza textů. Oba skripty jsou hotové a odstraněné (viz git historie); v adminu lze `parentComment` kdykoliv ručně upravit.
 
@@ -639,17 +688,20 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   na stránky zemí (ověřeno proti webu 14. 8. 2026; US/RU/CV stránku nemají → homepage);
   nové adresy z jejich [Landing page generatoru](https://www.discovercars.com/landing-page-generator)
   (i města, např. `/cz/austria/vienna`) lze vkládat rovnou do CMS pole. **Přesné
-  deep-linky doplnil doběh `pnpm backfill:affiliate`** (`scripts/backfill-affiliate-links.ts`,
-  dry-run bez `--apply`): každému místu najde stránku města/regionu přímo na webech
-  partnerů (exonyma Vídeň→vienna, přepis bez diakritiky, Booking si chybné slugy opraví
-  sám přesměrováním) a kde není, zdědí odkaz rodiče — v adminu je tak vidět skutečný cíl.
-  Země se určuje z názvu kořenové stránky, NE z legacy kódů (Egypt měl chybně `ec` =
-  Ekvádor). Na dev spuštěno 14. 8. 2026 (664 stránek; Booking 454 přesných, DiscoverCars 258) — **na produkci je po nasazení potřeba spustit znovu + force-recreate cms**.
+  deep-linky doplnil jednorázový doběh** (`scripts/backfill-affiliate-links.ts`): každému
+  místu našel stránku města/regionu přímo na webech partnerů (exonyma Vídeň→vienna, přepis
+  bez diakritiky, Booking si chybné slugy opraví sám přesměrováním) a kde nebyla, zdědil
+  odkaz rodiče — v adminu je tak vidět skutečný cíl. Země se určovala z názvu kořenové
+  stránky, NE z legacy kódů (Egypt měl chybně `ec` = Ekvádor). **Doběh je hotový (dev
+  i produkce, 14. 8. 2026) a skript odstraněný** — v případě potřeby ho najdeš v git
+  historii, viz „Stará databáze" výše pro postup. Výsledek na produkci: 657 stránek,
+  z toho 487 s přesnou stránkou města/regionu u Bookingu, 258 u DiscoverCars a 117
+  lokalit u Invie; zbytek dědí zemi. Novým místům stačí vyplnit pole v adminu (nebo
+  nechat prázdné — runtime spadne na odkaz země/obecný).
   **Zájezdy jdou přes Invii** (partnerský účet ověřen živý 14. 8. 2026, `aid=4745582`):
-  deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym)
-  doplnil týž doběh s `--tours-only` (117 přesných lokalit, jinak země; Invia neexistující
-  lokalitu přesměruje na zemi, hit je jen přímé 200) a karta je obaluje redirectem
-  `/go/zajezdy[/cesta]`, který doplní `aid` ze základního odkazu v adminu. **Homepage** má panel „Připrav se na cestu"
+  deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym;
+  Invia neexistující lokalitu přesměruje na zemi, hit je jen přímé 200) obaluje karta
+  redirectem `/go/zajezdy[/cesta]`, který doplní `aid` ze základního odkazu v adminu. **Homepage** má panel „Připrav se na cestu"
   (`homepage/preparation-section.tsx`, legacy parita s `affiliate--homepage`): 4 obecné
   karty bez Praktických informací a deep-linků, mezi „Co je nového" a „Tématy ke čtení";
   mřížku karet sdílí `PreparationCards`. Dále **Praktické

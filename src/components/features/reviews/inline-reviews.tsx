@@ -37,12 +37,10 @@ const INITIAL_VISIBLE = 3
  */
 export function InlineReviews({
   pageId,
-  pageTitle,
   turnstileSiteKey,
   rateRequest = null,
 }: {
   pageId: number
-  pageTitle: string
   turnstileSiteKey: string | null
   /** Předvyplnění z hlavičky cíle („Ohodnoť jako první") — viz typ výše. */
   rateRequest?: InlineReviewRateRequest | null
@@ -324,7 +322,6 @@ export function InlineReviews({
           <ReviewItem
             key={review.id}
             review={review}
-            itemReviewed={pageTitle}
             // Jemnější oddělovače uvnitř karty cíle; poslední recenze bez linky,
             // ať se nesráží s (světlejším) oddělovačem mezi cíli.
             className={

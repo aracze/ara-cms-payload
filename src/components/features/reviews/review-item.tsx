@@ -10,15 +10,15 @@ import { StarRating } from './star-rating'
  * Jedna recenze turistického cíle — vzhled podle legacy `.author-review`:
  * avatar vlevo, jméno autora (odkaz na profil u registrovaných), hvězdičky
  * + „Recenzováno: dd.MM.yyyy", pod tím text. Oddělovací linky řeší rodič
- * (border-t seznamu) + border-b tady. Mikrodata schema.org/Review jako legacy.
+ * (border-t seznamu) + border-b tady. Strukturovaná data recenzí NEznačíme
+ * tady (legacy mikrodata Google odmítal — itemReviewed/author jako holý
+ * text), posílá je jen JSON-LD na detailu cíle (`touristPointJsonLd`).
  */
 export function ReviewItem({
   review,
-  itemReviewed,
   className,
 }: {
   review: ReviewPublic
-  itemReviewed: string
   /** Doladění vzhledu podle kontextu (např. jemnější/žádný oddělovač v inline výpisu). */
   className?: string
 }) {
@@ -31,11 +31,7 @@ export function ReviewItem({
     <article
       id={`recenze-${review.id}`}
       className={cn('flex gap-4 border-b border-[#d7d7d7] py-4', className)}
-      itemScope
-      itemType="https://schema.org/Review"
     >
-      <meta itemProp="itemReviewed" content={itemReviewed} />
-
       <div className="shrink-0 pt-2">
         {profileHref ? (
           <Link href={profileHref} aria-label={`Profil ${review.authorName}`}>
@@ -47,7 +43,7 @@ export function ReviewItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="pb-1 pt-2 text-[17px] tracking-[1px] text-[#565656]" itemProp="author">
+        <div className="pb-1 pt-2 text-[17px] tracking-[1px] text-[#565656]">
           {profileHref ? (
             <Link href={profileHref} className="hover:underline">
               {review.authorName}
@@ -60,31 +56,18 @@ export function ReviewItem({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] leading-none text-[#a6b0b9]">
           {/* inline-flex: bez něj se hvězdičky (SVG) zarovnají na účaří textu
               a vůči datu „uskakují" nahoru — flex je vycentruje na střed řádku. */}
-          <span
-            itemProp="reviewRating"
-            itemScope
-            itemType="https://schema.org/Rating"
-            className="inline-flex items-center"
-          >
-            <meta itemProp="ratingValue" content={String(review.rating)} />
-            <meta itemProp="bestRating" content="5" />
+          <span className="inline-flex items-center">
             <StarRating rating={review.rating} />
           </span>
           {date && (
             <span>
-              Recenzováno:{' '}
-              <time dateTime={date.isoDate} itemProp="datePublished">
-                {date.display}
-              </time>
+              Recenzováno: <time dateTime={date.isoDate}>{date.display}</time>
             </span>
           )}
         </div>
 
         {/* Text recenze je čistý plaintext (migrace HTML neobsahuje) — zalomení řádků zachováme. */}
-        <p
-          className="mt-2 whitespace-pre-line break-words leading-relaxed text-[#2c3643]"
-          itemProp="reviewBody"
-        >
+        <p className="mt-2 whitespace-pre-line break-words leading-relaxed text-[#2c3643]">
           {review.body}
         </p>
       </div>

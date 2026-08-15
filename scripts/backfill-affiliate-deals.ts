@@ -88,8 +88,8 @@ async function main() {
     if (!APPLY) continue
 
     // Skupina se posílá CELÁ (Payload chybějící podpole nuluje) a spread se
-    // dělá z ČERSTVÉHO čtení těsně před zápisem — nesmí smazat toursUrl
-    // a spol. z backfill-affiliate-links ani `deals` z denního syncu.
+    // dělá z ČERSTVÉHO čtení těsně před zápisem — nesmí smazat deep-linky
+    // (toursUrl a spol.) ani `deals` z denního syncu.
     const fresh = (await payload.findByID({
       collection: 'pages',
       id: page.id,

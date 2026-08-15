@@ -193,9 +193,11 @@ export const MainContent = ({
     ? [...preHeadings, ...extractHeadings(textHtml, isPracticalInfo ? 4 : 3), ...extraHeadings]
     : []
 
-  const cleanOwnerGenitive = practicalInfo?.ownerGenitive?.replace(/^do\s+/i, '')
-  const practicalInfoOwnerName = practicalInfo
-    ? cleanOwnerGenitive || practicalInfo.ownerTitle
+  // Celý 2. pád i s předložkou („do Myanmaru", „na Slovensko") — stejně jako
+  // titulky v page-title.ts. Dřívější odřezávání „do" a doplňování ve větě
+  // selhalo u zemí s jinou předložkou („do na Slovensko").
+  const practicalInfoOwnerPhrase = practicalInfo
+    ? practicalInfo.ownerGenitive || `do ${practicalInfo.ownerTitle}`
     : null
   // Autora bereme VÝHRADNĚ z veřejného virtuálního pole `createdByPublic` —
   // interní `createdBy` (surová relace na uživatele) se na frontend nevystavuje.
@@ -396,7 +398,7 @@ export const MainContent = ({
                     />
                     <span className="relative z-10 flex-1">
                       <span className="block font-heading text-[16px] font-semibold leading-snug text-[#1a3f6c]">
-                        Praktické informace do {practicalInfoOwnerName}
+                        Praktické informace {practicalInfoOwnerPhrase}
                       </span>
                       <span className="mt-1 block text-[13px] leading-snug text-[#6f7a86]">
                         Měna, doprava, zdraví a další rady na cestu.
@@ -474,14 +476,14 @@ export const MainContent = ({
                   >
                     <h2 className="text-[22px] font-semibold text-[#1a3f6c] mb-6 group-hover:underline leading-tight">
                       Praktické informace <br />
-                      do {practicalInfoOwnerName}
+                      {practicalInfoOwnerPhrase}
                     </h2>
                     <div className="relative inline-block w-full">
                       <div className="absolute top-1/2 -translate-y-1/2 left-[calc(50%+70px)] w-[55px] h-[55px] bg-[url('/assets/information/essentials-gray.gif')] bg-no-repeat bg-contain opacity-20 z-0" />
                       <div className="relative z-10 text-[18px] text-[#888] leading-[1.5]">
                         <p className="m-0">
                           Praktické cestovní informace <br />
-                          při cestě do {practicalInfoOwnerName}
+                          při cestě {practicalInfoOwnerPhrase}
                         </p>
                       </div>
                     </div>

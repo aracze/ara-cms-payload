@@ -64,6 +64,19 @@ services:
       GA4_PROPERTY_ID: ${GA4_PROPERTY_ID}
       GA4_SERVICE_ACCOUNT_JSON: ${GA4_SERVICE_ACCOUNT_JSON}
       ANALYTICS_SYNC_SECRET: ${ANALYTICS_SYNC_SECRET}
+      # Kiwi Tequila Search API – denní sync akčních nabídek
+      # (/api/sync-affiliate-deals). Bez tohoto řádku se hodnota z /opt/aracze/.env
+      # do kontejneru NEDOSTANE (compose proměnné vyjmenovává) a sync tiše
+      # vynechá letenky — ověřeno při nasazení 14. 8. 2026.
+      KIWI_TEQUILA_API_KEY: ${KIWI_TEQUILA_API_KEY}
+      # Počasí na stránkách Počasí: Meteostat (měsíční sync klimatických normálů
+      # /api/sync-climate-normals) a OpenWeather One Call 3.0 (aktuální stav
+      # a předpověď při renderu). Platí stejná past jako u Kiwi výš — bez těchto
+      # řádků se klíče z /opt/aracze/.env do kontejneru nedostanou; normály by
+      # se nestáhly a živé počasí by spadlo na bezplatné endpointy (6denní
+      # předpověď), obojí bez hlášky.
+      METEOSTAT_RAPIDAPI_KEY: ${METEOSTAT_RAPIDAPI_KEY}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
       # Cloudflare Turnstile (ochrana registrace/obnovy hesla a komentářů proti
       # robotům) — bez obou klíčů se v aplikaci tiše vypne a jede jen honeypot.
       # Hodnoty do /opt/aracze/.env; widget má v CF povolené hostnames ara.cz.
