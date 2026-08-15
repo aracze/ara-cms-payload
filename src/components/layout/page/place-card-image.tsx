@@ -6,10 +6,11 @@ import { cloudinaryVariant, isCloudinary } from '@/lib/cloudinary-loader'
 /**
  * Obrázek karty místa s ořezem podle zařízení (art direction).
  *
- * Karta má pevnou výšku 280 px, ale proměnlivou šířku, takže její tvar se mění:
- * pod 1024 px (mobil/tablet) je na šířku, na desktopu je vedle mapy na výšku,
- * bez mapy skoro čtvercová. Pro každý případ proto Cloudinary ořízne jiný poměr
- * (`c_fill,g_auto`), aby se nestahovaly pixely, které `object-cover` stejně ořízne.
+ * Tvar karty se mění podle displeje: na mobilu jsou dvě dlaždice vedle sebe a karta
+ * je na výšku (~172×240), na tabletu taky dvě, ale širší, takže je na šířku, a na
+ * desktopu je vedle mapy na výšku, bez mapy skoro čtvercová. Pro každý případ proto
+ * Cloudinary ořízne jiný poměr (`c_fill,g_auto`), aby se nestahovaly pixely, které
+ * `object-cover` stejně ořízne.
  *
  * Art direction řešíme dvěma `next/image` variantami přepínanými `hidden lg:block`
  * / `lg:hidden` (místo `<picture>`), aby obrázky procházely optimalizací Next.js.
@@ -55,15 +56,25 @@ export function PlaceCardImage({ src, alt, className, hasMap = false }: PlaceCar
         unoptimized={unoptimized}
         className={`hidden lg:block ${className ?? ''}`}
       />
-      {/* Mobil + tablet (<1024 px): karta je na šířku */}
+      {/* Tablet (640–1023 px): dvě dlaždice vedle sebe, ale široké → na šířku */}
       <Image
         src={src}
         alt={alt}
         fill
         loader={cropLoader('c_fill,g_auto,ar_3:2')}
-        sizes="(min-width: 640px) 50vw, 100vw"
+        sizes="50vw"
         unoptimized={unoptimized}
-        className={`lg:hidden ${className ?? ''}`}
+        className={`hidden sm:block lg:hidden ${className ?? ''}`}
+      />
+      {/* Mobil (<640 px): dvě dlaždice vedle sebe → karta na výšku (~172×240) */}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        loader={cropLoader('c_fill,g_auto,ar_5:7')}
+        sizes="50vw"
+        unoptimized={unoptimized}
+        className={`sm:hidden ${className ?? ''}`}
       />
     </>
   )

@@ -80,9 +80,33 @@ export function CollapsiblePageTextWithContributor({
       {shouldCollapse && !isExpanded && (
         // Desktop: autor je vyjmutý z toku (absolutně vlevo), aby „zobrazit více"
         // bylo vycentrované na CELOU šířku (floatem by ho tlačítko — vlastní BFC —
-        // neobtékalo a odsunulo se doprava). Mobil: skládáme pod sebe (autor nahoře,
-        // tlačítko pod ním), jinak by úzký autor přes vycentrované tlačítko zasahoval.
+        // neobtékalo a odsunulo se doprava). Mobil: skládáme pod sebe, ale tlačítko
+        // MUSÍ být hned pod textem (proto je v kódu první) — autor mezi useknutým
+        // textem a „zobrazit více" rozbíjel souvislost mezi nimi.
         <div className="relative mt-[30px] flex w-full flex-col items-center gap-3 sm:min-h-[44px] sm:flex-row sm:justify-center sm:gap-0">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            aria-expanded={isExpanded}
+            // Svislý padding dělá z 20px řádku ~40px plochu pro prst (WCAG 2.2 chce
+            // aspoň 24); záporný margin drží původní rozestupy.
+            className="block w-[130px] py-2.5 -my-2.5 text-center text-[14px] font-bold leading-[19.5px] text-[#005580] hover:underline"
+          >
+            zobrazit více
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 10 6"
+              className="ml-[6px] inline-block h-[10px] w-[10px] align-middle"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M1 1l4 4 4-4" />
+            </svg>
+          </button>
+
           {contributor?.name && (
             <div className="sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2">
               <div className="flex items-start">
@@ -123,27 +147,6 @@ export function CollapsiblePageTextWithContributor({
               </div>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={() => setIsExpanded(true)}
-            aria-expanded={isExpanded}
-            className="block w-[130px] text-center text-[14px] font-bold leading-[19.5px] text-[#005580] hover:underline"
-          >
-            zobrazit více
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 10 6"
-              className="ml-[6px] inline-block h-[10px] w-[10px] align-middle"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M1 1l4 4 4-4" />
-            </svg>
-          </button>
         </div>
       )}
 

@@ -51,7 +51,7 @@ export function SearchPageBox({ initialQuery }: { initialQuery: string }) {
           <button
             type="button"
             onClick={() => setQuery('')}
-            className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+            className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
             aria-label="Vymazat hledání"
           >
             <X className="w-5 h-5" />

@@ -49,7 +49,10 @@ export function StarInput({
           onFocus={() => setHover(n)}
           onBlur={() => setHover(0)}
           onClick={() => onSelect(n)}
-          className={appearance === 'filled' ? '' : 'p-0.5'}
+          // Padding = plocha pro prst (WCAG 2.2 chce aspoň 24 px; hvězdička 14 px
+          // + 2×6 px = 26 px). Záporný margin část paddingu opticky stáhne zpět,
+          // ať rozestupy hvězdiček zůstávají blízko původním.
+          className={appearance === 'filled' ? 'p-1.5 -m-0.5' : 'p-1.5 -m-1'}
         >
           <Star
             aria-hidden="true"
