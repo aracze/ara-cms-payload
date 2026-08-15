@@ -60,9 +60,15 @@ function ensureAdSenseScript() {
  * jediná reklama až pod obsahem, takže se načte, až k ní čtenář dojede — nebo
  * vůbec, pokud tak daleko nedoroluje.
  *
- * Skryté boxy (`hidden lg:block` u postranních reklam) se nenačtou vůbec:
- * prvek s `display: none` nemá plochu, takže se s obrazovkou nikdy neprotne.
- * Odpadá tím i marné dožadování inzerátu do nulově široké schránky.
+ * Skryté boxy (`hidden lg:block` u postranních reklam) se přeskočí: prvek
+ * s `display: none` nemá plochu, takže o inzerát vůbec nežádáme.
+ *
+ * PROČ NE IntersectionObserver: postranní reklamy sedí v lepivém sloupci
+ * s vlastním posuvníkem, který se pozorovateli počítá jako ořezávající předek.
+ * Reklama odrolovaná uvnitř toho sloupce se pak s obrazovkou „neprotíná", i když
+ * na stránce leží pár set pixelů pod okrajem — a na desktopu se tak nenačetla
+ * vůbec (chyba nasazená v #68). Vzdálenost proto počítáme přímo z
+ * `getBoundingClientRect()`, kterou ořezání předků neovlivňuje.
  *
  * Pozor na souvislost: lištu souhlasu (Funding Choices) stahuje právě AdSense
  * tag, takže se objeví až spolu s reklamou. To je záměr — bez reklamy se do
@@ -74,8 +80,9 @@ function useLazyAd(ref: React.RefObject<HTMLElement | null>) {
     if (!box) return
 
     let done = false
+    let naplanovano = 0
+
     const load = () => {
-      if (done) return
       done = true
       ensureAdSenseScript()
       try {
@@ -86,24 +93,46 @@ function useLazyAd(ref: React.RefObject<HTMLElement | null>) {
       }
     }
 
-    // Bez podpory IntersectionObserver (staré prohlížeče) se chováme jako dřív.
-    if (typeof IntersectionObserver !== 'function') {
-      load()
-      return
+    const prestat = () => {
+      if (naplanovano) cancelAnimationFrame(naplanovano)
+      naplanovano = 0
+      document.removeEventListener('scroll', naplanovat, true)
+      window.removeEventListener('resize', naplanovat)
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((e) => e.isIntersecting)) return
-        observer.disconnect()
+    const zkusit = () => {
+      naplanovano = 0
+      if (done) return
+      // Skrytý box (mobil: postranní reklama v `hidden lg:block`) nemá plochu.
+      if (!box.offsetWidth && !box.offsetHeight) return
+      const r = box.getBoundingClientRect()
+      // Jedna obrazovka rezervy, ať je inzerát vykreslený dřív, než na něj
+      // čtenář dojede (Google lazy-loading sám doporučuje). Schválně se neptáme,
+      // jestli box není naopak NAD výřezem: skok na kotvu (odkaz na recenze,
+      // obsah stránky) i obnovená poloha po návratu zpět ho jinak přeskočí
+      // a inzerát by se nenačetl, ani kdyby se k němu čtenář vrátil.
+      if (r.top < window.innerHeight * 2) {
+        prestat()
         load()
-      },
-      // Zhruba jedna obrazovka dopředu, ať je inzerát vykreslený dřív, než na
-      // něj čtenář dojede (Google lazy-loading sám doporučuje).
-      { rootMargin: '100% 0px' },
-    )
-    observer.observe(box)
-    return () => observer.disconnect()
+      }
+    }
+
+    // Měřit nejvýš jednou za překreslení — posluchač scrollu jinak běží při
+    // každém pohnutí prstem.
+    const naplanovat = () => {
+      if (!naplanovano && !done) naplanovano = requestAnimationFrame(zkusit)
+    }
+
+    zkusit()
+    if (!done) {
+      // Zachytávací fáze na document: rolování NEBUBLÁ, takže posluchač na
+      // `window` by minul pohyb uvnitř lepivého sloupce s vlastním posuvníkem —
+      // a právě v něm postranní reklamy sedí (ověřeno: window 0 událostí,
+      // document v zachytávací fázi 1).
+      document.addEventListener('scroll', naplanovat, { capture: true, passive: true })
+      window.addEventListener('resize', naplanovat)
+    }
+    return prestat
   }, [ref])
 }
 
