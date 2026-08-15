@@ -14,7 +14,7 @@ import {
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { Subnavigation } from '@/components/layout/page/subnavigation'
 import { HeroSection } from '@/components/layout/page/hero-section'
-import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
+import { ArticleAd } from '@/components/features/article-ad'
 import { ArticleActions } from '@/components/features/article-actions'
 import { CommentsSection } from '@/components/features/comments/comments-section'
 
@@ -180,7 +180,6 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
             takes over in the lower half (legacy `sideAds--first` / `sideAds--second`). */}
           <aside className="hidden lg:flex flex-col w-[340px] shrink-0">
             {/* AdSense loader — rendered once, shared by both ad boxes below. */}
-            <AdSenseScript />
             <div className="flex-1">
               <ArticleAd variant="primary" className="sticky top-5" />
             </div>
