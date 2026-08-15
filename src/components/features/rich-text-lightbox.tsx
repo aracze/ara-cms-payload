@@ -82,13 +82,16 @@ export function RichTextLightbox() {
   // a ťuknutí kamkoli jinam otevřené bubliny zavře.
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      const target = e.target as Element | null
-      const trigger = target?.closest('.image-attribution-trigger')
-      const tooltip = trigger?.closest('.image-attribution-tooltip') ?? null
+      const target = e.target
+      if (!(target instanceof Element)) return
+      // Bublinu hledáme od cíle kliku, ne až od ikonky: klik na text nebo odkaz
+      // UVNITŘ bubliny ji tak nezavře (čtenář si potřebuje licenci přečíst).
+      const tooltip = target.closest('.image-attribution-tooltip')
+      const trigger = target.closest('.image-attribution-trigger')
       document.querySelectorAll('.image-attribution-tooltip.open').forEach((el) => {
         if (el !== tooltip) el.classList.remove('open')
       })
-      tooltip?.classList.toggle('open')
+      if (trigger) tooltip?.classList.toggle('open')
     }
     document.addEventListener('click', onClick)
     return () => document.removeEventListener('click', onClick)
