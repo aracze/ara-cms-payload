@@ -80,7 +80,12 @@ const MAX_DAYS_PER_REQUEST = 3650
 /** Měsíc se počítá jen z roku, kde má aspoň 90 % dní (jinak by chyběl týden srážek). */
 const MIN_DAYS_RATIO = 0.9
 /** Míň let než tohle = hodnota by byla jednoletý výkyv, ne průměr. */
-const MIN_YEARS_FOR_PRECIPITATION = 5
+const MIN_YEARS = 5
+
+/** Skutečný počet dní v měsíci (i přestupný únor). */
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
 
 const ymd = (d: Date): string => d.toISOString().slice(0, 10)
 
@@ -137,14 +142,17 @@ async function fetchRollingAverages(lat: number, lon: number, now: Date): Promis
   const to = new Date(Date.UTC(lastYear, 11, 31))
 
   const rows: MeteostatDailyRow[] = []
-  for (const range of requestRanges(from, to)) {
+  const ranges = requestRanges(from, to)
+  for (const [index, range] of ranges.entries()) {
     rows.push(...(await fetchDailyRange(lat, lon, range.start, range.end, apiKey)))
-    await sleep(METEOSTAT_DELAY_MS)
+    // Rozestup jen MEZI dotazy — čekání po posledním by při plném běhu
+    // (~174 míst) přidalo přes tři minuty úplně zbytečně.
+    if (index < ranges.length - 1) await sleep(METEOSTAT_DELAY_MS)
   }
   if (rows.length === 0) throw new Error('Meteostat nevrátil žádná denní data')
 
   // (rok, měsíc) → hodnoty daného měsíce
-  type Bucket = { days: number; tmax: number[]; tmin: number[]; prcp: number[] }
+  type Bucket = { tmax: number[]; tmin: number[]; prcp: number[] }
   const buckets = new Map<string, Bucket>()
   for (const row of rows) {
     const date = row.date ?? ''
@@ -152,8 +160,7 @@ async function fetchRollingAverages(lat: number, lon: number, now: Date): Promis
     const month = Number(date.slice(5, 7))
     if (!Number.isInteger(year) || !Number.isInteger(month)) continue
     const key = `${year}-${month}`
-    const bucket = buckets.get(key) ?? { days: 0, tmax: [], tmin: [], prcp: [] }
-    bucket.days++
+    const bucket = buckets.get(key) ?? { tmax: [], tmin: [], prcp: [] }
     if (typeof row.tmax === 'number') bucket.tmax.push(row.tmax)
     if (typeof row.tmin === 'number') bucket.tmin.push(row.tmin)
     if (typeof row.prcp === 'number') bucket.prcp.push(row.prcp)
@@ -170,18 +177,25 @@ async function fetchRollingAverages(lat: number, lon: number, now: Date): Promis
     const prcpYears: number[] = []
     for (let year = firstYear; year <= lastYear; year++) {
       const bucket = buckets.get(`${year}-${month}`)
-      if (!bucket || bucket.days === 0) continue
-      const enough = (values: number[]) => values.length >= bucket.days * MIN_DAYS_RATIO
-      if (enough(bucket.tmax)) tmaxYears.push(mean(bucket.tmax))
-      if (enough(bucket.tmin)) tminYears.push(mean(bucket.tmin))
+      if (!bucket) continue
+      // Poměřuje se se SKUTEČNÝM počtem dní v měsíci, ne s počtem vrácených
+      // řádků: kdyby API polovinu dní vůbec neposlalo, byl by takový měsíc
+      // „kompletní" a měsíční úhrn srážek by vyšel poloviční.
+      const required = daysInMonth(year, month) * MIN_DAYS_RATIO
+      if (bucket.tmax.length >= required) tmaxYears.push(mean(bucket.tmax))
+      if (bucket.tmin.length >= required) tminYears.push(mean(bucket.tmin))
       // Srážky se sčítají (měsíční úhrn), teploty průměrují.
-      if (enough(bucket.prcp)) prcpYears.push(bucket.prcp.reduce((a, b) => a + b, 0))
+      if (bucket.prcp.length >= required) {
+        prcpYears.push(bucket.prcp.reduce((a, b) => a + b, 0))
+      }
     }
+    // Stejný práh pro teploty i srážky — průměr z jednoho dvou let není
+    // dlouhodobá hodnota, ale náhodný výkyv.
     months.push({
       month,
-      tmax: tmaxYears.length > 0 ? round1(mean(tmaxYears)) : null,
-      tmin: tminYears.length > 0 ? round1(mean(tminYears)) : null,
-      prcp: prcpYears.length >= MIN_YEARS_FOR_PRECIPITATION ? Math.round(mean(prcpYears)) : null,
+      tmax: tmaxYears.length >= MIN_YEARS ? round1(mean(tmaxYears)) : null,
+      tmin: tminYears.length >= MIN_YEARS ? round1(mean(tminYears)) : null,
+      prcp: prcpYears.length >= MIN_YEARS ? Math.round(mean(prcpYears)) : null,
     })
   }
 
@@ -213,6 +227,17 @@ type DrizzleLike = DrizzleTx & {
   transaction: <T>(fn: (tx: DrizzleTx) => Promise<T>) => Promise<T>
 }
 
+/**
+ * Souběžný běh se odmítá HNED, ještě před prvním dotazem na Meteostat —
+ * jinak by dva překrývající se běhy (ruční curl přes běžící cron) společně
+ * spálily měsíční kvótu a teprve na konci by jeden dostal 409 u zápisu.
+ * Postgresový advisory lock by tuhle roli plnit nemohl: `pg_try_advisory_lock`
+ * platí pro spojení, a Payload sahá do poolu, takže další dotaz může přijít
+ * po jiném spojení. Web běží v jednom kontejneru, takže procesní pojistka
+ * stačí; zápis navíc chrání transakční advisory lock níž (obojí se doplňuje).
+ */
+let syncInFlight = false
+
 export const syncClimateNormalsEndpoint: Endpoint = {
   path: '/sync-climate-normals',
   method: 'post',
@@ -226,8 +251,31 @@ export const syncClimateNormalsEndpoint: Endpoint = {
     if (!isAdmin && (!secret || !providedSecret || !safeEqual(providedSecret, secret))) {
       throw new APIError('Forbidden', 403)
     }
-    const dryRun = new URL(req.url ?? '', 'http://localhost').searchParams.get('dryRun') === '1'
+    const url = new URL(req.url ?? '', 'http://localhost')
+    const dryRun = url.searchParams.get('dryRun') === '1'
 
+    // Bez dotazů na Meteostat (dryRun jen počítá) se souběh hlídat nemusí.
+    if (!dryRun) {
+      if (syncInFlight) {
+        throw new APIError('Sync už běží (souběžný požadavek) — zkus to za chvíli znovu', 409)
+      }
+      syncInFlight = true
+    }
+    try {
+      return await runSync(req, url, dryRun)
+    } finally {
+      if (!dryRun) syncInFlight = false
+    }
+  },
+}
+
+/** Vlastní práce syncu — oddělené kvůli pojistce proti souběhu výš. */
+async function runSync(
+  req: Parameters<Extract<Endpoint['handler'], (...args: never[]) => unknown>>[0],
+  url: URL,
+  dryRun: boolean,
+): Promise<Response> {
+  {
     // Jen publikované stránky počasí — overrideAccess: true obchází přístupová
     // práva (a s nimi filtr draftů), proto se _status hlídá explicitně.
     const pagesRes = await req.payload.find({
@@ -273,7 +321,6 @@ export const syncClimateNormalsEndpoint: Endpoint = {
     // obslouží nejvýš MAX_PLACES_PER_RUN míst — s přibývajícími destinacemi
     // se práce rozloží do několika běhů místo aby narazila na kvótu.
     const now = new Date()
-    const url = new URL(req.url ?? '', 'http://localhost')
     const maxPlaces = Math.max(
       1,
       Number.parseInt(url.searchParams.get('maxPlaces') ?? '', 10) || MAX_PLACES_PER_RUN,
@@ -382,5 +429,5 @@ export const syncClimateNormalsEndpoint: Endpoint = {
       skipped,
       errors,
     })
-  },
+  }
 }

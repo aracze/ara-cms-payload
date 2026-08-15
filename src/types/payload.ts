@@ -71,8 +71,8 @@ export interface AffiliateDeals {
 }
 
 /**
- * Klimatické normály — dlouhodobé měsíční průměry počasí pro stránky kategorie
- * „Počasí" (sekce „Průměrné měsíční teploty a srážky"). Tvar JSON pole
+ * Dlouhodobé měsíční průměry počasí pro stránky kategorie „Počasí" (sekce
+ * „Nejlepší doba na cestu…") — klouzavé okno posledních 20 let. Tvar JSON pole
  * `climateNormals` na stránce; plní ho sync /api/sync-climate-normals
  * (viz src/endpoints/syncClimateNormals.ts) z Meteostat API. Čte se přes
  * type-guard `parseClimateNormals` (climate-section.tsx) — JSON pole nemá
@@ -91,7 +91,11 @@ export interface ClimateNormalMonth {
 
 export interface ClimateNormals {
   months: ClimateNormalMonth[]
-  /** Referenční období normálů (typicky 1991–2020). */
+  /**
+   * Roky, ze kterých se průměry počítají — klouzavé okno posledních 20
+   * ukončených let (např. 2006–2025), ne pevné normály WMO. Posouvá se
+   * s každým ročním syncem, viz src/endpoints/syncClimateNormals.ts.
+   */
   period?: { start: number; end: number } | null
   /** ISO timestamp posledního úspěšného syncu. */
   updatedAt?: string

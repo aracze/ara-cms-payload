@@ -6,8 +6,9 @@ import type { ClimateNormalMonth, ClimateNormals } from '@/types/payload'
  * sloupce podle vhodnosti návštěvy (design z maket, kolo 3). Data plní měsíční
  * sync /api/sync-climate-normals z Meteostatu (viz syncClimateNormals.ts).
  *
- * DOČASNĚ se kreslí OBĚ varianty pod sebou (A bez srážek ve sloupci, D s tenkým
- * modrým sloupcem srážek) — uživatel vybere naživo a druhá se smaže.
+ * Srážky jsou u čísla pod měsícem ještě jako tenký proužek s vlastním měřítkem
+ * (nejdeštivější měsíc = plný proužek), aby se daly porovnat okem, ale
+ * nesoupeřily s barvou vhodnosti.
  *
  * Server komponenta bez klientského JS; tooltipy řeší CSS hover (Tailwind
  * `group`), pro čtečky je pod grafem plnohodnotná tabulka.
@@ -41,6 +42,9 @@ export function parseClimateNormals(value: unknown): ClimateNormals | null {
     })
   }
   months.sort((a, b) => a.month - b.month)
+  // Každý měsíc PRÁVĚ JEDNOU — samotná délka 12 by propustila i data, kde je
+  // březen dvakrát a květen chybí; graf by pak tiše kreslil špatné pořadí.
+  if (months.some((m, i) => m.month !== i + 1)) return null
   // Graf potřebuje kompletní teploty (sync to garantuje, guard jistí).
   if (months.some((m) => m.tmin === null || m.tmax === null)) return null
 
