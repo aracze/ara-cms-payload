@@ -3,7 +3,7 @@ import { ReviewPublic } from '@/types/payload'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
 import { getCurrentUser } from '@/lib/auth'
 import { LoginHint, SignedAsRow } from '@/components/features/auth/signed-as'
-import { AdSenseScript, ArticleAd } from '@/components/features/article-ad'
+import { ArticleAd } from '@/components/features/article-ad'
 import { ReviewItem } from './review-item'
 import { ReviewRatingBox } from './review-rating-box'
 
@@ -63,7 +63,6 @@ export async function ReviewsSection({
           </div>
 
           <aside className="hidden w-[340px] shrink-0 lg:block">
-            <AdSenseScript />
             <ArticleAd
               variant={reviews.length < 2 ? 'box' : 'primary'}
               className="mt-10 lg:sticky lg:top-5"

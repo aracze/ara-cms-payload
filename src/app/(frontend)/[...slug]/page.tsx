@@ -1,6 +1,6 @@
 import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
-import { AdSenseScript, LeaderboardAd } from '@/components/features/article-ad'
+import { LeaderboardAd } from '@/components/features/article-ad'
 import {
   fetchPageByFullSlug,
   fetchPageLightByFullSlug,
@@ -136,7 +136,6 @@ export default async function PageRoute({ params }: Props) {
 function BottomAdStrip() {
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pb-12 pt-4">
-      <AdSenseScript />
       <LeaderboardAd />
     </div>
   )
