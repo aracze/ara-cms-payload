@@ -27,7 +27,7 @@ const APPLY = process.argv.includes('--apply')
 const FEED = (id: string) => `https://affil.invia.cz/direct/core/tool_xml-feed/download/id/${id}/`
 
 /** fullSlug stránky → zdroje nabídek. */
-const DESTINATIONS: Record<string, { kiwi: string; inviaFeed: string | null }> = {
+const DESTINATIONS: Record<string, { kiwi: string | null; inviaFeed: string | null }> = {
   '/chorvatsko': { kiwi: 'HR', inviaFeed: FEED('4745582-6a7ee4b5774b7') },
   '/recko': { kiwi: 'GR', inviaFeed: FEED('4745582-6a7ee8a1d7579') },
   '/bulharsko': { kiwi: 'BG', inviaFeed: FEED('4745582-6a7ee8b4bdce2') },
@@ -50,6 +50,34 @@ const DESTINATIONS: Record<string, { kiwi: string; inviaFeed: string | null }> =
   '/anglie/londyn': { kiwi: 'LON', inviaFeed: FEED('4745582-6a7eeacda0eb5') },
   '/francie/pariz': { kiwi: 'PAR', inviaFeed: FEED('4745582-6a7eeae12293b') },
   '/spanelsko/barcelona': { kiwi: 'BCN', inviaFeed: FEED('4745582-6a7eeaf4d6228') },
+
+  // —— 2. kolo (15. 8. 2026): vybráno podle návštěvnosti stromu na ara.cz
+  // a OVĚŘENO stažením feedu — jen destinace, kde Invia má nabídku s odletem
+  // z Prahy. Neprošly (bez letecké nabídky, jezdí se autem/busem): Slovensko,
+  // Česká republika, Slovinsko, Bosna a Hercegovina, Makedonie.
+  // `kiwi: null` = letenka se nezobrazuje: do Vídně, Budapešti a Krakova se
+  // z Prahy létá dráž a hůř než vlakem/autem, taková „akční nabídka" by webu
+  // spíš uškodila.
+  '/albanie': { kiwi: 'AL', inviaFeed: FEED('4745582-6a7fa6f8d93bd') },
+  '/brazilie': { kiwi: 'BR', inviaFeed: FEED('4745582-6a7fa60ee97b8') },
+  '/cina': { kiwi: 'CN', inviaFeed: FEED('4745582-6a7fa653de842') },
+  '/dansko': { kiwi: 'DK', inviaFeed: FEED('4745582-6a7fa6b065a9d') },
+  '/finsko': { kiwi: 'FI', inviaFeed: FEED('4745582-6a7fa6d360e56') },
+  '/francie': { kiwi: 'FR', inviaFeed: FEED('4745582-6a7fa641e6eba') },
+  '/island': { kiwi: 'IS', inviaFeed: FEED('4745582-6a7fa67968963') },
+  '/japonsko': { kiwi: 'JP', inviaFeed: FEED('4745582-6a7fa71af298c') },
+  '/madarsko': { kiwi: null, inviaFeed: FEED('4745582-6a7fa5fdd551c') },
+  '/nemecko': { kiwi: 'DE', inviaFeed: FEED('4745582-6a7fa58887bdd') },
+  '/nizozemsko': { kiwi: 'NL', inviaFeed: FEED('4745582-6a80034908881') },
+  '/peru': { kiwi: 'PE', inviaFeed: FEED('4745582-6a7fa6309b1b9') },
+  '/polsko': { kiwi: null, inviaFeed: FEED('4745582-6a7fa57783d5d') },
+  '/portugalsko': { kiwi: 'PT', inviaFeed: FEED('4745582-6a7fa5cb0f189') },
+  '/rakousko': { kiwi: null, inviaFeed: FEED('4745582-6a7fa5ecd7a4f') },
+  '/rumunsko': { kiwi: 'RO', inviaFeed: FEED('4745582-6a7fa5aaa4c31') },
+  '/srbsko': { kiwi: 'RS', inviaFeed: FEED('4745582-6a7fa61fd2595') },
+  '/svedsko': { kiwi: 'SE', inviaFeed: FEED('4745582-6a7fa69f57efc') },
+  '/usa': { kiwi: 'US', inviaFeed: FEED('4745582-6a7fa5dbccd94') },
+  '/vietnam': { kiwi: 'VN', inviaFeed: FEED('4745582-6a7fa709d3fa1') },
 }
 
 async function main() {
@@ -105,7 +133,7 @@ async function main() {
       data: {
         affiliate: {
           ...(fresh.affiliate ?? {}),
-          kiwiIataCode: src.kiwi,
+          kiwiIataCode: src.kiwi, // null = bez karty letenky
           inviaFeedUrl: src.inviaFeed,
         },
       },
