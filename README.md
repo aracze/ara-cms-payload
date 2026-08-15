@@ -334,11 +334,17 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
   nabídku beze změny.
+- **Po nasazení změn v letenkách spusť sync ručně** (Actions → Sync affiliate
+  deals → Run workflow). Do jeho doběhnutí drží databáze starší záznamy;
+  letenka bez počtu nocí pochází z doby jednosměrného hledání a karta se
+  proto vůbec nevykreslí — radši nic než cena, která by pod popiskem
+  „zpáteční" lhala. Zájezdů se to netýká.
 - Letenky jsou **zpáteční**, ne jednosměrné: cena je to, co člověk opravdu
   zaplatí, sedí k ceně zájezdu na vedlejší kartě a provize se počítá
   z rezervace (jednosměrná cena láká na klik, ale po zjištění celkové ceny
-  odrazuje). Délka pobytu 3–14 nocí, u dálek (`LONG_HAUL` v endpointu:
-  US, BR, PE, CN, JP, VN, LK, TH, CV) 7–21 nocí. Karta délku ukazuje
+  odrazuje). Délka pobytu 3–14 nocí, u dálkových destinací 7–21 nocí
+  (dálková = leží mimo Evropu, pozná se z prvního drobečku stránky — ne ze
+  seznamu kódů, protože pole přijímá i kódy měst). Karta délku ukazuje
   („zpáteční · odlet 12. 11. 2026 · 7 nocí · Kiwi.com").
 - Kiwi kvóty: 30 dotazů/min a **look-to-book ratio 1 rezervace / 5000
   dotazů** (jinak hrozí vypnutí účtu) — proto rozestupy mezi dotazy a jen

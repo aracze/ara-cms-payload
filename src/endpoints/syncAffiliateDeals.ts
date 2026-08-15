@@ -47,10 +47,19 @@ function kiwiDate(d: Date): string {
 }
 
 /**
- * Dálkové destinace — na tři noci tam nikdo neletí, takže mají delší okno
- * pobytu. Kódy odpovídají hodnotám `Kiwi Fly To` v adminu.
+ * Dálková destinace = leží mimo Evropu. Bere se z PRVNÍHO drobečku stránky
+ * (kontinent, např. `/asie`), ne ze seznamu kódů: pole `Kiwi Fly To` přijímá
+ * kódy zemí i měst (LON, PAR, BCN) a proti seznamu kódů by se dálkové MĚSTO
+ * (BKK, NYC) tiše vyhodnotilo jako blízké a dostalo okno na tři noci.
  */
-const LONG_HAUL = new Set(['US', 'BR', 'PE', 'CN', 'JP', 'VN', 'LK', 'TH', 'CV'])
+const EUROPE_CRUMB = '/evropa'
+
+function isLongHaul(page: DealPage): boolean {
+  const continent = page.breadcrumbs?.[0]?.url?.trim().toLowerCase()
+  // Bez drobečků radši kratší okno — širší by u evropské destinace vypadlo
+  // jako „nejlevnější letenka na tři týdny", což nedává smysl.
+  return Boolean(continent) && continent !== EUROPE_CRUMB
+}
 
 /**
  * Nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace v okně dnes až +6 měsíců,
@@ -59,14 +68,13 @@ const LONG_HAUL = new Set(['US', 'BR', 'PE', 'CN', 'JP', 'VN', 'LK', 'TH', 'CV']
  * z rezervace — jednosměrná cena láká na klik, ale po zjištění celkové ceny
  * odrazuje (rozhodnutí uživatele 15. 8. 2026).
  */
-async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
+async function fetchKiwiDeal(iataCode: string, longHaul: boolean): Promise<AffiliateDealKiwi> {
   const apiKey = process.env.KIWI_TEQUILA_API_KEY
   if (!apiKey) throw new Error('KIWI_TEQUILA_API_KEY není nastaveno')
 
   const now = new Date()
   const to = new Date(now)
   to.setMonth(to.getMonth() + 6)
-  const longHaul = LONG_HAUL.has(iataCode.trim().toUpperCase())
   const params = new URLSearchParams({
     fly_from: 'PRG',
     fly_to: iataCode,
@@ -104,9 +112,10 @@ async function fetchKiwiDeal(iataCode: string): Promise<AffiliateDealKiwi> {
     price: Math.round(cheapest.price!),
     deepLink: cheapest.deep_link!,
     departureDate: (cheapest.local_departure ?? '').slice(0, 10),
+    // Celé noci: zlomek by se vykreslil jako „3.5 nocí".
     nights:
-      typeof cheapest.nightsInDest === 'number' && cheapest.nightsInDest > 0
-        ? cheapest.nightsInDest
+      Number.isInteger(cheapest.nightsInDest) && (cheapest.nightsInDest as number) > 0
+        ? (cheapest.nightsInDest as number)
         : null,
   }
 }
@@ -191,6 +200,8 @@ async function fetchInviaDeal(feedUrl: string): Promise<AffiliateDealInvia | nul
 type DealPage = {
   id: number
   fullSlug?: string | null
+  /** Řetěz předků; první položka je kontinent — viz isLongHaul. */
+  breadcrumbs?: { url?: string | null }[] | null
   affiliate?: {
     kiwiIataCode?: string | null
     inviaFeedUrl?: string | null
@@ -260,7 +271,7 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       depth: 0,
       limit: 0,
       pagination: false,
-      select: { fullSlug: true, affiliate: true },
+      select: { fullSlug: true, affiliate: true, breadcrumbs: true },
       joins: false,
     })
     const pages = (pagesRes.docs as unknown as DealPage[]).filter(
@@ -322,7 +333,7 @@ async function collectDeals(pages: DealPage[]): Promise<{
     const iata = page.affiliate?.kiwiIataCode?.trim()
     if (iata) {
       try {
-        deals.kiwi = await fetchKiwiDeal(iata)
+        deals.kiwi = await fetchKiwiDeal(iata, isLongHaul(page))
       } catch (err) {
         deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
         errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)

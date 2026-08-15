@@ -40,7 +40,11 @@ export function parseAffiliateDeals(raw: unknown): AffiliateDeals | null {
     typeof value.kiwi.price === 'number' &&
     value.kiwi.price > 0 &&
     typeof value.kiwi.deepLink === 'string' &&
-    value.kiwi.deepLink.startsWith('https://')
+    value.kiwi.deepLink.startsWith('https://') &&
+    // Bez počtu nocí jde o záznam z doby jednosměrného hledání — karta dnes
+    // slibuje zpáteční cestu, tak se radši nezobrazí a počká na sync.
+    Number.isInteger(value.kiwi.nights) &&
+    (value.kiwi.nights as number) > 0
   const inviaValid =
     value.invia != null &&
     typeof value.invia === 'object' &&
@@ -58,10 +62,7 @@ export function parseAffiliateDeals(raw: unknown): AffiliateDeals | null {
           price: value.kiwi!.price,
           deepLink: value.kiwi!.deepLink,
           departureDate: str(value.kiwi!.departureDate) ?? '',
-          nights:
-            typeof value.kiwi!.nights === 'number' && value.kiwi!.nights > 0
-              ? value.kiwi!.nights
-              : null,
+          nights: value.kiwi!.nights!,
         }
       : null,
     invia: inviaValid
