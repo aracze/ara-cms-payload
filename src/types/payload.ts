@@ -40,12 +40,14 @@ export interface Homepage {
  * nemá v generovaných typech tvar.
  */
 export interface AffiliateDealKiwi {
-  /** Cena v CZK (Kiwi Search API s curr=CZK). */
+  /** Cena ZPÁTEČNÍ letenky v CZK (Kiwi Search API s curr=CZK). */
   price: number
   /** Odkaz s provizí (affilid) na kiwi.com. */
   deepLink: string
   /** Datum odletu ve formátu ISO (YYYY-MM-DD). */
   departureDate: string
+  /** Počet nocí v destinaci; null = Kiwi hodnotu nevrátil. */
+  nights: number | null
 }
 
 export interface AffiliateDealInvia {

@@ -9,7 +9,7 @@ import { richTextToHtml } from '@/lib/rich-text-html'
 import { websiteHref, websiteLabel } from '@/lib/utils'
 import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
 import { PageContributor } from './page-contributor'
-import { ArticleAd, AdSenseScript } from '@/components/features/article-ad'
+import { ArticleAd } from '@/components/features/article-ad'
 import { TocSidebar } from '@/components/features/toc-sidebar'
 
 /** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
@@ -501,7 +501,6 @@ export const MainContent = ({
           {showTableOfContents && (
             <TocSidebar items={headings} practicalInfo={isPracticalInfo}>
               <div className={headings.length > 0 ? 'mt-12' : ''}>
-                <AdSenseScript />
                 <ArticleAd variant="primary" />
               </div>
             </TocSidebar>

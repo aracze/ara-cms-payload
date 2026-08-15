@@ -6,9 +6,16 @@ import Script from 'next/script'
  * JAK TO SPOLU DRŽÍ:
  * Souhlas nesbíráme vlastní lištou — obstarává ji Google Funding Choices,
  * nastavená v AdSense konzoli, která se na stránku dostane spolu s AdSense
- * tagem (`AdSenseScript`). V AdSense je zapnutý „režim souhlasu", takže Google
- * signál z té lišty předá i Analytics. Vlastní cookie lišta by byla druhá
- * lišta o tomtéž.
+ * tagem. V AdSense je zapnutý „režim souhlasu", takže Google signál z té lišty
+ * předá i Analytics. Vlastní cookie lišta by byla druhá lišta o tomtéž.
+ *
+ * KDY SE LIŠTA OBJEVÍ: AdSense tag se od srpna 2026 načítá až ve chvíli, kdy se
+ * čtenář blíží ke konkrétní reklamě (viz `useLazyAd` v `article-ad.tsx`) —
+ * jeho skripty totiž zabíraly hlavní vlákno na stovky milisekund a kazily
+ * odezvu na ťuknutí (INP). Lišta souhlasu tedy přijde spolu s reklamou, ne
+ * hned. Je to záměr: dokud se reklama nenačte, neuloží se do prohlížeče nic,
+ * na co by byl souhlas potřeba. Důsledek pro měření je popsaný níže —
+ * u návštěvníka, který se k reklamě nedostane, zůstane souhlas zamítnutý.
  *
  * POŘADÍ JE TU PODSTATNÉ. Výchozí stav souhlasu musí být na stránce dřív než
  * jakákoli značka Google, jinak by se první měření odeslalo, než se stihne

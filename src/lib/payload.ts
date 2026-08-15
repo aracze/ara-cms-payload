@@ -1319,6 +1319,8 @@ export type TopAffiliateDeal = {
   price: number
   /** Letenka: ISO datum odletu. */
   departureDate?: string | null
+  /** Letenka: počet nocí v destinaci (zpáteční hledání). */
+  nights?: number | null
   /** Zájezd: hotel + délka. */
   hotel?: string | null
   days?: number | null
@@ -1382,12 +1384,23 @@ async function fetchTopAffiliateDealsUncached(
   }
 
   type Candidate = TopAffiliateDeal & { specificity: number }
+  // Letenka bez počtu nocí = záznam z doby, kdy sync hledal jednosměrné lety.
+  // Takový se NEZOBRAZUJE: popisek i ikona dnes slibují zpáteční cestu, takže
+  // by stará cena lhala. Po nejbližším syncu se karta sama vrátí.
+  const isRoundTrip = (d: { nights?: number | null }) =>
+    Number.isInteger(d.nights) && (d.nights as number) > 0
+
   const flightsByLink = new Map<string, Candidate>()
   const toursByLink = new Map<string, Candidate>()
 
   for (const page of enriched) {
     const deals = (page.affiliate?.deals ?? null) as {
-      kiwi?: { price: number; deepLink: string; departureDate?: string } | null
+      kiwi?: {
+        price: number
+        deepLink: string
+        departureDate?: string
+        nights?: number | null
+      } | null
       invia?: {
         price: number
         deepLink: string
@@ -1398,7 +1411,7 @@ async function fetchTopAffiliateDealsUncached(
     } | null
     const specificity = page.fullSlug.split('/').length
 
-    if (isValidDeal(deals?.kiwi)) {
+    if (isValidDeal(deals?.kiwi) && isRoundTrip(deals!.kiwi!)) {
       const kiwi = deals!.kiwi!
       const existing = flightsByLink.get(kiwi.deepLink)
       if (!existing || existing.specificity < specificity) {
@@ -1407,6 +1420,8 @@ async function fetchTopAffiliateDealsUncached(
           deepLink: kiwi.deepLink,
           price: kiwi.price,
           departureDate: kiwi.departureDate ?? null,
+          nights:
+            Number.isInteger(kiwi.nights) && (kiwi.nights as number) > 0 ? kiwi.nights! : null,
           imageUrl: placeImageOf(page),
           specificity,
         })

@@ -27,43 +27,113 @@ const AD_VARIANTS = {
   },
 } as const
 
+const SCRIPT_ID = 'adsbygoogle-js'
+
 /**
- * AdSense loader script. Render exactly ONCE per page (the article layout renders
- * several `ArticleAd` boxes, but the loader must be injected only once).
+ * Vloží AdSense tag do stránky. Idempotentní — volá se z každého reklamního
+ * boxu, ale skript se přidá jen jednou.
  *
- * Injected manually rather than via `next/script`: `next/script` stamps a
- * `data-nscript` attribute onto the tag, which AdSense rejects with a console
- * warning ("AdSense head tag doesn't support data-nscript attribute"). A plain
- * `<script async crossorigin>` matches Google's official snippet exactly. We inject
- * during idle time after the page is interactive to preserve the original
- * `strategy="lazyOnload"` behaviour (never render-blocking), and guard by element
- * id so it loads a single time.
+ * Vkládáme ho ručně, ne přes `next/script`: ten na tag razítkuje atribut
+ * `data-nscript`, který AdSense odmítá varováním v konzoli. Prosté
+ * `<script async crossorigin>` přesně odpovídá oficiálnímu úryvku od Googlu.
  */
-export function AdSenseScript() {
+function ensureAdSenseScript() {
+  if (document.getElementById(SCRIPT_ID)) return
+  const script = document.createElement('script')
+  script.id = SCRIPT_ID
+  script.async = true
+  script.crossOrigin = 'anonymous'
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`
+  document.head.appendChild(script)
+}
+
+/**
+ * Načte AdSense a vyžádá inzerát, teprve až se box blíží k obrazovce.
+ *
+ * PROČ: skript Googlu je zdaleka nejtěžší věc na stránce — sám o sobě zabere
+ * hlavní vlákno na stovky milisekund a kazí tím INP (odezvu na ťuknutí), což
+ * hlásí i Search Console. Dřív se vkládal hned po načtení stránky, tedy přesně
+ * v okamžiku, kdy člověk začíná klikat.
+ *
+ * Jedno pravidlo stačí na všechna zařízení: na desktopu jsou postranní reklamy
+ * hned vedle textu, takže se načtou prakticky okamžitě jako dřív; na mobilu je
+ * jediná reklama až pod obsahem, takže se načte, až k ní čtenář dojede — nebo
+ * vůbec, pokud tak daleko nedoroluje.
+ *
+ * Skryté boxy (`hidden lg:block` u postranních reklam) se přeskočí: prvek
+ * s `display: none` nemá plochu, takže o inzerát vůbec nežádáme.
+ *
+ * PROČ NE IntersectionObserver: postranní reklamy sedí v lepivém sloupci
+ * s vlastním posuvníkem, který se pozorovateli počítá jako ořezávající předek.
+ * Reklama odrolovaná uvnitř toho sloupce se pak s obrazovkou „neprotíná", i když
+ * na stránce leží pár set pixelů pod okrajem — a na desktopu se tak nenačetla
+ * vůbec (chyba nasazená v #68). Vzdálenost proto počítáme přímo z
+ * `getBoundingClientRect()`, kterou ořezání předků neovlivňuje.
+ *
+ * Pozor na souvislost: lištu souhlasu (Funding Choices) stahuje právě AdSense
+ * tag, takže se objeví až spolu s reklamou. To je záměr — bez reklamy se do
+ * prohlížeče nic neukládá, takže není nač se ptát. Viz `analytics.tsx`.
+ */
+function useLazyAd(ref: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const SCRIPT_ID = 'adsbygoogle-js'
-    if (document.getElementById(SCRIPT_ID)) return
+    const box = ref.current
+    if (!box) return
 
-    const inject = () => {
-      if (document.getElementById(SCRIPT_ID)) return
-      const script = document.createElement('script')
-      script.id = SCRIPT_ID
-      script.async = true
-      script.crossOrigin = 'anonymous'
-      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`
-      document.head.appendChild(script)
+    let done = false
+    let naplanovano = 0
+
+    const load = () => {
+      done = true
+      ensureAdSenseScript()
+      try {
+        const w = window as unknown as { adsbygoogle?: unknown[] }
+        ;(w.adsbygoogle = w.adsbygoogle || []).push({})
+      } catch {
+        // AdSense nedostupný (např. blokovaný) — zůstane prázdný box.
+      }
     }
 
-    // Load lazily, during browser idle time (mirrors next/script's `lazyOnload`).
-    if (typeof window.requestIdleCallback === 'function') {
-      const handle = window.requestIdleCallback(inject)
-      return () => window.cancelIdleCallback?.(handle)
+    const prestat = () => {
+      if (naplanovano) cancelAnimationFrame(naplanovano)
+      naplanovano = 0
+      document.removeEventListener('scroll', naplanovat, true)
+      window.removeEventListener('resize', naplanovat)
     }
-    const timeout = window.setTimeout(inject, 1)
-    return () => window.clearTimeout(timeout)
-  }, [])
 
-  return null
+    const zkusit = () => {
+      naplanovano = 0
+      if (done) return
+      // Skrytý box (mobil: postranní reklama v `hidden lg:block`) nemá plochu.
+      if (!box.offsetWidth && !box.offsetHeight) return
+      const r = box.getBoundingClientRect()
+      // Jedna obrazovka rezervy, ať je inzerát vykreslený dřív, než na něj
+      // čtenář dojede (Google lazy-loading sám doporučuje). Schválně se neptáme,
+      // jestli box není naopak NAD výřezem: skok na kotvu (odkaz na recenze,
+      // obsah stránky) i obnovená poloha po návratu zpět ho jinak přeskočí
+      // a inzerát by se nenačetl, ani kdyby se k němu čtenář vrátil.
+      if (r.top < window.innerHeight * 2) {
+        prestat()
+        load()
+      }
+    }
+
+    // Měřit nejvýš jednou za překreslení — posluchač scrollu jinak běží při
+    // každém pohnutí prstem.
+    const naplanovat = () => {
+      if (!naplanovano && !done) naplanovano = requestAnimationFrame(zkusit)
+    }
+
+    zkusit()
+    if (!done) {
+      // Zachytávací fáze na document: rolování NEBUBLÁ, takže posluchač na
+      // `window` by minul pohyb uvnitř lepivého sloupce s vlastním posuvníkem —
+      // a právě v něm postranní reklamy sedí (ověřeno: window 0 událostí,
+      // document v zachytávací fázi 1).
+      document.addEventListener('scroll', naplanovat, { capture: true, passive: true })
+      window.addEventListener('resize', naplanovat)
+    }
+    return prestat
+  }, [ref])
 }
 
 // "Leaderboard responsive" – spodní pruh přes šířku obsahu (legacy bottomAds)
@@ -72,25 +142,15 @@ const LEADERBOARD_SLOT = process.env.NEXT_PUBLIC_ADSENSE_LEADERBOARD_SLOT || '11
 /**
  * Responzivní reklamní pruh na spodku stránek (legacy `bottomAds` / slot
  * „Leaderboard responsive"). Výšku si určuje AdSense podle šířky; min-height
- * drží místo, ať se stránka neposkakuje. Vyžaduje `<AdSenseScript />`
- * vykreslený jednou kdekoliv na stránce.
+ * drží místo, ať se stránka neposkakuje. Inzerát si vyžádá sám, až se blíží
+ * k obrazovce (viz `useLazyAd`).
  */
 export function LeaderboardAd({ className = '' }: { className?: string }) {
-  const pushedRef = useRef(false)
-
-  useEffect(() => {
-    if (pushedRef.current) return
-    pushedRef.current = true
-    try {
-      const w = window as unknown as { adsbygoogle?: unknown[] }
-      ;(w.adsbygoogle = w.adsbygoogle || []).push({})
-    } catch {
-      // AdSense nedostupný (např. blokovaný) — zůstane prázdný box.
-    }
-  }, [])
+  const boxRef = useRef<HTMLDivElement>(null)
+  useLazyAd(boxRef)
 
   return (
-    <div className={`min-h-[120px] ${className}`}>
+    <div ref={boxRef} className={`min-h-[120px] ${className}`}>
       <ins
         className="adsbygoogle block"
         style={{ display: 'block' }}
@@ -107,7 +167,10 @@ export function LeaderboardAd({ className = '' }: { className?: string }) {
  * Sticky side advertisement shown next to the article body.
  * Visuals mirror the legacy `.ad-article-along` box (light gray, rounded, sticky);
  * the ad creative itself rotates via AdSense.
- * Requires `<AdSenseScript />` to be rendered once elsewhere on the page.
+ *
+ * Na mobilu bývá tenhle box v `<aside class="hidden lg:block">` — skrytý prvek
+ * nemá plochu, takže se s obrazovkou nikdy neprotne a inzerát se pro něj vůbec
+ * nevyžádá (viz `useLazyAd`).
  */
 export function ArticleAd({
   variant = 'primary',
@@ -117,22 +180,11 @@ export function ArticleAd({
   className?: string
 }) {
   const { slot, width, height } = AD_VARIANTS[variant]
-  const pushedRef = useRef(false)
-
-  useEffect(() => {
-    // Guard against React Strict Mode double-invocation (would log a duplicate-ad warning).
-    if (pushedRef.current) return
-    pushedRef.current = true
-    try {
-      const w = window as unknown as { adsbygoogle?: unknown[] }
-      ;(w.adsbygoogle = w.adsbygoogle || []).push({})
-    } catch {
-      // AdSense not available (e.g. blocked) — leave the empty placeholder box.
-    }
-  }, [])
+  const boxRef = useRef<HTMLDivElement>(null)
+  useLazyAd(boxRef)
 
   return (
-    <div className={`rounded-[15px] bg-[#f6f6f6] p-5 ${className}`}>
+    <div ref={boxRef} className={`rounded-[15px] bg-[#f6f6f6] p-5 ${className}`}>
       <ins
         className="adsbygoogle mx-auto block"
         style={{ display: 'block', width, height }}
