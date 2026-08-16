@@ -89,21 +89,25 @@ export function LocalTime({
           <>
             <span className={`${microClass} h-[15px]`} />
             <span className="text-[26px] leading-none">&nbsp;</span>
-            <span className={`${microClass} h-[15px]`} />
           </>
         )}
       </div>
     )
   }
 
+  // Sloupcový režim: nahoře popisek, dole hodnota se svou příponou. Posun
+  // zůstává VEDLE času, ne pod ním — upřesňuje ho, takže patří k němu na řádek
+  // (a sloupec s počasím vedle má pak tutéž stavbu: stav / teplota s ikonou).
   if (stacked) {
     return (
       <div className={wrapper}>
         <span className={`${microClass} flex h-[15px] items-center`}>{data.day}</span>
-        <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
-          {data.time}
+        <span className="flex items-center justify-center gap-1.5">
+          <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
+            {data.time}
+          </span>
+          {data.offset && <span className={microClass}>{data.offset}</span>}
         </span>
-        <span className={`${microClass} flex h-[15px] items-center`}>{data.offset}</span>
       </div>
     )
   }

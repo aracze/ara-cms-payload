@@ -24,10 +24,10 @@ export interface PanelWeatherData {
 }
 
 /**
- * Sloupec počasí v panelu: značka nahoře, hodnota uprostřed, upřesnění dole —
- * stejný tvar jako sloupec s časem vedle (den / čas / posun). Ikona je proto
- * NAHOŘE a slovo dole: naproti údaji „+0h" tak stojí text, ne ozdoba, a ikona
- * neopakuje to, co je hned pod ní.
+ * Sloupec počasí v panelu: nahoře popisek stavu, dole teplota se svou ikonou.
+ * Přesně tatáž stavba jako sloupec s časem vedle (den / čas s posunem), takže
+ * oba mají dva řádky a nikde nezbývá prázdné ani vycpané místo. Ikona stojí
+ * u teploty jako přípona — stejně jako „+0h" u času.
  */
 function PanelWeather({ weather }: { weather: PanelWeatherData }) {
   return (
@@ -35,14 +35,19 @@ function PanelWeather({ weather }: { weather: PanelWeatherData }) {
       href={weather.href}
       className="flex flex-col items-center gap-1.5 px-1.5 hover:no-underline"
     >
-      <span className="flex h-[15px] items-center justify-center">
-        <WeatherIcon icon={weather.icon} className="h-[15px] w-[15px] text-[#667085]" />
-      </span>
-      <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
-        {weather.temp} °C
-      </span>
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
+      <span className="flex h-[15px] items-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
         {weather.condition}
+      </span>
+      <span className="flex items-center justify-center gap-1.5">
+        <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
+          {weather.temp} °C
+        </span>
+        {/* O pixel níž: se `items-center` sedí ikona na středu řádkového boxu,
+            což je nad optickým středem číslic. */}
+        <WeatherIcon
+          icon={weather.icon}
+          className="h-[15px] w-[15px] shrink-0 translate-y-px text-[#667085]"
+        />
       </span>
     </Link>
   )
