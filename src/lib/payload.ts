@@ -1476,6 +1476,116 @@ export const fetchTopAffiliateDeals = cache(
 )
 
 // ————————————————————————————————————————————————————————————————
+// Přehled počasí podřazených míst (stránka počasí u země / ostrova)
+// ————————————————————————————————————————————————————————————————
+
+/** Jedno místo v přehledu počasí — vše, co karta potřebuje vykreslit. */
+export type WeatherOverviewPlace = {
+  title: string
+  /** Adresa stránky POČASÍ toho místa (cíl prokliku karty). */
+  weatherFullSlug: string
+  imageUrl: string | null
+  lat: number
+  lng: number
+}
+
+/**
+ * Místa pod danou zemí (ostrovem, regionem), která mají vlastní stránku počasí.
+ *
+ * Stránka počasí u země nesmí ukazovat „vlastní" počasí: souřadnice země jsou
+ * její geometrický střed, takže Chorvatsko hlásilo 26 °C z lesů u Plitvic,
+ * zatímco Dubrovník, Split i Záhřeb měly 30 °C. Místo toho se vypíšou karty
+ * podřazených míst — stejné chování jako starý web (`generateWeatherOverview`).
+ */
+async function fetchWeatherOverviewPlacesUncached(
+  parentPlaceId: number,
+): Promise<WeatherOverviewPlace[]> {
+  const payload = await getDb()
+
+  // 1) místa přímo pod zemí (Dubrovník, Split, Záhřeb)
+  const placesRes = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { parent: { equals: parentPlaceId } },
+        { category: { equals: PageCategory.Misto_k_navstiveni } },
+      ],
+    },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    select: { title: true, detail: true, featuredImage: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    id: number
+    title: string
+    detail?: { latitude?: string | null; longitude?: string | null } | null
+    featuredImage?: { image?: unknown } | null
+  }>
+  const places = placesRes.docs ?? []
+  if (places.length === 0) return []
+
+  // 2) jejich stránky počasí (jen ta místa, která ji mají)
+  const weatherRes = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { parent: { in: places.map((p) => p.id) } },
+        { category: { equals: PageCategory.Pocasi } },
+      ],
+    },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    select: { fullSlug: true, parent: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    fullSlug: string
+    parent?: number | { id: number } | null
+  }>
+  const weatherByPlaceId = new Map<number, string>()
+  for (const doc of weatherRes.docs ?? []) {
+    const parentId = typeof doc.parent === 'object' ? doc.parent?.id : doc.parent
+    if (typeof parentId === 'number' && doc.fullSlug) weatherByPlaceId.set(parentId, doc.fullSlug)
+  }
+
+  const withWeather = places.filter((p) => weatherByPlaceId.has(p.id))
+  // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
+  const enriched = await enrichFeaturedImages(withWeather)
+
+  return enriched
+    .map((place) => {
+      const lat = Number.parseFloat(place.detail?.latitude ?? '')
+      const lng = Number.parseFloat(place.detail?.longitude ?? '')
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+      const imageUrl = (place.featuredImage?.image as { url?: string } | null | undefined)?.url
+      return {
+        title: place.title,
+        weatherFullSlug: weatherByPlaceId.get(place.id)!,
+        imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+        lat,
+        lng,
+      }
+    })
+    .filter((p): p is WeatherOverviewPlace => p !== null)
+    .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
+}
+
+const fetchWeatherOverviewPlacesCached = cached(
+  fetchWeatherOverviewPlacesUncached,
+  'weather-overview-places',
+  () => ['pages'],
+)
+
+/** Místa s počasím pod danou zemí — pro přehled na její stránce počasí. */
+export const fetchWeatherOverviewPlaces = cache(
+  (parentPlaceId: number): Promise<WeatherOverviewPlace[]> =>
+    fetchWeatherOverviewPlacesCached(parentPlaceId),
+)
+
+// ————————————————————————————————————————————————————————————————
 // Veřejný profil uživatele (/profil/<username>)
 // ————————————————————————————————————————————————————————————————
 

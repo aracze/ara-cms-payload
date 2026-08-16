@@ -13,10 +13,12 @@ import type { ClimateNormalMonth, ClimateNormals } from '@/types/payload'
  * Server komponenta bez klientského JS; tooltipy řeší CSS hover (Tailwind
  * `group`), pro čtečky je pod grafem plnohodnotná tabulka.
  *
- * Barvy vhodnosti jsou statusové (ordinální škála, ne kategorická série) —
- * validátorem palety prošla CVD separace sousedů; identita nikdy nestojí jen
- * na barvě (emoji, čísla, legenda, popisek v bublině, tabulka). Modrý sloupec
- * srážek #2f6db3 má bílý lem, ať je čitelný na každém podkladu.
+ * Barvy jsou ordinální škála ve dvou dvojicích (viz SUITABILITY_COLOR), ne
+ * kategorická série. Identita nikdy nestojí jen na barvě — nese ji emoji,
+ * čísla, legenda, popisek v bublině i tabulka pro čtečky. Graf vědomě NEŘÍKÁ,
+ * proč je měsíc slabý: dřívější popisky Chladno/Deštivo/Vedro hádaly příčinu
+ * a u tropů hádaly špatně (kombinace horko + monzun se hlásila jako „Vedro“,
+ * i když srážel déšť). Příčinu si čtenář přečte z čísel pod sloupcem.
  */
 
 /** Type-guard surového JSON pole `climateNormals` — tvar viz ClimateNormals. */
@@ -88,43 +90,57 @@ const MONTH_FULL = [
 
 type Suitability = 'ideal' | 'good' | 'mid' | 'poor'
 
+/**
+ * Škála jsou DVĚ DVOJICE, ne čtyři nezávislé kategorie: zelená = sezóna,
+ * šedomodrá = mimo ni, a uvnitř každé dvojice je tmavší odstín ten lepší.
+ * Barva tak nese dvě informace najednou (odstín = sezóna, světlost = míra)
+ * a světlost přitom plynule stoupá přes celou škálu.
+ *
+ * Stejné hodnoty používá i sezónní pruh v textu stránky (`.seasonality-month`
+ * v globals.css) — pruh bere první, druhý a čtvrtý stupeň. Při změně barev
+ * je proto nutné upravit obě místa.
+ */
 const SUITABILITY_COLOR: Record<Suitability, string> = {
-  ideal: '#1e7d5f',
-  good: '#82c996',
-  mid: '#d1962a',
-  poor: '#cf6b52',
+  ideal: '#1b7a68',
+  good: '#5eb49f',
+  mid: '#9fb1c4',
+  poor: '#c9d3de',
 }
 
+const SUITABILITY_LABEL: Record<Suitability, string> = {
+  ideal: 'Ideální',
+  good: 'Dobré',
+  mid: 'Průměrné',
+  poor: 'Nevhodné',
+}
+
+/** Legenda: dvě skupiny po dvou stupních, vždy celá — je to pevná stupnice. */
+const LEGEND_GROUPS: { title: string; levels: Suitability[] }[] = [
+  { title: 'Sezóna', levels: ['ideal', 'good'] },
+  { title: 'Mimo sezónu', levels: ['mid', 'poor'] },
+]
+
 /**
- * Vhodnost návštěvy z denní teploty, se srážkovou a vedrovou srážkou úrovně —
- * jednoduchá heuristika v1 (Londýn sedí na maketu; monzun/vedro nepustí
- * tropickou destinaci do „Ideální"). Případné ruční ladění per stránka až
- * podle zpětné vazby.
+ * Vhodnost návštěvy z denní teploty a srážek — jednoduchá heuristika.
+ *
+ * Komfortní pásmo je schválně široké až do 34 °C: tropická hlavní sezóna má
+ * běžně 33–34 °C (Bangkok v lednu) a dřívější strop na 33 °C ji srážel mezi
+ * nedoporučené měsíce. Nad pásmem se klesá po stupních, ne skokem.
+ *
+ * Hlavní srážeč jsou SRÁŽKY, ne teplota — o tom, že se někam nejezdí,
+ * rozhoduje monzun. Bangkok v září a v prosinci se liší o jediný stupeň
+ * teploty, ale o 330 mm deště.
  */
 function suitability(m: ClimateNormalMonth): Suitability {
   const t = m.tmax ?? 0
-  let level = t >= 21 ? 3 : t >= 17 ? 2 : t >= 12 ? 1 : 0
-  if (t >= 33) level = Math.min(level, 1) // úmorné vedro není ideál na výlety
+  let level = t > 38 ? 1 : t > 34 ? 2 : t >= 21 ? 3 : t >= 17 ? 2 : t >= 12 ? 1 : 0
   if (m.prcp !== null) {
-    if (m.prcp >= 180)
-      level = Math.max(0, level - 2) // monzun
-    else if (m.prcp >= 120) level = Math.max(0, level - 1)
+    if (m.prcp >= 250)
+      level = Math.max(0, level - 3) // monzun srazí až na dno
+    else if (m.prcp >= 150) level = Math.max(0, level - 2)
+    else if (m.prcp >= 100) level = Math.max(0, level - 1)
   }
   return (['poor', 'mid', 'good', 'ideal'] as const)[level]
-}
-
-/** Popisek nejhorší úrovně podle příčiny — „Chladno" v Londýně, „Vedro" v Egyptě. */
-function poorLabel(m: ClimateNormalMonth): string {
-  if ((m.tmax ?? 0) >= 33) return 'Vedro'
-  if (m.prcp !== null && m.prcp >= 120) return 'Deštivo'
-  return 'Chladno'
-}
-
-function suitabilityLabel(m: ClimateNormalMonth, level: Suitability): string {
-  if (level === 'ideal') return 'Ideální'
-  if (level === 'good') return 'Dobré'
-  if (level === 'mid') return 'Průměrné'
-  return poorLabel(m)
 }
 
 /** Orientační ikona měsíce z teploty a srážek (deterministická, bez dat navíc). */
@@ -141,8 +157,10 @@ function monthEmoji(m: ClimateNormalMonth): string {
 
 /**
  * Nadpis sekce z druhého pádu s předložkou („do Londýna" → „Nejlepší doba na
- * cestu do Londýna"). Exportovaný, protože stejný text potřebuje i položka
- * v postranním obsahu stránky (page.tsx).
+ * cestu do Londýna"). Druhé hledané spojení („počasí … po měsících") nese
+ * řádek pod nadpisem, takže stránka má obě fráze a žádná se neopakuje.
+ * Exportované, protože stejný text potřebuje i položka v postranním obsahu
+ * stránky (page.tsx).
  */
 export function climateHeading(genitive: string): string {
   return `Nejlepší doba na cestu ${genitive}`
@@ -158,7 +176,7 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
       <div className="grid min-w-[560px] grid-cols-12 gap-1.5">
         {months.map((m, i) => {
           const level = suitability(m)
-          const label = suitabilityLabel(m, level)
+          const label = SUITABILITY_LABEL[level]
           // Bublina: u krajních sloupců zarovnaná k okraji, ať neuteče z grafu.
           const tipPosition = i <= 1 ? 'left-0' : i >= 10 ? 'right-0' : 'left-1/2 -translate-x-1/2'
           return (
@@ -235,29 +253,13 @@ export function ClimateSection({
   /** Šestý pád místa včetně předložky („v Londýně") pro popisek pod nadpisem. */
   locative: string
   /**
-   * Druhý pád VČETNĚ předložky, jak ho drží admin („do Londýna", „na Maltu",
-   * „na Slovensko"). Nadpis proto říká „na cestu do Londýna" / „na cestu na
-   * Maltu" — do věty „na návštěvu Londýna" by šel jen čistý druhý pád, který
-   * v CMS není a u míst s předložkou „na" by vyšel špatně („návštěvu na Maltu").
+   * Druhý pád VČETNĚ předložky, jak ho drží admin („do Londýna", „na Maltu").
+   * Nadpis proto říká „na cestu do Londýna" / „na cestu na Maltu" — do věty
+   * „na návštěvu Londýna" by šel jen čistý druhý pád, který v CMS není.
    */
   genitive: string
 }) {
   const months = normals.months
-  const levelsPresent = [...new Set(months.map((m) => suitability(m)))]
-  // Popisky nejhorší úrovně se liší podle příčiny (Chladno/Vedro/Deštivo) —
-  // legenda vypíše jen ty, které se na stránce opravdu objeví.
-  const poorLabels = [
-    ...new Set(months.filter((m) => suitability(m) === 'poor').map((m) => poorLabel(m))),
-  ]
-  const legendItems: { color: string; label: string }[] = [
-    ...(['ideal', 'good', 'mid'] as const)
-      .filter((level) => levelsPresent.includes(level))
-      .map((level) => ({
-        color: SUITABILITY_COLOR[level],
-        label: level === 'ideal' ? 'Ideální' : level === 'good' ? 'Dobré' : 'Průměrné',
-      })),
-    ...poorLabels.map((label) => ({ color: SUITABILITY_COLOR.poor, label })),
-  ]
 
   return (
     <section aria-labelledby="prumerne-teploty-a-srazky" className="mt-10">
@@ -269,22 +271,32 @@ export function ClimateSection({
       >
         {climateHeading(genitive)}
       </h2>
-      {/* Druhé hledané spojení („počasí … po měsících") nese úvodní řádek —
-          v nadpisu by spolu s dobou návštěvy bylo dlouhé a upovídané. */}
+      {/* Druhé hledané spojení („počasí … po měsících") i rozsah let nese
+          řádek pod nadpisem — v nadpisu by to bylo dlouhé a upovídané. */}
       <p className="mt-1.5 text-[14px] text-[#8a94a0]">
         Počasí {locative} po měsících — průměrné denní teploty a srážky
         {normals.period ? ` za roky ${normals.period.start}–${normals.period.end}` : ''}.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-[#4a4a4a]">
-        {legendItems.map((item) => (
-          <span key={item.label} className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="h-3 w-3 rounded-[4px]"
-              style={{ backgroundColor: item.color }}
-            />
-            {item.label}
+      {/* Legenda po skupinách — sdělí i to, že stupně tvoří dvojice (sezóna
+          / mimo sezónu). Vypisuje se celá i na stránkách, kde některý stupeň
+          nepadne: je to pevná stupnice a na každé stránce má být stejná. */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-[#4a4a4a]">
+        {LEGEND_GROUPS.map((group) => (
+          <span key={group.title} className="flex items-center gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#99a9b3]">
+              {group.title}
+            </span>
+            {group.levels.map((level) => (
+              <span key={level} className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-[4px]"
+                  style={{ backgroundColor: SUITABILITY_COLOR[level] }}
+                />
+                {SUITABILITY_LABEL[level]}
+              </span>
+            ))}
           </span>
         ))}
       </div>
@@ -319,7 +331,7 @@ export function ClimateSection({
                 <td>{Math.round(m.tmax ?? 0)}</td>
                 <td>{Math.round(m.tmin ?? 0)}</td>
                 <td>{m.prcp === null ? '—' : Math.round(m.prcp)}</td>
-                <td>{suitabilityLabel(m, suitability(m))}</td>
+                <td>{SUITABILITY_LABEL[suitability(m)]}</td>
               </tr>
             ))}
           </tbody>

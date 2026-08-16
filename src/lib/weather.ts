@@ -89,6 +89,11 @@ export interface PlaceWeather {
     /** Český popis („polojasno") s velkým prvním písmenem. */
     condition: string
     emoji: string
+    /**
+     * Kód ikony OpenWeather (01d…50n) omezený na naši sadu obrázků oblohy
+     * v `public/weather/`; null = neznámý kód, karta pak fotku nechá čistou.
+     */
+    icon: string | null
     /** „6:13" v čase místa. */
     sunrise: string
     sunset: string
@@ -266,6 +271,9 @@ function buildCurrent(
     windArrowDeg: (windDeg + 180) % 360,
     condition: capitalize(raw.description ?? ''),
     emoji: owmEmoji(raw.icon),
+    // Kód ikony (01d…50n) drží i přehled u zemí — vybírá podle něj obrázek
+    // oblohy v public/weather/. Jen z naší sady, ať se nedá podstrčit cesta.
+    icon: raw.icon && /^(0[1-4]|09|1[013]|50)[dn]$/.test(raw.icon) ? raw.icon : null,
     sunrise: typeof raw.sunrise === 'number' ? formatTime(raw.sunrise, zone) : '',
     sunset: typeof raw.sunset === 'number' ? formatTime(raw.sunset, zone) : '',
   }

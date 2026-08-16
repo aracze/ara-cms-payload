@@ -8,6 +8,12 @@ import type { PlaceWeather } from '@/lib/weather'
  * Data dodává OpenWeatherMap přes fetchPlaceWeather (cache 15 min per
  * souřadnice); bez dat se sekce prostě nevykreslí.
  *
+ * Texty v pásu jsou BÍLÉ, ne světle modré: pás je přechod do světlejší modré
+ * a všechny drobné údaje leží zrovna na tom světlém konci, kde měla původní
+ * #a9c3de kontrast jen 2,6 (norma žádá 4,5). Rozdíl mezi popiskem a hodnotou
+ * proto nese velikost a tučnost, ne barva — pás zůstal světlý podle přání
+ * uživatele (ztmavení bylo druhou možností).
+ *
  * Podoba vybraná z maket (kolo 4, kombinace 2 + tónované karty): modrý pás
  * nese JEN velkou teplotu se stavem, čtyři údaje leží v patičce pásu pod
  * vlasovou linkou a části dne jsou samostatné, jemně modré karty pod pásem.
@@ -21,15 +27,18 @@ function FactsFooter({ weather }: { weather: PlaceWeather }) {
     <div className="mt-4 flex flex-wrap items-center gap-x-7 gap-y-2 border-t border-white/20 pt-3.5 text-[13.5px] text-white">
       <span className="flex items-center gap-2">
         <Sunrise aria-hidden="true" className={iconClass} strokeWidth={2} />
-        <span className="text-[#a9c3de]">Svítání</span> {weather.current.sunrise}
+        <span className="text-[13px] text-white">Svítání</span>
+        <span className="font-semibold">{weather.current.sunrise}</span>
       </span>
       <span className="flex items-center gap-2">
         <Sunset aria-hidden="true" className={iconClass} strokeWidth={2} />
-        <span className="text-[#a9c3de]">Stmívání</span> {weather.current.sunset}
+        <span className="text-[13px] text-white">Stmívání</span>
+        <span className="font-semibold">{weather.current.sunset}</span>
       </span>
       <span className="flex items-center gap-2">
         <Wind aria-hidden="true" className={iconClass} strokeWidth={2} />
-        <span className="text-[#a9c3de]">Vítr</span> {weather.current.windSpeed} m/s
+        <span className="text-[13px] text-white">Vítr</span>
+        <span className="font-semibold">{weather.current.windSpeed} m/s</span>
         <Navigation2
           aria-hidden="true"
           className="h-[14px] w-[14px] shrink-0 text-[#9fc0e2]"
@@ -40,7 +49,8 @@ function FactsFooter({ weather }: { weather: PlaceWeather }) {
       </span>
       <span className="flex items-center gap-2">
         <Droplets aria-hidden="true" className={iconClass} strokeWidth={2} />
-        <span className="text-[#a9c3de]">Vlhkost</span> {weather.current.humidity} %
+        <span className="text-[13px] text-white">Vlhkost</span>
+        <span className="font-semibold">{weather.current.humidity} %</span>
       </span>
     </div>
   )
@@ -72,9 +82,11 @@ export function WeatherNowSection({
           <div className="font-heading text-[46px] font-bold leading-none text-white">
             {weather.current.temp}°
           </div>
-          <div className="text-[15px] text-[#dce8f5]">
+          <div className="text-[15px] text-white">
             {weather.current.condition}
-            <span className="block text-[#a9c3de]">pocitově {weather.current.feelsLike}°</span>
+            <span className="block text-[13.5px] text-white">
+              pocitově {weather.current.feelsLike}°
+            </span>
           </div>
         </div>
         <FactsFooter weather={weather} />

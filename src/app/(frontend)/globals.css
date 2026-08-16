@@ -527,17 +527,24 @@
     @apply text-[12px] font-bold text-[#99a9b3] mt-3 tracking-normal;
   }
 
-  /* Colors based on status */
+  /* Barvy podle stavu — táž škála jako klimatický graf na stránkách počasí
+     (SUITABILITY_COLOR v climate-section.tsx). Zelená dvojice = sezóna,
+     šedomodrá = mimo ni; pruh z ní bere první, druhý a čtvrtý stupeň.
+     Při změně barev je nutné upravit obě místa.
+
+     Inkoust se řídí podkladem: bílá čísla drží kontrast jen na tmavém prvním
+     stupni (5,3 : 1), na světlejších blocích by propadla — dřívější bílá na
+     #3bba9c měla 2,4 : 1, tedy pod normou. */
   .prose .seasonality-month.status-off .month-num {
-    @apply bg-[#d6e0ec];
+    @apply bg-[#c9d3de] text-[#4e5a68];
   }
 
   .prose .seasonality-month.status-mid .month-num {
-    @apply bg-[#287bbb];
+    @apply bg-[#5eb49f] text-[#0e3a32];
   }
 
   .prose .seasonality-month.status-peak .month-num {
-    @apply bg-[#3bba9c];
+    @apply bg-[#1b7a68];
   }
 
   /* Legend */
@@ -554,13 +561,13 @@
   }
 
   .prose .legend-item.status-off .legend-dot {
-    @apply bg-[#d6e0ec];
+    @apply bg-[#c9d3de];
   }
   .prose .legend-item.status-mid .legend-dot {
-    @apply bg-[#287bbb];
+    @apply bg-[#5eb49f];
   }
   .prose .legend-item.status-peak .legend-dot {
-    @apply bg-[#3bba9c];
+    @apply bg-[#1b7a68];
   }
 
   .prose .legend-label {
