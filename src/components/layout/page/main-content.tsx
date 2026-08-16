@@ -38,15 +38,16 @@ function PanelWeather({ weather }: { weather: PanelWeatherData }) {
       <span className="flex h-[15px] items-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
         {weather.condition}
       </span>
-      <span className="flex items-center justify-center gap-1.5">
+      {/* Ikona je pozicovaná ABSOLUTNĚ, aby nerozšiřovala řádek: popisek stavu
+          se tak vystředí nad samotnou teplotou, ne nad dvojicí teplota + ikona.
+          Stejně je na tom posun u času ve sloupci vedle. */}
+      <span className="relative">
         <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
           {weather.temp} °C
         </span>
-        {/* O pixel níž: se `items-center` sedí ikona na středu řádkového boxu,
-            což je nad optickým středem číslic. */}
         <WeatherIcon
           icon={weather.icon}
-          className="h-[15px] w-[15px] shrink-0 translate-y-px text-[#667085]"
+          className="absolute left-full top-1/2 ml-1.5 h-[15px] w-[15px] -translate-y-1/2 text-[#667085]"
         />
       </span>
     </Link>

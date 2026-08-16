@@ -98,15 +98,25 @@ export function LocalTime({
   // Sloupcový režim: nahoře popisek, dole hodnota se svou příponou. Posun
   // zůstává VEDLE času, ne pod ním — upřesňuje ho, takže patří k němu na řádek
   // (a sloupec s počasím vedle má pak tutéž stavbu: stav / teplota s ikonou).
+  //
+  // Posun je pozicovaný ABSOLUTNĚ, aby nerozšiřoval řádek: den se tak vystředí
+  // nad samotným časem, ne nad dvojicí čas + posun, kde by proti němu seděl
+  // viditelně vlevo.
   if (stacked) {
     return (
       <div className={wrapper}>
         <span className={`${microClass} flex h-[15px] items-center`}>{data.day}</span>
-        <span className="flex items-center justify-center gap-1.5">
+        <span className="relative">
           <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
             {data.time}
           </span>
-          {data.offset && <span className={microClass}>{data.offset}</span>}
+          {data.offset && (
+            <span
+              className={`${microClass} absolute left-full top-1/2 ml-1.5 -translate-y-1/2 whitespace-nowrap`}
+            >
+              {data.offset}
+            </span>
+          )}
         </span>
       </div>
     )
