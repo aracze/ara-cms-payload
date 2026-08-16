@@ -11,6 +11,8 @@ import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
 import { PageContributor } from './page-contributor'
 import { ArticleAd } from '@/components/features/article-ad'
 import { TocSidebar } from '@/components/features/toc-sidebar'
+import { SeasonStrip } from './season-strip'
+import type { SeasonMonths } from '@/lib/seasonality'
 
 /** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
 export interface TouristPointInfo {
@@ -101,6 +103,8 @@ export const MainContent = ({
   currencyCode,
   exchangeRate,
   practicalInfo = null,
+  seasonPanel = null,
+  panelWeather = null,
   createdByPublic,
   touristPointInfo = null,
   aboveText = null,
@@ -125,6 +129,25 @@ export const MainContent = ({
     fullSlug: string
     ownerTitle: string
     ownerGenitive?: string | null
+  } | null
+  /**
+   * Pruh „Kdy jet do…" na začátku panelu. Zdroj sezóny vybírá page.tsx —
+   * u zemí jedině ruční blok z adminu, u konkrétních míst i výpočet z klimatu.
+   */
+  seasonPanel?: {
+    season: SeasonMonths
+    heading: string
+    href: string | null
+  } | null
+  /**
+   * Teplota vedle hodin (legacy „Aktuální čas s teplotou a kurz"). Jen
+   * u konkrétních míst s vlastní stránkou počasí — u zemí by šlo o teplotu
+   * z jejich geometrického středu.
+   */
+  panelWeather?: {
+    temp: number
+    condition: string
+    href: string
   } | null
   createdByPublic?: {
     username?: string | null
@@ -233,7 +256,9 @@ export const MainContent = ({
   // skutečné VYKRESLENÍ karty, ne existence cíle: cíl bez adresy/webu/mapy
   // kartu nemá a panel mu musí zůstat, jinak by přišel o čas a kurz.
   const showAktualniInfoPanel = Boolean(
-    showAktualniInfo && !showTouristPointCard && (timezone || exchangeRate || practicalInfo),
+    showAktualniInfo &&
+    !showTouristPointCard &&
+    (timezone || exchangeRate || practicalInfo || seasonPanel),
   )
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
@@ -421,19 +446,59 @@ export const MainContent = ({
               <div className="absolute -left-[30px] top-[20%] h-[70%] w-px bg-[#e4e4e4]" />
 
               <div className="text-center bg-white py-4 px-0">
+                {/* Kdy jet — pruh sezóny úplně nahoře (rozhodnutí uživatele:
+                    u zemí tenhle blok panel otevírá místo praktických informací). */}
+                {seasonPanel && (
+                  <SeasonStrip
+                    season={seasonPanel.season}
+                    heading={seasonPanel.heading}
+                    href={seasonPanel.href}
+                  />
+                )}
+                {seasonPanel && (timezone || exchangeRate) && (
+                  <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mb-6" />
+                )}
                 {/* Section 1: Time and Exchange Rate */}
                 {(timezone || exchangeRate) && (
                   <div className="mb-6">
                     <h2 className="text-[20px] font-semibold text-[#1a3f6c] mb-4">
-                      {timezone && exchangeRate
-                        ? 'Aktuální čas a kurz měny'
-                        : exchangeRate
-                          ? 'Aktuální měnový kurz'
-                          : 'Aktuální čas'}
+                      {timezone && panelWeather && exchangeRate
+                        ? 'Aktuální čas s teplotou a kurz'
+                        : timezone && exchangeRate
+                          ? 'Aktuální čas a kurz měny'
+                          : exchangeRate
+                            ? 'Aktuální měnový kurz'
+                            : 'Aktuální čas'}
                     </h2>
                     {timezone && (
                       <>
-                        <LocalTime timezone={timezone} />
+                        {/* Teplota stojí vedle hodin ve STEJNÉM zápisu (velikost,
+                            váha i barva) — vlastní barva a ikona z ní dělaly cizí
+                            prvek. Stav počasí nese drobný verzálkový popisek jako
+                            u dne v týdnu. */}
+                        {panelWeather ? (
+                          <div className="flex items-baseline justify-center gap-3">
+                            <LocalTime timezone={timezone} />
+                            {/* Stav počasí patří POD teplotu, ne pod celý řádek:
+                                vystředěný pod vším se vázal spíš k hodinám než
+                                k teplotě. A schválně malými písmeny a světlejší
+                                než popisky hodin („NEDĚLE", „+0H") — se stejným
+                                zápisem ho oko četlo jako třetí údaj o čase. */}
+                            <Link
+                              href={panelWeather.href}
+                              className="flex flex-col items-center gap-px hover:no-underline"
+                            >
+                              <span className="text-[30px] leading-none tracking-[0.01rem] text-[#333]">
+                                {panelWeather.temp} °C
+                              </span>
+                              <span className="text-[12px] text-[#667085]">
+                                {panelWeather.condition.toLocaleLowerCase('cs-CZ')}
+                              </span>
+                            </Link>
+                          </div>
+                        ) : (
+                          <LocalTime timezone={timezone} />
+                        )}
                         {exchangeRate && (
                           <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mt-4 mb-4" />
                         )}

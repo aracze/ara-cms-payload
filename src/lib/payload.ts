@@ -1497,6 +1497,13 @@ export type WeatherOverviewPlace = {
  * zatímco Dubrovník, Split i Záhřeb měly 30 °C. Místo toho se vypíšou karty
  * podřazených míst — stejné chování jako starý web (`generateWeatherOverview`).
  */
+/**
+ * Kolik míst nejvýš se v přehledu ukáže. Každé je jeden dotaz na OpenWeather
+ * při renderu, takže bez stropu by země s mnoha městy dokázala z jednoho
+ * zobrazení stránky vyrobit desítky externích volání.
+ */
+const MAX_WEATHER_OVERVIEW_PLACES = 24
+
 async function fetchWeatherOverviewPlacesUncached(
   parentPlaceId: number,
 ): Promise<WeatherOverviewPlace[]> {
@@ -1551,7 +1558,14 @@ async function fetchWeatherOverviewPlacesUncached(
     if (typeof parentId === 'number' && doc.fullSlug) weatherByPlaceId.set(parentId, doc.fullSlug)
   }
 
-  const withWeather = places.filter((p) => weatherByPlaceId.has(p.id))
+  // Strop na počet karet: každá znamená jeden dotaz na OpenWeather při
+  // renderu stránky, takže země s desítkami měst by z jednoho zobrazení
+  // udělala desítky externích volání. Řazení je abecední, proto se ořezává
+  // až PO něm — jinak by výběr záležel na pořadí z databáze.
+  const withWeather = places
+    .filter((p) => weatherByPlaceId.has(p.id))
+    .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
+    .slice(0, MAX_WEATHER_OVERVIEW_PLACES)
   // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
   const enriched = await enrichFeaturedImages(withWeather)
 
@@ -1583,6 +1597,57 @@ const fetchWeatherOverviewPlacesCached = cached(
 export const fetchWeatherOverviewPlaces = cache(
   (parentPlaceId: number): Promise<WeatherOverviewPlace[]> =>
     fetchWeatherOverviewPlacesCached(parentPlaceId),
+)
+
+export interface PlaceWeatherChild {
+  fullSlug: string
+  /** Lexical text stránky počasí — hledá se v něm ruční blok sezónnosti. */
+  text: unknown
+  /** Dlouhodobé průměry z Meteostatu (null, dokud neproběhl sync). */
+  climateNormals: unknown
+}
+
+/**
+ * Podstránka počasí daného místa — kvůli pruhu „Kdy jet do…" v pravém panelu.
+ * Panel se vykresluje na stránce MÍSTA, ale oba zdroje sezóny (ruční blok
+ * v textu i klimatické normály) leží na jeho podstránce počasí, takže se
+ * musí dotáhnout zvlášť.
+ */
+async function fetchPlaceWeatherChildUncached(placeId: number): Promise<PlaceWeatherChild | null> {
+  const payload = await getDb()
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [{ parent: { equals: placeId } }, { category: { equals: PageCategory.Pocasi } }],
+    },
+    depth: 0,
+    limit: 1,
+    pagination: false,
+    select: { fullSlug: true, text: true, climateNormals: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    fullSlug?: string | null
+    text?: unknown
+    climateNormals?: unknown
+  }>
+  const doc = res.docs?.[0]
+  if (!doc?.fullSlug) return null
+  return {
+    fullSlug: doc.fullSlug,
+    text: doc.text ?? null,
+    climateNormals: doc.climateNormals ?? null,
+  }
+}
+
+const fetchPlaceWeatherChildCached = cached(
+  fetchPlaceWeatherChildUncached,
+  'place-weather-child',
+  () => ['pages'],
+)
+
+export const fetchPlaceWeatherChild = cache((placeId: number): Promise<PlaceWeatherChild | null> =>
+  fetchPlaceWeatherChildCached(placeId),
 )
 
 // ————————————————————————————————————————————————————————————————

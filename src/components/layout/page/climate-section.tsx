@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ClimateNormalMonth, ClimateNormals } from '@/types/payload'
+import { LEGEND_GROUPS, SUITABILITY_COLOR, SUITABILITY_LABEL, suitability } from '@/lib/climate'
 
 /**
  * Sekce „Kdy je v … nejlíp" na stránkách kategorie „Počasí" — barevné měsíční
@@ -88,60 +89,8 @@ const MONTH_FULL = [
   'Prosinec',
 ]
 
-type Suitability = 'ideal' | 'good' | 'mid' | 'poor'
-
-/**
- * Škála jsou DVĚ DVOJICE, ne čtyři nezávislé kategorie: zelená = sezóna,
- * šedomodrá = mimo ni, a uvnitř každé dvojice je tmavší odstín ten lepší.
- * Barva tak nese dvě informace najednou (odstín = sezóna, světlost = míra)
- * a světlost přitom plynule stoupá přes celou škálu.
- *
- * Stejné hodnoty používá i sezónní pruh v textu stránky (`.seasonality-month`
- * v globals.css) — pruh bere první, druhý a čtvrtý stupeň. Při změně barev
- * je proto nutné upravit obě místa.
- */
-const SUITABILITY_COLOR: Record<Suitability, string> = {
-  ideal: '#1b7a68',
-  good: '#5eb49f',
-  mid: '#9fb1c4',
-  poor: '#c9d3de',
-}
-
-const SUITABILITY_LABEL: Record<Suitability, string> = {
-  ideal: 'Ideální',
-  good: 'Dobré',
-  mid: 'Průměrné',
-  poor: 'Nevhodné',
-}
-
-/** Legenda: dvě skupiny po dvou stupních, vždy celá — je to pevná stupnice. */
-const LEGEND_GROUPS: { title: string; levels: Suitability[] }[] = [
-  { title: 'Sezóna', levels: ['ideal', 'good'] },
-  { title: 'Mimo sezónu', levels: ['mid', 'poor'] },
-]
-
-/**
- * Vhodnost návštěvy z denní teploty a srážek — jednoduchá heuristika.
- *
- * Komfortní pásmo je schválně široké až do 34 °C: tropická hlavní sezóna má
- * běžně 33–34 °C (Bangkok v lednu) a dřívější strop na 33 °C ji srážel mezi
- * nedoporučené měsíce. Nad pásmem se klesá po stupních, ne skokem.
- *
- * Hlavní srážeč jsou SRÁŽKY, ne teplota — o tom, že se někam nejezdí,
- * rozhoduje monzun. Bangkok v září a v prosinci se liší o jediný stupeň
- * teploty, ale o 330 mm deště.
- */
-function suitability(m: ClimateNormalMonth): Suitability {
-  const t = m.tmax ?? 0
-  let level = t > 38 ? 1 : t > 34 ? 2 : t >= 21 ? 3 : t >= 17 ? 2 : t >= 12 ? 1 : 0
-  if (m.prcp !== null) {
-    if (m.prcp >= 250)
-      level = Math.max(0, level - 3) // monzun srazí až na dno
-    else if (m.prcp >= 150) level = Math.max(0, level - 2)
-    else if (m.prcp >= 100) level = Math.max(0, level - 1)
-  }
-  return (['poor', 'mid', 'good', 'ideal'] as const)[level]
-}
+// Škála (barvy, popisky, výpočet vhodnosti) žije v `@/lib/climate` — sdílí ji
+// s pruhem sezóny v pravém panelu, aby měla jedno místo.
 
 /** Orientační ikona měsíce z teploty a srážek (deterministická, bez dat navíc). */
 function monthEmoji(m: ClimateNormalMonth): string {
@@ -212,13 +161,13 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
               <div className="mt-1.5 font-heading text-[13px] font-semibold text-[#4a4a4a]">
                 {MONTH_SHORT[i]}
               </div>
-              <div className="whitespace-nowrap text-[11.5px] text-[#8a94a0]">
+              <div className="whitespace-nowrap text-[11.5px] text-[#667085]">
                 noc {Math.round(m.tmin ?? 0)}°
               </div>
               {/* Srážky se u některých míst nedají spočítat (stanice je pro
                   část okna nemá) — pak se číslo ani proužek nekreslí, aby
                   graf nepředstíral, že v tom měsíci neprší. */}
-              <div className="whitespace-nowrap text-[11.5px] text-[#8a94a0]">
+              <div className="whitespace-nowrap text-[11.5px] text-[#667085]">
                 {m.prcp === null ? ' ' : `💧 ${Math.round(m.prcp)} mm`}
               </div>
               {/* Srážky ještě jako tenký proužek pod číslem — porovnání mezi
@@ -273,7 +222,7 @@ export function ClimateSection({
       </h2>
       {/* Druhé hledané spojení („počasí … po měsících") i rozsah let nese
           řádek pod nadpisem — v nadpisu by to bylo dlouhé a upovídané. */}
-      <p className="mt-1.5 text-[14px] text-[#8a94a0]">
+      <p className="mt-1.5 text-[14px] text-[#667085]">
         Počasí {locative} po měsících — průměrné denní teploty a srážky
         {normals.period ? ` za roky ${normals.period.start}–${normals.period.end}` : ''}.
       </p>
@@ -284,7 +233,7 @@ export function ClimateSection({
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-[#4a4a4a]">
         {LEGEND_GROUPS.map((group) => (
           <span key={group.title} className="flex items-center gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#99a9b3]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
               {group.title}
             </span>
             {group.levels.map((level) => (
@@ -339,13 +288,13 @@ export function ClimateSection({
       </div>
 
       {/* Atribuce vyžadovaná licencí dat (CC BY 4.0). */}
-      <p className="mt-3 text-[12px] text-[#8a94a0]">
+      <p className="mt-3 text-[12px] text-[#667085]">
         Výška sloupce = denní teplota, proužek pod číslem = srážky · Zdroj:{' '}
         <a
           href="https://meteostat.net/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#8a94a0] underline hover:text-[#215491]"
+          className="text-[#667085] underline hover:text-[#215491]"
         >
           Meteostat
         </a>

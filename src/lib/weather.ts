@@ -2,7 +2,7 @@ import { cache } from 'react'
 
 /**
  * Aktuální počasí a předpověď pro stránky kategorie „Počasí" — OpenWeatherMap
- * One Call 3.0 (předplatné „Base plan"): prvních 1 000 volání denně zdarma,
+ * One Call 3.0 (předplatné „One Call by Call"): prvních 1 000 volání denně zdarma,
  * další zpoplatněné — účet má proto tvrdý strop 1 000/den, takže se nikdy nic
  * neúčtuje. Jeden dotaz na místo vrátí aktuální stav, 48 h po hodinách
  * i 8denní předpověď; české popisky přes `lang=cz`.

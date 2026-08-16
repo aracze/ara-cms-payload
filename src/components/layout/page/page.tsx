@@ -28,7 +28,9 @@ import {
   fetchTeamSection,
   fetchInheritedAffiliateDeals,
   fetchWeatherOverviewPlaces,
+  fetchPlaceWeatherChild,
 } from '@/lib/payload'
+import { extractSeasonalityBlock, seasonFromClimate } from '@/lib/seasonality'
 import { TeamSection } from './team-section'
 import { ABOUT_PAGE_SLUG } from '@/lib/team'
 import { composePracticalInfoHtml } from '@/lib/practical-info'
@@ -220,20 +222,32 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       ? fetchPlaceWeather(weatherLat, weatherLng)
       : Promise.resolve(null)
   // Přehled: počasí každého místa zvlášť (každé má vlastní cache 15 min).
+  // Dotazy jdou po dávkách, ne všechny naráz — u země s mnoha městy by jinak
+  // jeden render vystřelil desítky souběžných volání na OpenWeather.
+  // (Počet míst navíc omezuje MAX_WEATHER_OVERVIEW_PLACES v payload.ts.)
+  const OVERVIEW_WEATHER_CONCURRENCY = 6
   const overviewWeatherPromise = showOverview
-    ? Promise.all(
-        overviewPlaces.map(async (place) => {
-          const weather = await fetchPlaceWeather(place.lat, place.lng)
-          return weather
-            ? {
-                title: place.title,
-                href: place.weatherFullSlug,
-                imageUrl: place.imageUrl,
-                weather,
-              }
-            : null
-        }),
-      ).then((items) => items.filter((i): i is WeatherOverviewItem => i !== null))
+    ? (async (): Promise<WeatherOverviewItem[]> => {
+        const items: WeatherOverviewItem[] = []
+        for (let i = 0; i < overviewPlaces.length; i += OVERVIEW_WEATHER_CONCURRENCY) {
+          const batch = overviewPlaces.slice(i, i + OVERVIEW_WEATHER_CONCURRENCY)
+          const settled = await Promise.all(
+            batch.map(async (place) => {
+              const weather = await fetchPlaceWeather(place.lat, place.lng)
+              return weather
+                ? {
+                    title: place.title,
+                    href: place.weatherFullSlug,
+                    imageUrl: place.imageUrl,
+                    weather,
+                  }
+                : null
+            }),
+          )
+          for (const item of settled) if (item) items.push(item)
+        }
+        return items
+      })()
     : Promise.resolve([])
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
   // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
@@ -253,6 +267,37 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const showSubnavigation =
     page.category !== PageCategory.Rubrika && page.category !== PageCategory.Staticka_stranka
 
+  // ── Pravý panel u míst: pruh „Kdy jet do…" a teplota ──────────────────
+  // Místo, které v sobě má další místa (Chorvatsko, Evropa), se chová jako
+  // ZEMĚ: jeho souřadnice jsou geometrický střed, takže se z nich nesmí nic
+  // počítat — u Chorvatska je to vnitrozemí u Plitvic. Sezónu proto vezme
+  // jedině z ručního bloku v adminu a teplotu neukáže vůbec. Konkrétní místo
+  // (Dubrovník) má střed tam, kam se opravdu jede, takže dostane obojí.
+  // Rešerše referenčních webů dopadla stejně: celozemní „kdy jet" nikdo
+  // nepočítá, je to redaktorský úsudek (Lonely Planet, Rough Guides).
+  const isPlacePage = page.category === PageCategory.Misto_k_navstiveni
+  const hasSubPlaces = pageChildren.some(
+    (child) => child.category === PageCategory.Misto_k_navstiveni,
+  )
+  // Existenci podstránky počasí zjistíme z už načtených dětí (bez dotazu);
+  // dotaz níž doplňuje jen její text a klimatická data.
+  const weatherChildMeta = pageChildren.find((child) => child.category === PageCategory.Pocasi)
+  const pageIdNumber = Number(page.id)
+  const seasonSourcePromise =
+    isPlacePage && weatherChildMeta && Number.isInteger(pageIdNumber)
+      ? fetchPlaceWeatherChild(pageIdNumber)
+      : Promise.resolve(null)
+  const panelLat = Number.parseFloat(page.detail?.latitude ?? '')
+  const panelLng = Number.parseFloat(page.detail?.longitude ?? '')
+  const panelWeatherPromise =
+    isPlacePage &&
+    !hasSubPlaces &&
+    weatherChildMeta &&
+    Number.isFinite(panelLat) &&
+    Number.isFinite(panelLng)
+      ? fetchPlaceWeather(panelLat, panelLng)
+      : Promise.resolve(null)
+
   // "Místa"/"Články" v sekundárním menu patří kontextovému místu (např. Chorvatsko),
   // ne aktuální podstránce (Vstupní podmínky). Data kontextové stránky načítáme jen když
   // se menu vůbec renderuje (jinak zbytečný fetch pro rubriky/statické stránky).
@@ -269,6 +314,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     inheritedDeals,
     placeWeather,
     overviewItems,
+    seasonSource,
+    panelWeather,
   ] = await Promise.all([
     fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -308,7 +355,30 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     inheritedDealsPromise,
     weatherPromise,
     overviewWeatherPromise,
+    seasonSourcePromise,
+    panelWeatherPromise,
   ])
+
+  // Sezóna pro pruh v panelu: ruční blok z adminu má vždycky přednost (umí
+  // říct i „na severu jinak než na jihu"), automat z klimatu je jen záskok
+  // a jen u konkrétních míst. Když není ani jedno, pruh se nekreslí.
+  const manualSeason = seasonSource ? extractSeasonalityBlock(seasonSource.text) : null
+  const autoSeason =
+    !manualSeason && !hasSubPlaces && seasonSource
+      ? (() => {
+          const normals = parseClimateNormals(seasonSource.climateNormals)
+          return normals ? seasonFromClimate(normals) : null
+        })()
+      : null
+  const panelSeason = manualSeason ?? autoSeason
+  const seasonPanel =
+    panelSeason && seasonSource
+      ? {
+          season: panelSeason,
+          heading: `Kdy jet ${page.detail?.genitive || `do ${page.title}`}`,
+          href: seasonSource.fullSlug,
+        }
+      : null
 
   // Vstupy sekce „Akční nabídky": vlastní data stránky, jinak zděděná od
   // předka — pak karty nesou PŘEDKOVO jméno, skloňování i fotku (chorvatská
@@ -527,7 +597,22 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           timezone={page.detail?.timezone || safeRootPage?.detail?.timezone}
           currencyCode={effectiveCurrencyCode}
           exchangeRate={exchangeData?.rate}
-          practicalInfo={practicalInfo}
+          // Země (místo s dalšími místy uvnitř) kartu Praktických informací
+          // v panelu nemá — vede na tutéž stránku, kterou má hned vedle
+          // v sekundárním menu. U konkrétních míst zůstává.
+          practicalInfo={isPlacePage && hasSubPlaces ? null : practicalInfo}
+          seasonPanel={seasonPanel}
+          // Teplota do panelu jen u konkrétních míst (viz seasonPanel výš) —
+          // a jen když má místo vlastní stránku počasí, kam se dá prokliknout.
+          panelWeather={
+            panelWeather && seasonSource
+              ? {
+                  temp: panelWeather.current.temp,
+                  condition: panelWeather.current.condition,
+                  href: seasonSource.fullSlug,
+                }
+              : null
+          }
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
           // Pořadí bloků (rozhodnutí uživatele): aktuální počasí, dlouhodobé
