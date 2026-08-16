@@ -1,20 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
-import {
-  Cloud,
-  CloudDrizzle,
-  CloudFog,
-  CloudLightning,
-  CloudMoon,
-  CloudRain,
-  CloudSnow,
-  CloudSun,
-  Cloudy,
-  Droplets,
-  Moon,
-  Sun,
-  Wind,
-} from 'lucide-react'
+import { Droplets, Wind } from 'lucide-react'
+import { WEATHER_ICON } from '@/components/features/weather-icon'
 import type { PlaceWeather } from '@/lib/weather'
 
 /**
@@ -111,26 +98,7 @@ function skyLayers(icon: string | null): React.CSSProperties[] {
  * tah se stínem, takže je čitelná na jakékoli fotce. (V tónovaných kartách
  * částí dne a předpovědi emoji zůstávají — tam leží na klidném podkladu.)
  */
-const WEATHER_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  '01d': Sun,
-  '01n': Moon,
-  '02d': CloudSun,
-  '02n': CloudMoon,
-  '03d': Cloud,
-  '03n': Cloud,
-  '04d': Cloudy,
-  '04n': Cloudy,
-  '09d': CloudDrizzle,
-  '09n': CloudDrizzle,
-  '10d': CloudRain,
-  '10n': CloudRain,
-  '11d': CloudLightning,
-  '11n': CloudLightning,
-  '13d': CloudSnow,
-  '13n': CloudSnow,
-  '50d': CloudFog,
-  '50n': CloudFog,
-}
+// Mapa kódů na ikony je sdílená s pravým panelem — viz components/features/weather-icon.
 
 export function WeatherOverviewSection({
   items,

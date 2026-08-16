@@ -609,6 +609,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
               ? {
                   temp: panelWeather.current.temp,
                   condition: panelWeather.current.condition,
+                  icon: panelWeather.current.icon,
                   href: seasonSource.fullSlug,
                 }
               : null

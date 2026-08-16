@@ -12,7 +12,41 @@ import { PageContributor } from './page-contributor'
 import { ArticleAd } from '@/components/features/article-ad'
 import { TocSidebar } from '@/components/features/toc-sidebar'
 import { SeasonStrip } from './season-strip'
+import { WeatherIcon } from '@/components/features/weather-icon'
 import type { SeasonMonths } from '@/lib/seasonality'
+
+/** Data počasí v pravém panelu — teplota, stav a odkaz na stránku počasí. */
+export interface PanelWeatherData {
+  temp: number
+  condition: string
+  icon: string | null
+  href: string
+}
+
+/**
+ * Sloupec počasí v panelu: značka nahoře, hodnota uprostřed, upřesnění dole —
+ * stejný tvar jako sloupec s časem vedle (den / čas / posun). Ikona je proto
+ * NAHOŘE a slovo dole: naproti údaji „+0h" tak stojí text, ne ozdoba, a ikona
+ * neopakuje to, co je hned pod ní.
+ */
+function PanelWeather({ weather }: { weather: PanelWeatherData }) {
+  return (
+    <Link
+      href={weather.href}
+      className="flex flex-col items-center gap-1.5 px-1.5 hover:no-underline"
+    >
+      <span className="flex h-[15px] items-center justify-center">
+        <WeatherIcon icon={weather.icon} className="h-[15px] w-[15px] text-[#667085]" />
+      </span>
+      <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
+        {weather.temp} °C
+      </span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
+        {weather.condition}
+      </span>
+    </Link>
+  )
+}
 
 /** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
 export interface TouristPointInfo {
@@ -144,11 +178,7 @@ export const MainContent = ({
    * u konkrétních míst s vlastní stránkou počasí — u zemí by šlo o teplotu
    * z jejich geometrického středu.
    */
-  panelWeather?: {
-    temp: number
-    condition: string
-    href: string
-  } | null
+  panelWeather?: PanelWeatherData | null
   createdByPublic?: {
     username?: string | null
     name?: string | null
@@ -260,6 +290,24 @@ export const MainContent = ({
     !showTouristPointCard &&
     (timezone || exchangeRate || practicalInfo || seasonPanel),
   )
+  /**
+   * Nadpis musí vyjmenovat PRÁVĚ TO, co je pod ním — proto všech sedm kombinací
+   * času, teploty a kurzu (formulace ze starého webu). Dřívější řetěz ternárních
+   * podmínek na kombinaci „čas + teplota bez kurzu" zapomněl, takže Dubrovník
+   * s viditelnou teplotou hlásil jen „Aktuální čas“. Kurz tam chybí proto, že má
+   * v CMS starou měnu HRK — nadpis ale musí sedět i v takovém případě.
+   */
+  const panelHeadings: Record<string, string> = {
+    '111': 'Aktuální čas s teplotou a kurz',
+    '110': 'Aktuální čas a teplota',
+    '101': 'Aktuální čas a kurz měny',
+    '100': 'Aktuální čas',
+    '011': 'Aktuální teplota a kurz měny',
+    '010': 'Aktuální teplota',
+    '001': 'Aktuální měnový kurz',
+  }
+  const panelHeading =
+    panelHeadings[`${timezone ? 1 : 0}${panelWeather ? 1 : 0}${exchangeRate ? 1 : 0}`]
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
   // nevznikne.
@@ -455,49 +503,38 @@ export const MainContent = ({
                     href={seasonPanel.href}
                   />
                 )}
-                {seasonPanel && (timezone || exchangeRate) && (
+                {seasonPanel && (timezone || exchangeRate || panelWeather) && (
                   <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mb-6" />
                 )}
-                {/* Section 1: Time and Exchange Rate */}
-                {(timezone || exchangeRate) && (
+                {/* Section 1: Time, Weather and Exchange Rate */}
+                {(timezone || exchangeRate || panelWeather) && (
                   <div className="mb-6">
                     <h2 className="text-[20px] font-semibold text-[#1a3f6c] mb-4">
-                      {timezone && panelWeather && exchangeRate
-                        ? 'Aktuální čas s teplotou a kurz'
-                        : timezone && exchangeRate
-                          ? 'Aktuální čas a kurz měny'
-                          : exchangeRate
-                            ? 'Aktuální měnový kurz'
-                            : 'Aktuální čas'}
+                      {panelHeading}
                     </h2>
-                    {timezone && (
+                    {(timezone || panelWeather) && (
                       <>
-                        {/* Teplota stojí vedle hodin ve STEJNÉM zápisu (velikost,
-                            váha i barva) — vlastní barva a ikona z ní dělaly cizí
-                            prvek. Stav počasí nese drobný verzálkový popisek jako
-                            u dne v týdnu. */}
-                        {panelWeather ? (
-                          <div className="flex items-baseline justify-center gap-3">
-                            <LocalTime timezone={timezone} />
-                            {/* Stav počasí patří POD teplotu, ne pod celý řádek:
-                                vystředěný pod vším se vázal spíš k hodinám než
-                                k teplotě. A schválně malými písmeny a světlejší
-                                než popisky hodin („NEDĚLE", „+0H") — se stejným
-                                zápisem ho oko četlo jako třetí údaj o čase. */}
-                            <Link
-                              href={panelWeather.href}
-                              className="flex flex-col items-center gap-px hover:no-underline"
-                            >
-                              <span className="text-[30px] leading-none tracking-[0.01rem] text-[#333]">
-                                {panelWeather.temp} °C
-                              </span>
-                              <span className="text-[12px] text-[#667085]">
-                                {panelWeather.condition.toLocaleLowerCase('cs-CZ')}
-                              </span>
-                            </Link>
+                        {/* Čas vlevo, počasí vpravo, mezi nimi vlasová linka —
+                            dvě různé věci se nemají mísit do jedné řady (dřív
+                            splývaly a popisek stavu se vázal spíš k hodinám).
+                            Oba sloupce mají tvar „značka / hodnota / upřesnění":
+                            vlevo den–čas–posun, vpravo ikona–teplota–stav, takže
+                            naproti údaji „+0h" stojí text, ne ozdoba. */}
+                        {timezone && panelWeather ? (
+                          // Flex, ne grid: u gridu se automatické umísťování
+                          // buněk kolem přes-řádkové linky rozsype a sloupce
+                          // se překryjí.
+                          <div className="flex items-stretch justify-center">
+                            <LocalTime timezone={timezone} stacked className="flex-1 min-w-0" />
+                            <div className="w-px shrink-0 self-stretch bg-[#e4e4e4]" />
+                            <div className="flex-1 min-w-0">
+                              <PanelWeather weather={panelWeather} />
+                            </div>
                           </div>
-                        ) : (
+                        ) : timezone ? (
                           <LocalTime timezone={timezone} />
+                        ) : (
+                          panelWeather && <PanelWeather weather={panelWeather} />
                         )}
                         {exchangeRate && (
                           <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mt-4 mb-4" />
