@@ -530,12 +530,11 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           practicalInfo={practicalInfo}
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
-          // Aktuální počasí nad textem „Kdy jet…", klima a předpověď pod ním —
-          // pořadí bloků jako na starém webu.
-          // Pořadí bloků (rozhodnutí uživatele): aktuální počasí, předpověď na
-          // týden, dlouhodobé průměry po měsících — a teprve pak text z adminu
-          // („Kdy jet do…"), který to celé komentuje. Čtenář jde od toho, co je
-          // teď, k tomu, co bývá; text má poslední slovo.
+          // Pořadí bloků (rozhodnutí uživatele): aktuální počasí, dlouhodobé
+          // průměry po měsících, text z adminu („Kdy jet do…"), který to
+          // komentuje, a úplně nakonec předpověď na týden. Čtenář jde od toho,
+          // co je teď, k tomu, co bývá; předpověď zavírá stránku jako praktický
+          // dovětek a podpis autora patří až za ni (viz contributorAtEnd).
           aboveText={
             overviewItems.length > 0 ? (
               <WeatherOverviewSection items={overviewItems} locative={climateLocative} />
@@ -543,9 +542,6 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
               <>
                 {placeWeather && (
                   <WeatherNowSection weather={placeWeather} locative={climateLocative} />
-                )}
-                {placeWeather && placeWeather.days.length > 0 && (
-                  <WeatherForecastSection weather={placeWeather} locative={climateLocative} />
                 )}
                 {climateNormals && (
                   <ClimateSection
@@ -557,21 +553,24 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
               </>
             ) : null
           }
-          belowText={teamSection ? <TeamSection {...teamSection} /> : null}
-          // Obsah v pravém sloupci musí kopírovat nové pořadí: všechny tři
-          // bloky počasí jsou nad textem, takže patří do preHeadings.
+          // Předpověď na týden je ÚPLNĚ POSLEDNÍ blok stránky, až za textem
+          // z adminu (rozhodnutí uživatele). Nad textem tak zůstane jen to,
+          // co text komentuje — aktuální stav a dlouhodobé průměry; krátkodobá
+          // předpověď je praktický dovětek, ne úvod.
+          belowText={
+            teamSection ? (
+              <TeamSection {...teamSection} />
+            ) : placeWeather && placeWeather.days.length > 0 ? (
+              <div className="mt-10">
+                <WeatherForecastSection weather={placeWeather} locative={climateLocative} />
+              </div>
+            ) : null
+          }
+          // Obsah v pravém sloupci kopíruje pořadí bloků: aktuální počasí
+          // a graf klimatu nad textem, předpověď pod ním (extraHeadings).
           preHeadings={[
             ...(placeWeather || overviewItems.length > 0
               ? [{ id: 'aktualni-pocasi', text: `Aktuální počasí ${climateLocative}`, level: 2 }]
-              : []),
-            ...(placeWeather && placeWeather.days.length > 0
-              ? [
-                  {
-                    id: 'predpoved-pocasi',
-                    text: forecastHeading(placeWeather, climateLocative),
-                    level: 2,
-                  },
-                ]
               : []),
             ...(climateNormals
               ? [
@@ -583,6 +582,17 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
                 ]
               : []),
           ]}
+          extraHeadings={
+            placeWeather && placeWeather.days.length > 0
+              ? [
+                  {
+                    id: 'predpoved-pocasi',
+                    text: forecastHeading(placeWeather, climateLocative),
+                    level: 2,
+                  },
+                ]
+              : []
+          }
           // Na stránkách počasí patří podpis autora až za předpověď (rozhodnutí
           // uživatele) — mezi textem a grafy by rozdělil související sekce.
           contributorAtEnd={page.category === PageCategory.Pocasi}
