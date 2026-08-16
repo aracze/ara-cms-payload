@@ -426,8 +426,16 @@ async function runSync(
         throw new APIError('Sync už běží (souběžný požadavek) — zkus to za chvíli znovu', 409)
       }
       for (const r of results) {
+        const payload = JSON.stringify(r.normals)
         await tx.execute(
-          sql`UPDATE pages SET climate_normals = ${JSON.stringify(r.normals)}::jsonb WHERE id = ${r.id}`,
+          sql`UPDATE pages SET climate_normals = ${payload}::jsonb WHERE id = ${r.id}`,
+        )
+        // Verzní řádky MUSÍ dostat totéž. Publikace uloženého draftu totiž
+        // překlopí data z `_pages_v` zpátky do `pages` — a kdyby tam klima
+        // chybělo, tichý `null` by přepsal právě dopočítané hodnoty a graf
+        // by ze stránky zmizel až při nejbližší úpravě v adminu.
+        await tx.execute(
+          sql`UPDATE _pages_v SET version_climate_normals = ${payload}::jsonb WHERE parent_id = ${r.id}`,
         )
       }
     })

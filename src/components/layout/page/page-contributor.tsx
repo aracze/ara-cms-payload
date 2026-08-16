@@ -28,7 +28,11 @@ export function PageContributor({
     <div className={`flex ${align === 'center' ? 'items-center' : 'items-start'}`}>
       <div className="mr-[15px] shrink-0">
         {contributor.profileHref ? (
-          <Link href={contributor.profileHref} className="block">
+          // Avatar vede na týž profil jako jméno vedle, takže je pro čtečky
+          // i klávesnici schovaný — jinak by v pořadí přibyl druhý odkaz na
+          // totéž, a u výchozího papouška bez `alt` navíc odkaz bez názvu.
+          // Stejný vzor má už `team-section.tsx`.
+          <Link href={contributor.profileHref} className="block" tabIndex={-1} aria-hidden="true">
             {avatar}
           </Link>
         ) : (

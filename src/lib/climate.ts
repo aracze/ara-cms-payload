@@ -54,9 +54,17 @@ export const LEGEND_GROUPS: { title: string; levels: Suitability[] }[] = [
  * Hlavní srážeč jsou SRÁŽKY, ne teplota — o tom, že se někam nejezdí,
  * rozhoduje monzun. Bangkok v září a v prosinci se liší o jediný stupeň
  * teploty, ale o 330 mm deště.
+ *
+ * `null` = NEMÁME DATA, ne nula. Bez denní teploty se stupeň spočítat nedá
+ * a dřívější `m.tmax ?? 0` z chybějícího měření tiše udělal mrazivý měsíc,
+ * tedy „Nevhodné" — tvrzení, které z dat nijak neplyne. (Dnes to nenastane,
+ * `parseClimateNormals` měsíce bez teplot odmítne, ale ta záruka platí jen
+ * pro tuhle jednu cestu.) Chybějící srážky naopak jen znamenají, že se
+ * neuplatní dešťová srážka stupně — z neznámé hodnoty se trestat nedá.
  */
-export function suitability(m: ClimateNormalMonth): Suitability {
-  const t = m.tmax ?? 0
+export function suitability(m: ClimateNormalMonth): Suitability | null {
+  if (m.tmax === null) return null
+  const t = m.tmax
   let level = t > 38 ? 1 : t > 34 ? 2 : t >= 21 ? 3 : t >= 17 ? 2 : t >= 12 ? 1 : 0
   if (m.prcp !== null) {
     if (m.prcp >= 250)

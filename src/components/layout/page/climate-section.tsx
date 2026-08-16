@@ -125,7 +125,10 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
       <div className="grid min-w-[560px] grid-cols-12 gap-1.5">
         {months.map((m, i) => {
           const level = suitability(m)
-          const label = SUITABILITY_LABEL[level]
+          // Bez denní teploty se stupeň spočítat nedá — sloupec pak zůstane
+          // prázdný a bublina to řekne. Dokreslit ho odhadem by znamenalo
+          // tvrdit o měsíci něco, co v datech není.
+          const label = level ? SUITABILITY_LABEL[level] : 'Bez dat'
           // Bublina: u krajních sloupců zarovnaná k okraji, ať neuteče z grafu.
           const tipPosition = i <= 1 ? 'left-0' : i >= 10 ? 'right-0' : 'left-1/2 -translate-x-1/2'
           return (
@@ -137,13 +140,15 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
                 {Math.round(m.tmax ?? 0)}°
               </div>
               <div className="relative flex h-[176px] items-end justify-center rounded-full bg-[#f1f4f7] p-1">
-                <div
-                  className="w-full max-w-[26px] rounded-full"
-                  style={{
-                    height: `${Math.max(Math.round(((m.tmax ?? 0) / maxT) * 100), 12)}%`,
-                    backgroundColor: SUITABILITY_COLOR[level],
-                  }}
-                />
+                {level && (
+                  <div
+                    className="w-full max-w-[26px] rounded-full"
+                    style={{
+                      height: `${Math.max(Math.round(((m.tmax ?? 0) / maxT) * 100), 12)}%`,
+                      backgroundColor: SUITABILITY_COLOR[level],
+                    }}
+                  />
+                )}
                 {/* Bublina s hodnotami měsíce — jen CSS hover, bez JS */}
                 <div
                   className={`pointer-events-none absolute top-0 z-10 hidden w-max rounded-lg border border-[#d8dde3] bg-white px-3 py-2 text-left shadow-sm group-hover:block ${tipPosition}`}
@@ -277,10 +282,15 @@ export function ClimateSection({
             {months.map((m, i) => (
               <tr key={m.month}>
                 <th scope="row">{MONTH_FULL[i]}</th>
-                <td>{Math.round(m.tmax ?? 0)}</td>
-                <td>{Math.round(m.tmin ?? 0)}</td>
+                <td>{m.tmax === null ? '—' : Math.round(m.tmax)}</td>
+                <td>{m.tmin === null ? '—' : Math.round(m.tmin)}</td>
                 <td>{m.prcp === null ? '—' : Math.round(m.prcp)}</td>
-                <td>{SUITABILITY_LABEL[suitability(m)]}</td>
+                <td>
+                  {(() => {
+                    const level = suitability(m)
+                    return level ? SUITABILITY_LABEL[level] : 'Bez dat'
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>

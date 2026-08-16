@@ -1558,33 +1558,40 @@ async function fetchWeatherOverviewPlacesUncached(
     if (typeof parentId === 'number' && doc.fullSlug) weatherByPlaceId.set(parentId, doc.fullSlug)
   }
 
-  // Strop na počet karet: každá znamená jeden dotaz na OpenWeather při
-  // renderu stránky, takže země s desítkami měst by z jednoho zobrazení
-  // udělala desítky externích volání. Řazení je abecední, proto se ořezává
-  // až PO něm — jinak by výběr záležel na pořadí z databáze.
+  // Pořadí kroků je podstatné: nejdřív vypadnou místa, která se stejně
+  // nevykreslí (bez stránky počasí nebo bez souřadnic), pak se abecedně seřadí
+  // a teprve nakonec ořeže. Kdyby se ořezávalo dřív, země, jejíž první města
+  // v abecedě nemají souřadnice, by ukázala míň karet, než smí — a platná
+  // města za řezem by se nedostala ke slovu vůbec.
   const withWeather = places
     .filter((p) => weatherByPlaceId.has(p.id))
-    .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
+    .map((place) => ({
+      place,
+      lat: Number.parseFloat(place.detail?.latitude ?? ''),
+      lng: Number.parseFloat(place.detail?.longitude ?? ''),
+    }))
+    .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng))
+    .sort((a, b) => a.place.title.localeCompare(b.place.title, 'cs'))
+    // Strop na počet karet: každá znamená jeden dotaz na OpenWeather při
+    // renderu stránky, takže země s desítkami měst by z jednoho zobrazení
+    // udělala desítky externích volání.
     .slice(0, MAX_WEATHER_OVERVIEW_PLACES)
-  // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
-  const enriched = await enrichFeaturedImages(withWeather)
 
-  return enriched
-    .map((place) => {
-      const lat = Number.parseFloat(place.detail?.latitude ?? '')
-      const lng = Number.parseFloat(place.detail?.longitude ?? '')
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-      const imageUrl = (place.featuredImage?.image as { url?: string } | null | undefined)?.url
-      return {
-        title: place.title,
-        weatherFullSlug: weatherByPlaceId.get(place.id)!,
-        imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
-        lat,
-        lng,
-      }
-    })
-    .filter((p): p is WeatherOverviewPlace => p !== null)
-    .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
+  const coordsById = new Map(withWeather.map(({ place, lat, lng }) => [place.id, { lat, lng }]))
+  // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
+  const enriched = await enrichFeaturedImages(withWeather.map(({ place }) => place))
+
+  return enriched.map((place) => {
+    const imageUrl = (place.featuredImage?.image as { url?: string } | null | undefined)?.url
+    const coords = coordsById.get(place.id)!
+    return {
+      title: place.title,
+      weatherFullSlug: weatherByPlaceId.get(place.id)!,
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+      lat: coords.lat,
+      lng: coords.lng,
+    }
+  })
 }
 
 const fetchWeatherOverviewPlacesCached = cached(

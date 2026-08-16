@@ -408,7 +408,11 @@ async function fetchViaFreeEndpoints(
       let best: (typeof steps)[number] | null = null
       let bestDistance = Number.POSITIVE_INFINITY
       for (const step of steps.slice(0, 8)) {
-        const distance = Math.abs(hourInZone(step.dt!, zone) - part.hour)
+        // Vzdálenost se počítá PO KRUHU: půlnoc je od 23:00 hodinu daleko, ne
+        // třiadvacet. Bez toho by „V noci" (23 h) zahodilo i krok v 0:00,
+        // který je ze všech nejbližší.
+        const raw = Math.abs(hourInZone(step.dt!, zone) - part.hour)
+        const distance = Math.min(raw, 24 - raw)
         if (distance < bestDistance) {
           best = step
           bestDistance = distance

@@ -79,11 +79,21 @@ export function extractSeasonalityBlock(text: unknown): SeasonMonths | null {
  * jeho věrná zmenšenina: první stupeň = špička, druhý = sezóna, zbytek mimo.
  */
 export function seasonFromClimate(normals: ClimateNormals): SeasonMonths | null {
-  const months = normals.months.map((m) => {
+  // Řadí se podle POLE `month`, ne podle pořadí v poli: `months[0]` znamená
+  // v pruhu i v `idealRangeLabel()` leden, takže neseřazený (jinak platný)
+  // vstup by rozsvítil špatné měsíce. Chybějící nebo zdvojený měsíc pruh
+  // zahodí celý — dokreslovat ho odhadem by znamenalo tvrdit něco o období,
+  // o kterém data nic neříkají.
+  const byMonth = new Array<SeasonStatus | null>(12).fill(null)
+  for (const m of normals.months) {
+    if (!Number.isInteger(m.month) || m.month < 1 || m.month > 12) return null
+    if (byMonth[m.month - 1] !== null) return null
     const level = suitability(m)
-    return level === 'ideal' ? 'peak' : level === 'good' ? 'mid' : 'off'
-  }) as SeasonStatus[]
-  if (months.length !== 12) return null
+    if (level === null) return null
+    byMonth[m.month - 1] = level === 'ideal' ? 'peak' : level === 'good' ? 'mid' : 'off'
+  }
+  if (byMonth.some((s) => s === null)) return null
+  const months = byMonth as SeasonStatus[]
   // Samé „mimo sezónu" (třeba Reykjavík) není doporučení, ale prázdný pruh —
   // v panelu by jen zabíral místo a nic neřekl.
   if (!months.some((s) => s !== 'off')) return null
