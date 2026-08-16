@@ -254,7 +254,8 @@ export const syncClimateNormalsEndpoint: Endpoint = {
     const url = new URL(req.url ?? '', 'http://localhost')
     const dryRun = url.searchParams.get('dryRun') === '1'
 
-    // Bez dotazů na Meteostat (dryRun jen počítá) se souběh hlídat nemusí.
+    // dryRun na Meteostat nesahá (končí před smyčkou v runSync), takže se
+    // u něj souběh hlídat nemusí.
     if (!dryRun) {
       if (syncInFlight) {
         throw new APIError('Sync už běží (souběžný požadavek) — zkus to za chvíli znovu', 409)
@@ -351,6 +352,35 @@ async function runSync(
     const queue = candidates.slice(0, maxPlaces)
     const deferred = candidates.length - queue.length
 
+    // dryRun MUSÍ skončit tady, PŘED smyčkou — ta volá Meteostat pro každou
+    // stránku ve frontě. Dřív se `dryRun` uplatnil až u zápisu, takže „zkušební"
+    // běh přes celý web vyčerpal měsíční kvótu (500 dotazů) a vrátil samá 429.
+    // Zkušební běh proto jen spočítá, co by se dělo, a nesáhne na API.
+    if (dryRun) {
+      const plannedCoords = new Set(
+        queue.map(({ page }) => {
+          const parentId = typeof page.parent === 'object' ? page.parent?.id : page.parent
+          const parent = typeof parentId === 'number' ? parentById.get(parentId) : undefined
+          const lat = Number.parseFloat(parent?.detail?.latitude ?? '')
+          const lon = Number.parseFloat(parent?.detail?.longitude ?? '')
+          return Number.isFinite(lat) && Number.isFinite(lon)
+            ? `${lat.toFixed(4)},${lon.toFixed(4)}`
+            : null
+        }),
+      )
+      plannedCoords.delete(null)
+      return Response.json({
+        ok: true,
+        dryRun: true,
+        // Kolik dotazů by běh spotřeboval — dvě volání na jedny souřadnice
+        // (okno 20 let se nevejde do limitu 3 650 dní na dotaz).
+        plannedRequests: plannedCoords.size * 2,
+        queued: queue.map(({ page }) => page.fullSlug),
+        upToDate,
+        deferred,
+      })
+    }
+
     // Sekvenčně s rozestupy (rate limit RapidAPI). Kdyby víc stránek sdílelo
     // souřadnice, druhá se obslouží z cache — kvóta je jen 500 dotazů/měsíc.
     const normalsCache = new Map<string, ClimateNormals | Error>()
@@ -383,18 +413,6 @@ async function runSync(
         continue
       }
       results.push({ id: page.id, fullSlug: page.fullSlug ?? null, normals: cached })
-    }
-
-    if (dryRun) {
-      return Response.json({
-        ok: true,
-        dryRun: true,
-        pages: results,
-        upToDate,
-        deferred,
-        skipped,
-        errors,
-      })
     }
 
     // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
