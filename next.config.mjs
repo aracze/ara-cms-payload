@@ -123,6 +123,27 @@ const nextConfig = {
         destination: '/:path+/:slug',
         permanent: true,
       },
+      // Staré VÝPISOVÉ podstránky míst. V Grails to byly samostatné stránky
+      // (`{rodic}/mista` = DESTINATION_LIST, `{rodic}/clanky` = ARTICLE_LIST);
+      // na novém webu jsou to sekce na stránce rodiče, takže míříme na kotvu.
+      // Ověřeno proti staré DB: 495x `%/mista`, 673x `%/clanky` - a v aktuální
+      // sitemapě (3155 URL) nekončí na tyhle segmenty ANI JEDNA stránka, takže
+      // pravidlo nemá co zastínit. POZOR: `prakticke-informace` a `ubytovani`
+      // sem nepatří - to jsou na novém webu skutečné podstránky (71, resp. 8).
+      // MUSÍ být až za pravidlem pro články výše: tohle chytá jen adresu, která
+      // segmentem končí, takže `{rodic}/clanky/{slug}` propadne správně tam.
+      {
+        source: '/:path+/:section(mista|clanky)',
+        destination: '/:path+#:section',
+        permanent: true,
+      },
+      // Pozn.: segmenty `turisticke-cile` / `zajimavosti` / `aktivity` / `zabava`
+      // tu SCHVÁLNĚ nejsou. Grails je z adresy sám vyhazoval (Page.groovy:
+      // `uniqueUrl - "turisticke-cile/" - "zajimavosti/" ...`), takže ve staré
+      // DB nemají ani jednu stránku - existovaly jen v pár prastarých URL, které
+      // si starý web řešil třemi ručními redirecty. Na tři adresy nemá smysl
+      // držet obecná pravidla. (A pokud by se sem někdy vracely: segment byl
+      // v MNOŽNÉM čísle, tvary `turisticky-cil`/`zajimavost` nikdy neexistovaly.)
     ]
   },
 }
