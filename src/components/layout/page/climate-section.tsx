@@ -92,14 +92,51 @@ const MONTH_FULL = [
 // Škála (barvy, popisky, výpočet vhodnosti) žije v `@/lib/climate` — sdílí ji
 // s pruhem sezóny v pravém panelu, aby měla jedno místo.
 
+/**
+ * Kolik naprší, se musí posuzovat VŮČI MÍSTU, ne podle jedné univerzální
+ * hranice. Dřív platilo „55 mm a víc = deštivo" všude, takže Bangkok dostal
+ * v listopadu deštivý mráček, přesto že je to jeho nejsušší část roku a vrchol
+ * sezóny — vedle září se 340 mm to vypadalo nesmyslně. Stejná třída chyby jako
+ * bývalý teplotní strop na 33 °C: jedno číslo na Island i na Thajsko.
+ *
+ * Samotný poměr k místu ale nestačí ani jedním směrem:
+ *  · v poušti (maximum 5 mm) by „nejdeštivější měsíc" dostal deštivou ikonu,
+ *    ačkoli tam neprší vůbec → proto absolutní podlaha,
+ *  · v Bergenu prší 200 mm každý měsíc rovnoměrně, takže by žádný nevyčníval
+ *    → proto absolutní strop, nad kterým prší bez ohledu na okolí.
+ *
+ * Poměřuje se s MEDIÁNEM, ne s maximem: u míst s vyrovnanými srážkami
+ * (Chorvatsko 34–71 mm) by se proti maximu „deštivá" stala většina měsíců,
+ * a taková ikona pak nenese žádnou informaci.
+ */
+const RAIN_A_LOT_MM = 120
+const RAIN_SOME_MM = 80
+const RAIN_FLOOR_MM = 30
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+}
+
+type RainLevel = 'rainy' | 'showery' | 'dry'
+
+function rainLevel(prcp: number | null, medianPrcp: number): RainLevel {
+  if (prcp === null) return 'dry'
+  const aboveFloor = prcp >= RAIN_FLOOR_MM && medianPrcp > 0
+  if (prcp >= RAIN_A_LOT_MM || (aboveFloor && prcp >= medianPrcp * 1.6)) return 'rainy'
+  if (prcp >= RAIN_SOME_MM || (aboveFloor && prcp >= medianPrcp * 1.25)) return 'showery'
+  return 'dry'
+}
+
 /** Orientační ikona měsíce z teploty a srážek (deterministická, bez dat navíc). */
-function monthEmoji(m: ClimateNormalMonth): string {
+function monthEmoji(m: ClimateNormalMonth, medianPrcp: number): string {
   const t = m.tmax ?? 0
-  const rain = m.prcp ?? 0
-  if (rain >= 55) return '🌧️'
-  if (rain >= 45 && t < 15) return '🌦️'
-  if (t >= 25) return '☀️'
-  if (t >= 20) return rain >= 45 ? '🌤️' : '☀️'
+  const rain = rainLevel(m.prcp, medianPrcp)
+  if (rain === 'rainy') return '🌧️'
+  if (rain === 'showery') return t < 15 ? '🌦️' : '🌤️'
+  if (t >= 20) return '☀️'
   if (t >= 10) return '⛅'
   return '🌥️'
 }
@@ -119,6 +156,9 @@ export function climateHeading(genitive: string): string {
 function PillChart({ months }: { months: ClimateNormalMonth[] }) {
   const maxT = Math.max(...months.map((m) => m.tmax ?? 0), 1)
   const maxR = Math.max(...months.map((m) => m.prcp ?? 0), 1)
+  // Typický měsíc daného místa — podle něj se pozná, který je opravdu deštivý
+  // (viz rainLevel). Měsíce bez měření se do mediánu nepočítají.
+  const medianR = median(months.map((m) => m.prcp).filter((p): p is number => p !== null))
 
   return (
     <div className="overflow-x-auto">
@@ -134,7 +174,7 @@ function PillChart({ months }: { months: ClimateNormalMonth[] }) {
           return (
             <div key={m.month} className="group relative text-center">
               <div aria-hidden="true" className="text-[19px] leading-7">
-                {monthEmoji(m)}
+                {monthEmoji(m, medianR)}
               </div>
               <div className="mb-1 font-heading text-[13px] font-semibold text-[#1f2937]">
                 {Math.round(m.tmax ?? 0)}°
@@ -297,9 +337,16 @@ export function ClimateSection({
         </table>
       </div>
 
-      {/* Atribuce vyžadovaná licencí dat (CC BY 4.0). */}
+      {/* Atribuce vyžadovaná licencí dat (CC BY 4.0). Legenda popisuje i ikonu,
+          protože bez vysvětlení může slunce u londýnského července s 58 mm
+          působit jako chyba — číslo pod sloupcem přitom říká pravdu.
+          Formulace musí pokrýt OBĚ větve `rainLevel`: nejen „víc než tu bývá"
+          (poměr k mediánu), ale i absolutní hranice. Jinak by lhala v Bergenu,
+          kde duben se 110 mm proti mediánu 180 je sušší než obvykle, a přesto
+          deštivou ikonu dostane. */}
       <p className="mt-3 text-[12px] text-[#667085]">
-        Výška sloupce = denní teplota, proužek pod číslem = srážky · Zdroj:{' '}
+        Výška sloupce = denní teplota, proužek pod číslem = srážky, ikona = deštivost měsíce (hodně
+        srážek, nebo víc než tu bývá) · Zdroj:{' '}
         <a
           href="https://meteostat.net/"
           target="_blank"

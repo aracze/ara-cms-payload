@@ -1,5 +1,5 @@
 import { PageCategory, PracticalInfoSection, RichTextRoot } from '@/types/payload'
-import { richTextToHtml } from './rich-text-html'
+import { richTextToHtml, type RichTextRenderContext } from './rich-text-html'
 
 /**
  * Složená stránka „Praktické informace" — jedna dlouhá stránka poskládaná
@@ -70,7 +70,9 @@ function demoteHeadings(html: string): string {
 export function composePracticalInfoHtml(
   ownText: string | RichTextRoot | null | undefined,
   sections: PracticalInfoSection[],
-  context: { currencyCode?: string | null; exchangeRate?: number | null } = {},
+  // Tvar kontextu sdílíme s richTextToHtml, ať se při přidání dalšího pole
+  // (jako se stalo s pásmem) nemusí měnit dvě definice.
+  context: Omit<RichTextRenderContext, 'usedHeadingIds'> = {},
 ): string {
   const present = sectionDefs
     .map((def) => {

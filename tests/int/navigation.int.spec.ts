@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildPageUrl } from '@/lib/page-url'
-import { buildBreadcrumbs } from '@/lib/page-hierarchy'
+import { ancestorSlugsNearestFirst, buildBreadcrumbs } from '@/lib/page-hierarchy'
 import { PageCategory } from '@/types/payload'
 
 // Pojistka drobečků (odvození z adresy) sahá do datové vrstvy — mockujeme jen
@@ -94,6 +94,52 @@ describe('buildBreadcrumbs: řetězec z hierarchie CMS', () => {
       { title: 'Kalifornie', href: '/usa/kalifornie' },
       { title: 'San Francisco', href: '/usa/san-francisco' },
     ])
+  })
+})
+
+// Dědění měny a časového pásma stojí na tomto seznamu: prázdný seznam znamená
+// „nezdědí se nic", a protože úklid dat potomkům vlastní hodnoty smazal podle
+// hierarchie v databázi (ne podle drobečků), musí i stránka bez uloženého
+// řetězce dostat předky z adresy.
+describe('ancestorSlugsNearestFirst: předci pro dědění', () => {
+  const chain = [
+    { label: 'Evropa', url: '/evropa' },
+    { label: 'Chorvatsko', url: '/chorvatsko' },
+    { label: 'Dubrovník', url: '/chorvatsko/dubrovnik' },
+  ]
+
+  it('vrací předky od nejbližšího, bez stránky samotné', () => {
+    expect(
+      ancestorSlugsNearestFirst({ breadcrumbs: chain, fullSlug: '/chorvatsko/dubrovnik' }),
+    ).toEqual(['/chorvatsko', '/evropa'])
+  })
+
+  it('drží i předky skryté z adresy (Karélie nad Kiži)', () => {
+    expect(
+      ancestorSlugsNearestFirst({
+        breadcrumbs: [
+          { label: 'Evropa', url: '/evropa' },
+          { label: 'Rusko', url: '/rusko' },
+          { label: 'Karélie', url: '/rusko/karelie' },
+          { label: 'Kiži', url: '/rusko/kizi' },
+        ],
+        fullSlug: '/rusko/kizi',
+      }),
+    ).toEqual(['/rusko/karelie', '/rusko', '/evropa'])
+  })
+
+  it('bez uloženého řetězce spadne na prefixy adresy', () => {
+    expect(
+      ancestorSlugsNearestFirst({ breadcrumbs: [], fullSlug: '/chorvatsko/dubrovnik' }),
+    ).toEqual(['/chorvatsko'])
+    expect(
+      ancestorSlugsNearestFirst({ breadcrumbs: null, fullSlug: '/usa/grand-canyon/south-rim' }),
+    ).toEqual(['/usa/grand-canyon', '/usa'])
+  })
+
+  it('stránka nejvyšší úrovně předky nemá', () => {
+    expect(ancestorSlugsNearestFirst({ breadcrumbs: [], fullSlug: '/evropa' })).toEqual([])
+    expect(ancestorSlugsNearestFirst({ breadcrumbs: null, fullSlug: '' })).toEqual([])
   })
 })
 

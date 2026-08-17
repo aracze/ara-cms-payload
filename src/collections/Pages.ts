@@ -179,12 +179,16 @@ export const Pages: CollectionConfig = {
                 },
               ],
             },
-            {
-              name: 'showWeather',
-              label: 'Zobrazit přehled počasí',
-              type: 'checkbox',
-              defaultValue: false,
-            },
+            // Políčko „Zobrazit přehled počasí" (`showWeather`) tu bývalo jako
+            // dědictví migrace ze starého webu (`displayWeatherOverview`).
+            // Odstraněné 17. 8. 2026: přehled počasí podřazených míst se pozná
+            // sám podle toho, jestli je pod stránkou nějaké místo s vlastní
+            // stránkou počasí (viz page.tsx a fetchWeatherOverviewPlaces), takže
+            // zaškrtávátko nic neovlivňovalo a jen mátlo. Migrovaná data se
+            // navíc s realitou rozcházela u šesti stránek. Sloupce
+            // `pages.detail_show_weather` a `_pages_v.version_detail_show_weather`
+            // v databázi zůstávají — nic je nečte a mazání dat na produkci by
+            // bylo zbytečné riziko.
           ],
         },
         {
