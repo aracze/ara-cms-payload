@@ -24,10 +24,11 @@ export interface PanelWeatherData {
 }
 
 /**
- * Sloupec počasí v panelu: nahoře popisek stavu, dole teplota se svou ikonou.
- * Přesně tatáž stavba jako sloupec s časem vedle (den / čas s posunem), takže
- * oba mají dva řádky a nikde nezbývá prázdné ani vycpané místo. Ikona stojí
- * u teploty jako přípona — stejně jako „+0h" u času.
+ * Sloupec počasí v panelu: tři řádky nad sebou — popisek stavu, teplota, ikona.
+ * Přesně tatáž stavba jako sloupec s časem vedle (den / čas / posun), takže obě
+ * poloviny mají stejný tvar i výšku a u dělící linky proti sobě stojí jen dvě
+ * hodnoty. Ikona proto leží POD teplotou, ne vedle ní — vedle ní by u linky
+ * odsazovala jednu stranu jinak než druhá.
  */
 function PanelWeather({ weather }: { weather: PanelWeatherData }) {
   return (
@@ -35,21 +36,20 @@ function PanelWeather({ weather }: { weather: PanelWeatherData }) {
       href={weather.href}
       className="flex flex-col items-center gap-1.5 px-1.5 hover:no-underline"
     >
-      <span className="flex h-[15px] items-center text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085]">
+      {/* Jeden řádek s výpustkou: sloupec je široký 125 px, takže delší popisky
+          („Zataženo s deštěm“) by se zalomily. Řádek má pevnou výšku kvůli
+          zarovnání s časem vedle, takže by druhá řádka přetekla přes teplotu.
+          Celý popisek zůstává v title a stránka počasí ho má vypsaný. */}
+      <span
+        title={weather.condition}
+        className="block h-[15px] max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-bold uppercase leading-[15px] tracking-[0.1em] text-[#667085]"
+      >
         {weather.condition}
       </span>
-      {/* Ikona je pozicovaná ABSOLUTNĚ, aby nerozšiřovala řádek: popisek stavu
-          se tak vystředí nad samotnou teplotou, ne nad dvojicí teplota + ikona.
-          Stejně je na tom posun u času ve sloupci vedle. */}
-      <span className="relative">
-        <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
-          {weather.temp} °C
-        </span>
-        <WeatherIcon
-          icon={weather.icon}
-          className="absolute left-full top-1/2 ml-1.5 h-[15px] w-[15px] -translate-y-1/2 text-[#667085]"
-        />
+      <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
+        {weather.temp} °C
       </span>
+      <WeatherIcon icon={weather.icon} className="h-[15px] w-[15px] text-[#667085]" />
     </Link>
   )
 }
@@ -523,14 +523,18 @@ export const MainContent = ({
                         {/* Čas vlevo, počasí vpravo, mezi nimi vlasová linka —
                             dvě různé věci se nemají mísit do jedné řady (dřív
                             splývaly a popisek stavu se vázal spíš k hodinám).
-                            Oba sloupce mají tvar „značka / hodnota / upřesnění":
-                            vlevo den–čas–posun, vpravo ikona–teplota–stav, takže
-                            naproti údaji „+0h" stojí text, ne ozdoba. */}
+                            Oba sloupce mají tvar „popisek / hodnota / upřesnění":
+                            vlevo den–čas–posun, vpravo stav–teplota–ikona, takže
+                            u linky proti sobě stojí jen dvě hodnoty.
+
+                            Blok je široký 250 px jako vodorovné linky nad ním a
+                            pod ním — v šířce celého panelu (340 px) zbývalo u
+                            dělící linky přes 50 px prázdna na každé straně. */}
                         {timezone && panelWeather ? (
                           // Flex, ne grid: u gridu se automatické umísťování
                           // buněk kolem přes-řádkové linky rozsype a sloupce
                           // se překryjí.
-                          <div className="flex items-stretch justify-center">
+                          <div className="mx-auto flex w-[250px] items-stretch justify-center">
                             <LocalTime timezone={timezone} stacked className="flex-1 min-w-0" />
                             <div className="w-px shrink-0 self-stretch bg-[#e4e4e4]" />
                             <div className="flex-1 min-w-0">

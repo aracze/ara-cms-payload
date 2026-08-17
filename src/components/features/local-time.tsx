@@ -89,35 +89,31 @@ export function LocalTime({
           <>
             <span className={`${microClass} h-[15px]`} />
             <span className="text-[26px] leading-none">&nbsp;</span>
+            <span className={`${microClass} h-[15px]`} />
           </>
         )}
       </div>
     )
   }
 
-  // Sloupcový režim: nahoře popisek, dole hodnota se svou příponou. Posun
-  // zůstává VEDLE času, ne pod ním — upřesňuje ho, takže patří k němu na řádek
-  // (a sloupec s počasím vedle má pak tutéž stavbu: stav / teplota s ikonou).
-  //
-  // Posun je pozicovaný ABSOLUTNĚ, aby nerozšiřoval řádek: den se tak vystředí
-  // nad samotným časem, ne nad dvojicí čas + posun, kde by proti němu seděl
-  // viditelně vlevo.
+  // Sloupcový režim: tři řádky nad sebou — popisek, hodnota, upřesnění. Posun
+  // leží POD časem, ne vedle něj: vedle času čouhal do strany a u dělící linky
+  // pak byla jedna polovina panelu plná a druhá prázdná (23 px inkoustu vlevo
+  // proti 52 px prázdna vpravo). Pod časem zbude u linky na obou stranách jen
+  // hodnota, takže je odstup 29 : 30 px. Sloupec s počasím vedle má tutéž
+  // stavbu: stav / teplota / ikona.
   if (stacked) {
     return (
       <div className={wrapper}>
         <span className={`${microClass} flex h-[15px] items-center`}>{data.day}</span>
-        <span className="relative">
-          <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
-            {data.time}
-          </span>
-          {data.offset && (
-            <span
-              className={`${microClass} absolute left-full top-1/2 ml-1.5 -translate-y-1/2 whitespace-nowrap`}
-            >
-              {data.offset}
-            </span>
-          )}
+        <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
+          {data.time}
         </span>
+        {data.offset && (
+          <span className={`${microClass} flex h-[15px] items-center whitespace-nowrap`}>
+            {data.offset}
+          </span>
+        )}
       </div>
     )
   }
