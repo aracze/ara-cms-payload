@@ -1312,6 +1312,12 @@ export type InheritedPlaceDetail = {
   timezone: string | null
 }
 
+/** Nic se nezdědilo — stránka bez předků, nebo selhal dotaz (viz volající). */
+export const EMPTY_INHERITED_PLACE_DETAIL: InheritedPlaceDetail = {
+  currencyCode: null,
+  timezone: null,
+}
+
 /**
  * Měna a časové pásmo od NEJBLIŽŠÍHO předka, který je má (Toulouse → Francie,
  * Kiži → Karelie). Díky tomu zůstávají políčka u potomků prázdná a přechod
@@ -1324,7 +1330,7 @@ export type InheritedPlaceDetail = {
 async function fetchInheritedPlaceDetailUncached(
   ancestorFullSlugs: string[],
 ): Promise<InheritedPlaceDetail> {
-  if (ancestorFullSlugs.length === 0) return { currencyCode: null, timezone: null }
+  if (ancestorFullSlugs.length === 0) return EMPTY_INHERITED_PLACE_DETAIL
   const payload = await getDb()
 
   const res = (await payload.find({
@@ -1332,7 +1338,11 @@ async function fetchInheritedPlaceDetailUncached(
     overrideAccess: false,
     where: { fullSlug: { in: ancestorFullSlugs } },
     depth: 0,
-    limit: ancestorFullSlugs.length,
+    // `pagination: false` = bez druhého dotazu na počet, který nikdo nečte.
+    // Limit zároveň nesmí být přesně na počet předků: `fullSlug` unikátní index
+    // nemá, takže duplicitní adresa by z výsledku vytlačila skutečného předka.
+    pagination: false,
+    limit: 0,
     select: { fullSlug: true, detail: true },
     joins: false,
   })) as unknown as PayloadDocsResponse<{

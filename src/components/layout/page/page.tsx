@@ -28,6 +28,7 @@ import {
   fetchTeamSection,
   fetchInheritedAffiliateDeals,
   fetchInheritedPlaceDetail,
+  EMPTY_INHERITED_PLACE_DETAIL,
   type InheritedPlaceDetail,
   fetchWeatherOverviewPlaces,
   fetchPlaceWeatherChild,
@@ -77,11 +78,13 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const ancestorSlugs = ancestorSlugsNearestFirst(page)
   // Místo bez vlastních nabídek dědí od NEJBLIŽŠÍHO předka, který je má
   // (Dubrovník → Chorvatsko). Promise startuje hned, await až v poslední vlně.
+  // `.catch` tu MUSÍ být: promise se čeká až o 300 řádků dál, takže když mezitím
+  // spadne jiný dotaz, zůstala by odmítnutá promise bez obsluhy (unhandledRejection).
   const inheritedDealsPromise =
     !ownAffiliateDeals &&
     page.category === PageCategory.Misto_k_navstiveni &&
     ancestorSlugs.length > 0
-      ? fetchInheritedAffiliateDeals(ancestorSlugs)
+      ? fetchInheritedAffiliateDeals(ancestorSlugs).catch(() => null)
       : Promise.resolve(null)
 
   // Měna a časové pásmo se dědí stejně (Toulouse → Francie, Kiži → Karelie):
@@ -89,12 +92,16 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // změna na jednom místě. Vlastní hodnota vždy vyhrává — tím se řeší země
   // s víc měnami (výjimka u regionu). Dotaz jde jen když stránce něco chybí
   // a běží v první vlně, aby nepřidal další sekvenční čekání.
+  // Selhání dotazu nesmí shodit celou stránku: sedí v `Promise.all` první vlny,
+  // takže bez `.catch` by jeden výpadek databáze při dohledávání měny znamenal
+  // chybu 500 místo chybějících hodin a kurzu (dřív se hodnoty braly z už
+  // načtených dat, takže tahle cesta selhat neumělo).
   const ownCurrencyCode = page.detail?.currencyCode?.trim() || null
   const ownTimezone = page.detail?.timezone?.trim() || null
   const inheritedDetailPromise: Promise<InheritedPlaceDetail> =
     (!ownCurrencyCode || !ownTimezone) && ancestorSlugs.length > 0
-      ? fetchInheritedPlaceDetail(ancestorSlugs)
-      : Promise.resolve({ currencyCode: null, timezone: null })
+      ? fetchInheritedPlaceDetail(ancestorSlugs).catch(() => EMPTY_INHERITED_PLACE_DETAIL)
+      : Promise.resolve(EMPTY_INHERITED_PLACE_DETAIL)
 
   // Nezávislé dotazy běží PARALELNĚ — sekvenční čekání (ancestors → menu →
   // kurz → obrázky) sčítalo ~0,3 s režii CMS za každý dotaz. React cache()
@@ -429,6 +436,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       ? composePracticalInfoHtml(page.text, practicalInfoSections, {
           currencyCode: effectiveCurrencyCode,
           exchangeRate: exchangeData?.rate,
+          timezone: effectiveTimezone,
         })
       : page.text
 

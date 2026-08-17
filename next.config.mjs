@@ -81,6 +81,15 @@ const nextConfig = {
         destination: '/',
         permanent: true,
       },
+      {
+        // Rozbitý duplikát z migrace: norský text o jídle omylem pod
+        // Portugalskem (časové razítko ve slugu = automatické přejmenování při
+        // srážce). Smazaný 17. 8. 2026 skriptem cleanup-currency-timezone.sql;
+        // správnou stránku má Norsko, tak tam posíláme i zaindexované odkazy.
+        source: '/portugalsko/jidlo1726123756332',
+        destination: '/norsko/jidlo',
+        permanent: true,
+      },
       // Kalifornie jako mezistupeň v adrese - stará i nová hierarchie ji
       // z URL schovávají (viz Pages.includeInChildUrlPaths), ale konkrétně
       // tyhle staré odkazy ji ještě obsahují (ověřeno proti aktuálním fullSlug

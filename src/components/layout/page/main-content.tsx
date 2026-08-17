@@ -232,7 +232,9 @@ export const MainContent = ({
     PageCategory.Turisticky_cil,
   ]
   const showAktualniInfo = !!pageCategory && placeCategories.includes(pageCategory)
-  const textHtml = richTextToHtml(text, { currencyCode, exchangeRate })
+  // Pásmo jde do kontextu spolu s měnou — karta „Aktuální čas" v textu si ho
+  // bere, když má v bloku prázdné políčko (viz rich-text-html).
+  const textHtml = richTextToHtml(text, { currencyCode, exchangeRate, timezone })
   const tocCategories: PageCategory[] = [
     PageCategory.Vstupni_podminky,
     PageCategory.Mena_a_ceny,
