@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { revalidatePageAfterChange, revalidatePageAfterDelete } from '../hooks/revalidation'
 import { isAllowedInviaFeedUrl } from '../endpoints/syncAffiliateDeals'
 import { imageFields } from '../fields/image'
+import { currencyCodeField, timezoneField } from '../fields/place-detail'
 import { slugField } from '../fields/slug'
 import { isAdmin } from '../access/isAdmin'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
@@ -156,27 +157,9 @@ export const Pages: CollectionConfig = {
                 // Obojí se DĚDÍ od nejbližšího nadřazeného místa, které to má
                 // vyplněné (viz fetchInheritedPlaceDetail) — u potomků proto
                 // nechávej políčka prázdná a vyplňuj je jen tam, kde se hodnota
-                // od předka liší.
-                {
-                  name: 'timezone',
-                  label: 'Název čas. pásma (např. Europe/London)',
-                  type: 'text',
-                  admin: {
-                    width: '50%',
-                    description:
-                      'Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu/místa, kde je pásmo jiné.',
-                  },
-                },
-                {
-                  name: 'currencyCode',
-                  label: 'Kód měny (např. GBP)',
-                  type: 'text',
-                  admin: {
-                    width: '50%',
-                    description:
-                      'Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu s jinou měnou. U kontinentů nechávej prázdné.',
-                  },
-                },
+                // od předka liší. Validaci a normalizaci drží fields/place-detail.
+                timezoneField,
+                currencyCodeField,
               ],
             },
             // Políčko „Zobrazit přehled počasí" (`showWeather`) tu bývalo jako
