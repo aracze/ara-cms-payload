@@ -54,6 +54,25 @@ UPDATE pages SET detail_timezone = 'Asia/Yekaterinburg' WHERE full_slug = '/rusk
 UPDATE pages SET detail_timezone = 'Asia/Omsk' WHERE full_slug = '/rusko/omsk';
 UPDATE pages SET detail_timezone = 'Asia/Novosibirsk' WHERE full_slug = '/rusko/novosibirsk';
 
+-- 4b) USA: pásmo drží jednotlivé státy — Aljaška, Kalifornie a Wyoming ho už mají
+--     a Yellowstone, Yosemite, Death Valley, Cody nebo Jackson ho po nich dědí.
+--     Chybí Arizona (nemá letní čas, proto vlastní pásmo Phoenix — dědí ho celý
+--     Grand Canyon) a země: na /usa dáváme VÝCHODNÍ čas jako referenci, aby
+--     hodiny měly i podstránky USA (Praktické informace, Počasí, Měna…).
+UPDATE pages SET detail_timezone = 'America/New_York' WHERE full_slug = '/usa';
+UPDATE pages SET detail_timezone = 'America/Phoenix' WHERE full_slug = '/usa/arizona';
+
+-- 4c) Rozbitý duplikát: norská stránka o jídle omylem pod Portugalskem, se
+--     zdvojenými odstavci, s norskou měnou i pásmem a s časovým razítkem ve
+--     slugu (automatické přejmenování při srážce). Správnou stránku má Norsko
+--     na /norsko/jidlo, tahle byla jen navíc — a odkazovala se z portugalských
+--     praktických informací, takže návštěvníka poslala na text o norských rybách.
+--     Verze mažeme ručně: FK `_pages_v.parent_id` je SET NULL, jinak by po
+--     stránce zůstaly osiřelé verze.
+DELETE FROM _pages_v
+WHERE parent_id = (SELECT id FROM pages WHERE full_slug = '/portugalsko/jidlo1726123756332');
+DELETE FROM pages WHERE full_slug = '/portugalsko/jidlo1726123756332';
+
 -- 5) Nadbytečné kopie: hodnota shodná s tou, kterou by stránka zdědila od
 --    nejbližšího předka. Smazání NEMĚNÍ nic z toho, co web zobrazí.
 CREATE TEMP TABLE inherited_now AS
@@ -102,7 +121,8 @@ WHERE v.parent_id = p.id AND v.latest = true;
 COMMIT;
 
 -- Kontrola po spuštění: obě „→ smazat" čísla musí být 0 a „jiná než u předka"
--- smí obsahovat jen skutečné výjimky (dnes 4 ruská pásma).
+-- smí obsahovat jen skutečné výjimky (dnes 8 pásem: Kaliningrad, Jekatěrinburg,
+-- Omsk, Novosibirsk, Arizona, Aljaška, Kalifornie, Wyoming).
 WITH RECURSIVE chain AS (
   SELECT p.id AS page_id, p.parent_id AS anc_id, 1 AS depth
   FROM pages p WHERE p.parent_id IS NOT NULL

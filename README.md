@@ -709,10 +709,14 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   s `includeInChildUrlPaths: false` (kontinenty, Karélie nad Kiži) v URL nejsou, a přitom
   právě u nich může být výjimka. Celý řetěz jde jedním dotazem a jen tehdy, když stránce
   něco chybí. **Kontinenty nechávej prázdné** (hodnota by se propsala do všech zemí pod
-  nimi), stejně jako **Česko** (kurz CZK→CZK se stejně nepočítá) a **země s víc pásmy**
-  — u USA drží pásmo jednotlivé státy, u Ruska země (moskevský čas) + výjimky.
-  Jednorázový úklid dat po zavedení dědění je v `scripts/cleanup-currency-timezone.sql`
-  (idempotentní, se zálohou; na produkci spustit ručně + `force-recreate cms`).
+  nimi) a stejně tak **Česko** (kurz CZK→CZK se nepočítá). **Země s víc pásmy** drží
+  na sobě referenční čas a výjimky mají jednotlivé oblasti: Rusko moskevský čas
+  - Kaliningrad/Jekatěrinburg/Omsk/Novosibirsk, USA východní čas + Aljaška,
+    Kalifornie, Wyoming a Arizona (ta nemá letní čas, proto vlastní `America/Phoenix`;
+    národní parky pásmo dědí od svého státu). Jednorázový úklid dat po zavedení dědění
+    je v `scripts/cleanup-currency-timezone.sql` (idempotentní, se zálohou; kromě polí
+    maže i rozbitý duplikát norské stránky o jídle, který visel pod Portugalskem).
+    **Na produkci spustit ručně + `force-recreate cms`.**
 
 - **Sekce „Příprava do …“** (`src/components/layout/page/preparation-section.tsx`): na
   stránkách kategorie **Místo k navštívení** mezi „Co vidět“ a „Články a cestopisy“ (legacy
