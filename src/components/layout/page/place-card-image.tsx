@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { cloudinaryVariant, isCloudinary } from '@/lib/cloudinary-loader'
+import { capImageWidth, cloudinaryVariant, isCloudinary } from '@/lib/cloudinary-loader'
 
 /**
  * Obrázek karty místa s ořezem podle zařízení (art direction).
@@ -27,7 +27,7 @@ const BASE = 'f_auto,q_auto'
 /** `next/image` loader s pevným Cloudinary ořezem (poměr stran dle varianty). */
 function cropLoader(crop: string) {
   return ({ src, width }: { src: string; width: number }) =>
-    cloudinaryVariant(src, `${BASE},${crop},w_${width}`)
+    cloudinaryVariant(src, `${BASE},${crop},w_${capImageWidth(width)}`)
 }
 
 interface PlaceCardImageProps {

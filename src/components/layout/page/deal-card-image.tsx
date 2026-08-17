@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { cloudinaryVariant, isCloudinary } from '@/lib/cloudinary-loader'
+import { capImageWidth, cloudinaryVariant, isCloudinary } from '@/lib/cloudinary-loader'
 
 /**
  * Fotka deal karty v sekci „Akční nabídky". Cloudinary zdroje (fotka místa)
@@ -28,7 +28,7 @@ export function DealCardImage({
       alt={alt}
       fill
       loader={({ src: s, width }) =>
-        cloudinaryVariant(s, `f_auto,q_auto,c_fill,g_auto,ar_${aspect},w_${width}`)
+        cloudinaryVariant(s, `f_auto,q_auto,c_fill,g_auto,ar_${aspect},w_${capImageWidth(width)}`)
       }
       sizes={sizes}
       unoptimized={unoptimized}

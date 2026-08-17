@@ -35,6 +35,11 @@ const nextConfig = {
     // funguje to tak i se standalone outputem bez další zátěže.
     loader: 'custom',
     loaderFile: './src/lib/cloudinary-loader.ts',
+    // Výchozí sada Next.js obsahuje i 2048 a 3840 px — 4K varianty dělaly
+    // většinu přenosů z Cloudinary. Strop 1920 px drží i loader
+    // (MAX_IMAGE_WIDTH v cloudinary-loader.ts), tady jen srcset větší
+    // varianty vůbec nenabízí.
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
   },
   webpack: (webpackConfig) => {
     webpackConfig.resolve.extensionAlias = {
