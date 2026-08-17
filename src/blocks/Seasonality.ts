@@ -1,9 +1,17 @@
 import type { Block } from 'payload'
 
+/**
+ * Čtyři stupně, shodné se škálou klimatického grafu (SUITABILITY_LABEL
+ * v `lib/climate.ts`) — pruh u zemí a graf u měst pak mluví stejnou řečí.
+ * Popisky nesou obojí názvosloví: sezónní pro redaktora, škálové kvůli
+ * grafu, na který pruh odkazuje. Hodnoty se nepřejmenovávají, jinak by
+ * dosavadní bloky v obsahu spadly na výchozí „mimo sezónu".
+ */
 const SEASON_STATUS_OPTIONS = [
-  { label: 'Mimo sezónu', value: 'off' },
-  { label: 'Vedlejší sezóna', value: 'mid' },
-  { label: 'Hlavní sezóna', value: 'peak' },
+  { label: 'Mimo sezónu (nevhodné)', value: 'off' },
+  { label: 'Přechodné období (průměrné)', value: 'shoulder' },
+  { label: 'Vedlejší sezóna (dobré)', value: 'mid' },
+  { label: 'Hlavní sezóna (ideální)', value: 'peak' },
 ]
 
 export const SeasonalityBlock: Block = {

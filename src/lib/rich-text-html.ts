@@ -444,8 +444,8 @@ function buildImageAttributionHtml(image: Record<string, unknown>): string {
   return parts.join(' · ')
 }
 
-function sanitizeSeasonalityStatus(status: unknown): 'off' | 'mid' | 'peak' {
-  if (status === 'mid' || status === 'peak' || status === 'off') {
+function sanitizeSeasonalityStatus(status: unknown): 'off' | 'shoulder' | 'mid' | 'peak' {
+  if (status === 'mid' || status === 'peak' || status === 'off' || status === 'shoulder') {
     return status
   }
   return 'off'

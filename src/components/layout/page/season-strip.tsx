@@ -28,16 +28,18 @@ const MONTH_FULL = [
   'Prosinec',
 ]
 
-/** Stav pruhu → stupeň škály. Prostřední dva stupně škály pruh nerozlišuje. */
-const LEVEL: Record<SeasonStatus, 'ideal' | 'good' | 'poor'> = {
+/** Stav pruhu → stupeň škály, nově jeden ku jedné (dřív pruh třetí vynechával). */
+const LEVEL: Record<SeasonStatus, 'ideal' | 'good' | 'mid' | 'poor'> = {
   peak: 'ideal',
   mid: 'good',
+  shoulder: 'mid',
   off: 'poor',
 }
 
 const STATUS_TEXT: Record<SeasonStatus, string> = {
   peak: 'hlavní sezóna',
   mid: 'sezóna',
+  shoulder: 'přechodné období',
   off: 'mimo sezónu',
 }
 

@@ -1168,13 +1168,13 @@ export interface SeasonalityBlock {
   months?:
     | {
         monthNumber: number;
-        status: 'off' | 'mid' | 'peak';
+        status: 'off' | 'shoulder' | 'mid' | 'peak';
         id?: string | null;
       }[]
     | null;
   legend?:
     | {
-        status: 'off' | 'mid' | 'peak';
+        status: 'off' | 'shoulder' | 'mid' | 'peak';
         label: string;
         id?: string | null;
       }[]

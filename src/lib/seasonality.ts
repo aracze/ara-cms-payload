@@ -19,8 +19,13 @@ import { suitability } from '@/lib/climate'
  * než pruh, který ukazuje jiné místo, než o kterém stránka je.
  */
 
-/** Tři stavy pruhu, shodné s `seasonalityBlock` v adminu. */
-export type SeasonStatus = 'peak' | 'mid' | 'off'
+/**
+ * Čtyři stavy pruhu, shodné s `seasonalityBlock` v adminu i se stupni škály
+ * v `lib/climate.ts` (peak = ideal, mid = good, shoulder = mid, off = poor).
+ * Dřív jich byly tři a města o čtvrtý přicházela: „průměrné" měsíce splývaly
+ * s „nevhodnými", takže přechodný duben vypadal jako leden.
+ */
+export type SeasonStatus = 'peak' | 'mid' | 'shoulder' | 'off'
 
 export interface SeasonMonths {
   /** 12 stavů od ledna, vždy kompletní. */
@@ -29,8 +34,14 @@ export interface SeasonMonths {
   idealText: string | null
 }
 
+/**
+ * Do popisku „Květen – Září" i do rozhodnutí, jestli pruh vůbec vykreslit,
+ * se počítá jen SEZÓNA — přechodné měsíce jsou ústupek, ne doporučení.
+ */
+const isSeason = (s: SeasonStatus): boolean => s === 'peak' || s === 'mid'
+
 function toStatus(value: unknown): SeasonStatus {
-  return value === 'peak' || value === 'mid' ? value : 'off'
+  return value === 'peak' || value === 'mid' || value === 'shoulder' ? value : 'off'
 }
 
 /**
@@ -90,13 +101,15 @@ export function seasonFromClimate(normals: ClimateNormals): SeasonMonths | null 
     if (byMonth[m.month - 1] !== null) return null
     const level = suitability(m)
     if (level === null) return null
-    byMonth[m.month - 1] = level === 'ideal' ? 'peak' : level === 'good' ? 'mid' : 'off'
+    byMonth[m.month - 1] =
+      level === 'ideal' ? 'peak' : level === 'good' ? 'mid' : level === 'mid' ? 'shoulder' : 'off'
   }
   if (byMonth.some((s) => s === null)) return null
   const months = byMonth as SeasonStatus[]
-  // Samé „mimo sezónu" (třeba Reykjavík) není doporučení, ale prázdný pruh —
-  // v panelu by jen zabíral místo a nic neřekl.
-  if (!months.some((s) => s !== 'off')) return null
+  // Žádná sezóna (třeba Reykjavík) není doporučení, ale prázdný pruh — v panelu
+  // by jen zabíral místo a nic neřekl. Rozhoduje sezóna, ne pouhá odlišnost od
+  // „mimo": samé přechodné měsíce taky nejsou, kdy jet.
+  if (!months.some(isSeason)) return null
   return { months, idealText: idealRangeLabel(months) }
 }
 
@@ -121,7 +134,7 @@ const MONTH_NAMES = [
  * dvojnásobná řada měsíců.
  */
 export function idealRangeLabel(months: SeasonStatus[]): string | null {
-  const inSeason = months.map((s) => s !== 'off')
+  const inSeason = months.map(isSeason)
   if (inSeason.every(Boolean)) return 'Celý rok'
   if (!inSeason.some(Boolean)) return null
 

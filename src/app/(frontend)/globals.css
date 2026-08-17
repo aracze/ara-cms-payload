@@ -529,7 +529,7 @@
 
   /* Barvy podle stavu — táž škála jako klimatický graf na stránkách počasí
      (SUITABILITY_COLOR v climate-section.tsx). Zelená dvojice = sezóna,
-     šedomodrá = mimo ni; pruh z ní bere první, druhý a čtvrtý stupeň.
+     šedomodrá = mimo ni; pruh bere všechny čtyři stupně.
      Při změně barev je nutné upravit obě místa.
 
      Inkoust se řídí podkladem: bílá čísla drží kontrast jen na tmavém prvním
@@ -537,6 +537,10 @@
      #3bba9c měla 2,4 : 1, tedy pod normou. */
   .prose .seasonality-month.status-off .month-num {
     @apply bg-[#c9d3de] text-[#4e5a68];
+  }
+
+  .prose .seasonality-month.status-shoulder .month-num {
+    @apply bg-[#9fb1c4] text-[#22303f];
   }
 
   .prose .seasonality-month.status-mid .month-num {
@@ -562,6 +566,9 @@
 
   .prose .legend-item.status-off .legend-dot {
     @apply bg-[#c9d3de];
+  }
+  .prose .legend-item.status-shoulder .legend-dot {
+    @apply bg-[#9fb1c4];
   }
   .prose .legend-item.status-mid .legend-dot {
     @apply bg-[#5eb49f];
