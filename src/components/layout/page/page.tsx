@@ -27,6 +27,8 @@ import {
   fetchPracticalInfoSections,
   fetchTeamSection,
   fetchInheritedAffiliateDeals,
+  fetchInheritedPlaceDetail,
+  type InheritedPlaceDetail,
   fetchWeatherOverviewPlaces,
   fetchPlaceWeatherChild,
 } from '@/lib/payload'
@@ -37,6 +39,7 @@ import { composePracticalInfoHtml } from '@/lib/practical-info'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
 import {
+  ancestorSlugsNearestFirst,
   breadcrumbListJsonLd,
   buildBreadcrumbs,
   menuOwnerCategories,
@@ -68,20 +71,30 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     page.category === PageCategory.Misto_k_navstiveni
       ? parseAffiliateDeals(page.affiliate?.deals)
       : null
+  // Předci od NEJBLIŽŠÍHO — sdílený vstup pro všechno, co se dědí po hierarchii
+  // (nabídky, měna, časové pásmo). Bere se z breadcrumbs, ne z adresy, ať v řetězu
+  // zůstanou předci skrytí z URL (viz ancestorSlugsNearestFirst).
+  const ancestorSlugs = ancestorSlugsNearestFirst(page)
   // Místo bez vlastních nabídek dědí od NEJBLIŽŠÍHO předka, který je má
-  // (Dubrovník → Chorvatsko); slugy z breadcrumbs od nejbližšího, bez stránky
-  // samotné. Promise startuje hned, await až v poslední vlně s ostatními.
-  const ancestorSlugsForDeals =
-    !ownAffiliateDeals && page.category === PageCategory.Misto_k_navstiveni
-      ? (page.breadcrumbs ?? [])
-          .map((b) => b?.url)
-          .filter((u): u is string => typeof u === 'string' && !!u && u !== page.fullSlug)
-          .reverse()
-      : []
+  // (Dubrovník → Chorvatsko). Promise startuje hned, await až v poslední vlně.
   const inheritedDealsPromise =
-    ancestorSlugsForDeals.length > 0
-      ? fetchInheritedAffiliateDeals(ancestorSlugsForDeals)
+    !ownAffiliateDeals &&
+    page.category === PageCategory.Misto_k_navstiveni &&
+    ancestorSlugs.length > 0
+      ? fetchInheritedAffiliateDeals(ancestorSlugs)
       : Promise.resolve(null)
+
+  // Měna a časové pásmo se dědí stejně (Toulouse → Francie, Kiži → Karelie):
+  // u potomků zůstávají políčka prázdná, takže přechod země na euro je jedna
+  // změna na jednom místě. Vlastní hodnota vždy vyhrává — tím se řeší země
+  // s víc měnami (výjimka u regionu). Dotaz jde jen když stránce něco chybí
+  // a běží v první vlně, aby nepřidal další sekvenční čekání.
+  const ownCurrencyCode = page.detail?.currencyCode?.trim() || null
+  const ownTimezone = page.detail?.timezone?.trim() || null
+  const inheritedDetailPromise: Promise<InheritedPlaceDetail> =
+    (!ownCurrencyCode || !ownTimezone) && ancestorSlugs.length > 0
+      ? fetchInheritedPlaceDetail(ancestorSlugs)
+      : Promise.resolve({ currencyCode: null, timezone: null })
 
   // Nezávislé dotazy běží PARALELNĚ — sekvenční čekání (ancestors → menu →
   // kurz → obrázky) sčítalo ~0,3 s režii CMS za každý dotaz. React cache()
@@ -93,10 +106,11 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     })
     .filter((id): id is number => id !== null)
 
-  const [rootPage, imageUrlMap, currentUser] = await Promise.all([
+  const [rootPage, imageUrlMap, currentUser, inheritedDetail] = await Promise.all([
     fetchRootPage(page),
     fetchMediaUrlsByIds(childImageIdsEarly),
     getCurrentUser(),
+    inheritedDetailPromise,
   ])
   const safeRootPage = rootPage ?? page
 
@@ -104,7 +118,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // e.g. on Dubrovník's Počasí → menuContext = Dubrovník's children
   // e.g. on Chorvatsko's Počasí → menuContext = Chorvatsko's children
   // (breadcrumbs i menuContext čtou stejné ancestor fetche — dedupováno.)
-  const effectiveCurrencyCode = page.detail?.currencyCode || safeRootPage.detail?.currencyCode
+  const effectiveCurrencyCode = ownCurrencyCode ?? inheritedDetail.currencyCode
+  const effectiveTimezone = ownTimezone ?? inheritedDetail.timezone
   // Kurz dává smysl jen na stránkách typu „místo" (sidebar s časem/kurzem).
   // Na ostatních podstránkách by to byl jen zbytečný externí request navíc.
   const shouldFetchExchangeRate = exchangeRateCategories.includes(page.category)
@@ -594,7 +609,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <MainContent
           text={mainText}
           pageCategory={page.category}
-          timezone={page.detail?.timezone || safeRootPage?.detail?.timezone}
+          timezone={effectiveTimezone}
           currencyCode={effectiveCurrencyCode}
           exchangeRate={exchangeData?.rate}
           // Země (místo s dalšími místy uvnitř) kartu Praktických informací

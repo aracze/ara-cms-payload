@@ -312,7 +312,13 @@ export interface Page {
     googleMapsZoom?: number | null;
     locative?: string | null;
     genitive?: string | null;
+    /**
+     * Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu/místa, kde je pásmo jiné.
+     */
     timezone?: string | null;
+    /**
+     * Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu s jinou měnou. U kontinentů nechávej prázdné.
+     */
     currencyCode?: string | null;
     showWeather?: boolean | null;
   };

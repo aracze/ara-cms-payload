@@ -153,17 +153,29 @@ export const Pages: CollectionConfig = {
             {
               type: 'row',
               fields: [
+                // Obojí se DĚDÍ od nejbližšího nadřazeného místa, které to má
+                // vyplněné (viz fetchInheritedPlaceDetail) — u potomků proto
+                // nechávej políčka prázdná a vyplňuj je jen tam, kde se hodnota
+                // od předka liší.
                 {
                   name: 'timezone',
                   label: 'Název čas. pásma (např. Europe/London)',
                   type: 'text',
-                  admin: { width: '50%' },
+                  admin: {
+                    width: '50%',
+                    description:
+                      'Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu/místa, kde je pásmo jiné.',
+                  },
                 },
                 {
                   name: 'currencyCode',
                   label: 'Kód měny (např. GBP)',
                   type: 'text',
-                  admin: { width: '50%' },
+                  admin: {
+                    width: '50%',
+                    description:
+                      'Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu s jinou měnou. U kontinentů nechávej prázdné.',
+                  },
                 },
               ],
             },

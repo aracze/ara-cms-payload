@@ -46,6 +46,24 @@ export function buildBreadcrumbs(
 }
 
 /**
+ * Slugy předků od NEJBLIŽŠÍHO po nejvyšší — vstup pro dědění hodnot po
+ * hierarchii (měna, časové pásmo, akční nabídky).
+ *
+ * Zdrojem je uložený řetězec `breadcrumbs` z CMS, NE prefixy adresy: předci
+ * s `includeInChildUrlPaths: false` (kontinenty, skryté regiony jako Karelie
+ * nad Kiži) v adrese nejsou, a přitom právě u takového předka může být
+ * výjimka — třeba region s jinou měnou než zbytek země.
+ *
+ * Aktuální stránka je v `breadcrumbs` poslední, proto se odfiltruje.
+ */
+export function ancestorSlugsNearestFirst(page: Pick<Page, 'breadcrumbs' | 'fullSlug'>): string[] {
+  return (page.breadcrumbs ?? [])
+    .map((item) => item?.url)
+    .filter((url): url is string => typeof url === 'string' && !!url && url !== page.fullSlug)
+    .reverse()
+}
+
+/**
  * Strukturovaná data drobečkové navigace (schema.org BreadcrumbList) pro
  * vyhledávače — Google z nich ve výsledku hledání kreslí cestu místo nahé URL.
  *
