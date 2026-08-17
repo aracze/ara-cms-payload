@@ -347,6 +347,15 @@ export interface Page {
     hasNextPage?: boolean;
     totalDocs?: number;
   };
+  climateNormals?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   slug?: string | null;
   legacyPageId?: number | null;
   /**
@@ -795,6 +804,7 @@ export interface PagesSelect<T extends boolean = true> {
         deals?: T;
       };
   comments?: T;
+  climateNormals?: T;
   slug?: T;
   legacyPageId?: T;
   analyticsPageViews?: T;
@@ -1158,13 +1168,13 @@ export interface SeasonalityBlock {
   months?:
     | {
         monthNumber: number;
-        status: 'off' | 'mid' | 'peak';
+        status: 'off' | 'shoulder' | 'mid' | 'peak';
         id?: string | null;
       }[]
     | null;
   legend?:
     | {
-        status: 'off' | 'mid' | 'peak';
+        status: 'off' | 'shoulder' | 'mid' | 'peak';
         label: string;
         id?: string | null;
       }[]

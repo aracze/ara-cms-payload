@@ -8,8 +8,51 @@ import { UserAvatar } from '@/components/user-avatar'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { websiteHref, websiteLabel } from '@/lib/utils'
 import { CollapsiblePageTextWithContributor } from './collapsible-page-text'
+import { PageContributor } from './page-contributor'
 import { ArticleAd } from '@/components/features/article-ad'
 import { TocSidebar } from '@/components/features/toc-sidebar'
+import { SeasonStrip } from './season-strip'
+import { WeatherIcon } from '@/components/features/weather-icon'
+import type { SeasonMonths } from '@/lib/seasonality'
+
+/** Data počasí v pravém panelu — teplota, stav a odkaz na stránku počasí. */
+export interface PanelWeatherData {
+  temp: number
+  condition: string
+  icon: string | null
+  href: string
+}
+
+/**
+ * Sloupec počasí v panelu: tři řádky nad sebou — popisek stavu, teplota, ikona.
+ * Přesně tatáž stavba jako sloupec s časem vedle (den / čas / posun), takže obě
+ * poloviny mají stejný tvar i výšku a u dělící linky proti sobě stojí jen dvě
+ * hodnoty. Ikona proto leží POD teplotou, ne vedle ní — vedle ní by u linky
+ * odsazovala jednu stranu jinak než druhá.
+ */
+function PanelWeather({ weather }: { weather: PanelWeatherData }) {
+  return (
+    <Link
+      href={weather.href}
+      className="flex flex-col items-center gap-1.5 px-1.5 hover:no-underline"
+    >
+      {/* Jeden řádek s výpustkou: sloupec je široký 125 px, takže delší popisky
+          („Zataženo s deštěm“) by se zalomily. Řádek má pevnou výšku kvůli
+          zarovnání s časem vedle, takže by druhá řádka přetekla přes teplotu.
+          Celý popisek zůstává v title a stránka počasí ho má vypsaný. */}
+      <span
+        title={weather.condition}
+        className="block h-[15px] max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-bold uppercase leading-[15px] tracking-[0.1em] text-[#667085]"
+      >
+        {weather.condition}
+      </span>
+      <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333]">
+        {weather.temp} °C
+      </span>
+      <WeatherIcon icon={weather.icon} className="h-[15px] w-[15px] text-[#667085]" />
+    </Link>
+  )
+}
 
 /** Data karty „Praktické informace" v pravém sloupci detailu turistického cíle. */
 export interface TouristPointInfo {
@@ -21,7 +64,7 @@ export interface TouristPointInfo {
   fullSlug: string
 }
 
-interface TocItem {
+export interface TocItem {
   id: string
   text: string
   level: number
@@ -100,9 +143,15 @@ export const MainContent = ({
   currencyCode,
   exchangeRate,
   practicalInfo = null,
+  seasonPanel = null,
+  panelWeather = null,
   createdByPublic,
   touristPointInfo = null,
+  aboveText = null,
   belowText = null,
+  preHeadings = [],
+  extraHeadings = [],
+  contributorAtEnd = false,
   centerColumn = false,
 }: {
   text: string | RichTextRoot
@@ -121,6 +170,21 @@ export const MainContent = ({
     ownerTitle: string
     ownerGenitive?: string | null
   } | null
+  /**
+   * Pruh „Kdy jet do…" na začátku panelu. Zdroj sezóny vybírá page.tsx —
+   * u zemí jedině ruční blok z adminu, u konkrétních míst i výpočet z klimatu.
+   */
+  seasonPanel?: {
+    season: SeasonMonths
+    heading: string
+    href: string | null
+  } | null
+  /**
+   * Teplota vedle hodin (legacy „Aktuální čas s teplotou a kurz"). Jen
+   * u konkrétních míst s vlastní stránkou počasí — u zemí by šlo o teplotu
+   * z jejich geometrického středu.
+   */
+  panelWeather?: PanelWeatherData | null
   createdByPublic?: {
     username?: string | null
     name?: string | null
@@ -135,6 +199,27 @@ export const MainContent = ({
    * obsahu — takhle plyne dál ve stejném rytmu jako odstavce.
    */
   belowText?: React.ReactNode
+  /**
+   * Obsah PŘED textem stránky uvnitř čtecího sloupce (dnes aktuální počasí
+   * na stránkách Počasí — legacy pořadí: počasí, text „Kdy jet", zbytek).
+   */
+  aboveText?: React.ReactNode
+  /**
+   * Položky obsahu (TOC) PŘED nadpisy z textu — pro sekce v `aboveText`.
+   */
+  preHeadings?: TocItem[]
+  /**
+   * Položky obsahu (TOC) navíc za nadpisy z textu — pro sekce vykreslované
+   * mimo rich text (dnes graf klimatu v `belowText` na stránkách Počasí).
+   * Bez nich by sekce v postranním obsahu chyběla, extractHeadings čte jen HTML.
+   */
+  extraHeadings?: TocItem[]
+  /**
+   * Podpis autora až na SAMÉM KONCI sloupce (za `belowText`), ne hned pod
+   * textem. Zapnuté na stránkách počasí: mezi textem a grafy by autor rozdělil
+   * sekce, které patří k sobě.
+   */
+  contributorAtEnd?: boolean
   /**
    * Postavit čtecí sloupec na osu stránky, i když vedle sebe nemá boční panel.
    * Zapíná se na statických stránkách — pod nimi nezačíná žádná sekce přes
@@ -163,7 +248,9 @@ export const MainContent = ({
   // Složené Praktické informace mají nadpisy posunuté o úroveň níž — obsah
   // proto bere h2–h4 (sekce + dvě úrovně podkapitol, jako starý web s h1–h3).
   const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
-  const headings = showTableOfContents ? extractHeadings(textHtml, isPracticalInfo ? 4 : 3) : []
+  const headings = showTableOfContents
+    ? [...preHeadings, ...extractHeadings(textHtml, isPracticalInfo ? 4 : 3), ...extraHeadings]
+    : []
 
   // Celý 2. pád i s předložkou („do Myanmaru", „na Slovensko") — stejně jako
   // titulky v page-title.ts. Dřívější odřezávání „do" a doplňování ve větě
@@ -205,8 +292,28 @@ export const MainContent = ({
   // skutečné VYKRESLENÍ karty, ne existence cíle: cíl bez adresy/webu/mapy
   // kartu nemá a panel mu musí zůstat, jinak by přišel o čas a kurz.
   const showAktualniInfoPanel = Boolean(
-    showAktualniInfo && !showTouristPointCard && (timezone || exchangeRate || practicalInfo),
+    showAktualniInfo &&
+    !showTouristPointCard &&
+    (timezone || exchangeRate || practicalInfo || seasonPanel),
   )
+  /**
+   * Nadpis musí vyjmenovat PRÁVĚ TO, co je pod ním — proto všech sedm kombinací
+   * času, teploty a kurzu (formulace ze starého webu). Dřívější řetěz ternárních
+   * podmínek na kombinaci „čas + teplota bez kurzu" zapomněl, takže Dubrovník
+   * s viditelnou teplotou hlásil jen „Aktuální čas“. Kurz tam chybí proto, že má
+   * v CMS starou měnu HRK — nadpis ale musí sedět i v takovém případě.
+   */
+  const panelHeadings: Record<string, string> = {
+    '111': 'Aktuální čas s teplotou a kurz',
+    '110': 'Aktuální čas a teplota',
+    '101': 'Aktuální čas a kurz měny',
+    '100': 'Aktuální čas',
+    '011': 'Aktuální teplota a kurz měny',
+    '010': 'Aktuální teplota',
+    '001': 'Aktuální měnový kurz',
+  }
+  const panelHeading =
+    panelHeadings[`${timezone ? 1 : 0}${panelWeather ? 1 : 0}${exchangeRate ? 1 : 0}`]
   // Statické stránky a rubriky do panelu nedávají NIC — dokud se vykresloval
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
   // nevznikne.
@@ -230,6 +337,7 @@ export const MainContent = ({
     >
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
+        {aboveText}
         <CollapsiblePageTextWithContributor
           textHtml={textHtml}
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
@@ -238,7 +346,9 @@ export const MainContent = ({
           // Na turistickém cíli se autor přesouvá do karty Praktické informace
           // v pravém sloupci (legacy rozložení), pod textem by byl dvakrát.
           contributor={
-            (showAktualniInfo || showTableOfContents) && !touristPointInfo ? contributor : null
+            (showAktualniInfo || showTableOfContents) && !touristPointInfo && !contributorAtEnd
+              ? contributor
+              : null
           }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
           // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
@@ -247,6 +357,11 @@ export const MainContent = ({
           proseClassName={touristPointInfo ? 'poi-prose' : isPracticalInfo ? 'pi-prose' : undefined}
         />
         {belowText}
+        {contributorAtEnd && contributor && (
+          <div className="mt-10">
+            <PageContributor contributor={contributor} />
+          </div>
+        )}
       </div>
 
       {/* Sidebar / Info Column — vznikne jen když má co ukázat (viz hasSidebar) */}
@@ -385,19 +500,52 @@ export const MainContent = ({
               <div className="absolute -left-[30px] top-[20%] h-[70%] w-px bg-[#e4e4e4]" />
 
               <div className="text-center bg-white py-4 px-0">
-                {/* Section 1: Time and Exchange Rate */}
-                {(timezone || exchangeRate) && (
+                {/* Kdy jet — pruh sezóny úplně nahoře (rozhodnutí uživatele:
+                    u zemí tenhle blok panel otevírá místo praktických informací). */}
+                {seasonPanel && (
+                  <SeasonStrip
+                    season={seasonPanel.season}
+                    heading={seasonPanel.heading}
+                    href={seasonPanel.href}
+                  />
+                )}
+                {seasonPanel && (timezone || exchangeRate || panelWeather) && (
+                  <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mb-6" />
+                )}
+                {/* Section 1: Time, Weather and Exchange Rate */}
+                {(timezone || exchangeRate || panelWeather) && (
                   <div className="mb-6">
                     <h2 className="text-[20px] font-semibold text-[#1a3f6c] mb-4">
-                      {timezone && exchangeRate
-                        ? 'Aktuální čas a kurz měny'
-                        : exchangeRate
-                          ? 'Aktuální měnový kurz'
-                          : 'Aktuální čas'}
+                      {panelHeading}
                     </h2>
-                    {timezone && (
+                    {(timezone || panelWeather) && (
                       <>
-                        <LocalTime timezone={timezone} />
+                        {/* Čas vlevo, počasí vpravo, mezi nimi vlasová linka —
+                            dvě různé věci se nemají mísit do jedné řady (dřív
+                            splývaly a popisek stavu se vázal spíš k hodinám).
+                            Oba sloupce mají tvar „popisek / hodnota / upřesnění":
+                            vlevo den–čas–posun, vpravo stav–teplota–ikona, takže
+                            u linky proti sobě stojí jen dvě hodnoty.
+
+                            Blok je široký 250 px jako vodorovné linky nad ním a
+                            pod ním — v šířce celého panelu (340 px) zbývalo u
+                            dělící linky přes 50 px prázdna na každé straně. */}
+                        {timezone && panelWeather ? (
+                          // Flex, ne grid: u gridu se automatické umísťování
+                          // buněk kolem přes-řádkové linky rozsype a sloupce
+                          // se překryjí.
+                          <div className="mx-auto flex w-[250px] items-stretch justify-center">
+                            <LocalTime timezone={timezone} stacked className="flex-1 min-w-0" />
+                            <div className="w-px shrink-0 self-stretch bg-[#e4e4e4]" />
+                            <div className="flex-1 min-w-0">
+                              <PanelWeather weather={panelWeather} />
+                            </div>
+                          </div>
+                        ) : timezone ? (
+                          <LocalTime timezone={timezone} />
+                        ) : (
+                          panelWeather && <PanelWeather weather={panelWeather} />
+                        )}
                         {exchangeRate && (
                           <div className="w-[250px] mx-auto border-b border-[#e4e4e4] mt-4 mb-4" />
                         )}

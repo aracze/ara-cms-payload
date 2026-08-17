@@ -11,9 +11,16 @@ interface TimeData {
 export function LocalTime({
   timezone,
   className = '',
+  stacked = false,
 }: {
   timezone?: string | null
   className?: string
+  /**
+   * Sloupcové rozložení (den nad časem, posun pod ním) — pro pravý panel,
+   * kde stojí čas vedle počasí a oba sloupce mají mít stejný tvar. Výchozí
+   * je řádek, jak ho používá zbytek webu.
+   */
+  stacked?: boolean
 }) {
   const [data, setData] = useState<TimeData | null>(null)
 
@@ -68,23 +75,56 @@ export function LocalTime({
     }
   }, [timezone])
 
+  // Placeholder drží stejnou výšku jako hotový obsah (prevence poskočení
+  // rozvržení, než doběhne klientský efekt).
+  const wrapper = stacked
+    ? `flex flex-col items-center gap-1.5 ${className}`
+    : `flex items-baseline justify-center gap-2 py-1 h-[42px] ${className}`
+  const microClass = 'text-[10px] font-bold uppercase tracking-[0.1em] text-[#67747c]'
+
   if (!data) {
-    return <div className={`flex items-baseline justify-center gap-2 py-1 h-[42px] ${className}`} />
+    return (
+      <div className={wrapper}>
+        {stacked && (
+          <>
+            <span className={`${microClass} h-[15px]`} />
+            <span className="text-[26px] leading-none">&nbsp;</span>
+            <span className={`${microClass} h-[15px]`} />
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Sloupcový režim: tři řádky nad sebou — popisek, hodnota, upřesnění. Posun
+  // leží POD časem, ne vedle něj: vedle času čouhal do strany a u dělící linky
+  // pak byla jedna polovina panelu plná a druhá prázdná (23 px inkoustu vlevo
+  // proti 52 px prázdna vpravo). Pod časem zbude u linky na obou stranách jen
+  // hodnota, takže je odstup 29 : 30 px. Sloupec s počasím vedle má tutéž
+  // stavbu: stav / teplota / ikona.
+  if (stacked) {
+    return (
+      <div className={wrapper}>
+        <span className={`${microClass} flex h-[15px] items-center`}>{data.day}</span>
+        <span className="text-[26px] leading-none tracking-[0.01rem] text-[#333] tabular-nums">
+          {data.time}
+        </span>
+        {data.offset && (
+          <span className={`${microClass} flex h-[15px] items-center whitespace-nowrap`}>
+            {data.offset}
+          </span>
+        )}
+      </div>
+    )
   }
 
   return (
-    <div className={`flex items-baseline justify-center gap-2 py-1 h-[42px] ${className}`}>
-      <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#67747c]">
-        {data.day}
-      </span>
+    <div className={wrapper}>
+      <span className={microClass}>{data.day}</span>
       <span className="text-[26px] tracking-[0.01rem] text-[#333] px-2 tabular-nums">
         {data.time}
       </span>
-      {data.offset && (
-        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#67747c]">
-          {data.offset}
-        </span>
-      )}
+      {data.offset && <span className={microClass}>{data.offset}</span>}
     </div>
   )
 }

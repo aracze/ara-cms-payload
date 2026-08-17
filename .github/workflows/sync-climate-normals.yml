@@ -1,0 +1,48 @@
+name: Sync climate normals
+
+# Obnova dlouhodobých průměrů počasí (sekce „Nejlepší doba na cestu…" na
+# stránkách počasí): klouzavý průměr posledních 20 ukončených let počítaný
+# z denních dat Meteostatu pro rodičovská místa stránek kategorie „Počasí"
+# (endpoint /api/sync-climate-normals, viz src/endpoints/syncClimateNormals.ts).
+# Okno se posouvá jednou ročně, takže běh je PŘÍRŮSTKOVÝ — obnovuje jen data
+# starší než 330 dní a nové stránky bez dat, nejvýš 200 míst za běh. Měsíční
+# cron proto většinou nemá co dělat a nové destinace doplní do měsíce. Stejný
+# vzor jako sync-affiliate-deals — autentizovaný HTTP požadavek na produkci.
+on:
+  schedule:
+    - cron: '17 4 3 * *' # 3. den v měsíci ve 4:17 UTC, mimo špičku i ostatní syncy
+  workflow_dispatch: {} # umožní ruční spuštění z webu GitHubu (např. po přidání stránky počasí)
+
+concurrency:
+  group: sync-climate-normals
+  cancel-in-progress: false # ať se souběžný ruční běh nezruší uprostřed zápisu
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Job jen volá HTTP endpoint — GITHUB_TOKEN nepotřebuje žádná práva.
+    permissions: {}
+    timeout-minutes: 45
+    steps:
+      - name: Zavolat /api/sync-climate-normals
+        # Sync počítá průměry z DENNÍCH dat: 2 dotazy na místo a rozestupy kvůli
+        # rate limitu RapidAPI, takže jedno místo trvá ~5 s (naměřeno). Plný běh
+        # ~174 míst je tedy ~15 min — proto max-time 2400 a timeout 45 min.
+        # Běžný běh je ale krátký: přírůstkově se obnovují jen chybějící a stará
+        # data. Secrets jdou přes env, ne přímo do příkazu (neobjeví se
+        # v command line procesu a zvláštní znaky nerozbijí quoting).
+        #
+        # ŽÁDNÉ `--retry`: plný běh spotřebuje ~348 z 500 dotazů měsíční kvóty
+        # RapidAPI, takže opakované pokusy po timeoutu by ji přetáhly a zbytek
+        # měsíce by končil chybou. Když běh selže, spustí se ručně přes
+        # „Run workflow" — zbytek fronty stejně dopočítá příští běh.
+        env:
+          SYNC_URL: ${{ secrets.SYNC_ANALYTICS_URL }}
+          SYNC_SECRET: ${{ secrets.ANALYTICS_SYNC_SECRET }}
+        run: |
+          # Hlavička jde do curlu STDINEM (`-H @-`), ne argumentem: argumenty
+          # procesu jsou na stroji čitelné (ps/proc), takže by tajemství šlo
+          # přečíst. Tohle je jediné místo, kde secret opouští proměnnou.
+          curl -fsS -X POST "$SYNC_URL/api/sync-climate-normals" \
+            -H @- <<< "X-Sync-Secret: $SYNC_SECRET" \
+            --connect-timeout 10 --max-time 2400

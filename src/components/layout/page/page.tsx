@@ -9,6 +9,10 @@ import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
 import { PreparationSection } from './preparation-section'
 import { DealsSection, parseAffiliateDeals } from './deals-section'
+import { ClimateSection, parseClimateNormals, climateHeading } from './climate-section'
+import { WeatherNowSection, WeatherForecastSection, forecastHeading } from './weather-now-section'
+import { WeatherOverviewSection, type WeatherOverviewItem } from './weather-overview-section'
+import { fetchPlaceWeather } from '@/lib/weather'
 import {
   fetchPageLightByFullSlug,
   fetchMediaUrlsByIds,
@@ -23,7 +27,10 @@ import {
   fetchPracticalInfoSections,
   fetchTeamSection,
   fetchInheritedAffiliateDeals,
+  fetchWeatherOverviewPlaces,
+  fetchPlaceWeatherChild,
 } from '@/lib/payload'
+import { extractSeasonalityBlock, seasonFromClimate } from '@/lib/seasonality'
 import { TeamSection } from './team-section'
 import { ABOUT_PAGE_SLUG } from '@/lib/team'
 import { composePracticalInfoHtml } from '@/lib/practical-info'
@@ -166,6 +173,82 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // Košicemi je počasí Košic, ne Slovenska. Titulek i hero fotka proto berou
   // kontextové místo z menu (stejné jako legacy `getRootPage`), ne kořenovou zemi.
   const contextPlace = menuContext.contextPage
+  // Graf „Průměrné měsíční teploty a srážky" — jen stránky kategorie Počasí
+  // s daty z měsíčního syncu (/api/sync-climate-normals). Nadpis skloňuje
+  // kontextové místo (počasí pod Londýnem je počasí Londýna, ne Anglie).
+  // Data grafu klimatu se čtou vždy, ale vykreslí se jen u konkrétních míst —
+  // u zemí by se počítala z jejich geometrického středu (viz `showOverview` níž).
+  const climateNormalsRaw =
+    page.category === PageCategory.Pocasi ? parseClimateNormals(page.climateNormals) : null
+  const climateLocative = contextPlace.detail?.locative || `v ${contextPlace.title}`
+  // Druhý pád VČETNĚ předložky, jak ho drží admin („do Londýna", „na Maltu") —
+  // nadpis z něj skládá „Nejlepší doba na cestu do Londýna".
+  const climateGenitive = contextPlace.detail?.genitive || `do ${contextPlace.title}`
+  // Stránka počasí se chová dvojím způsobem podle toho, co je pod ní:
+  //  · má-li pod sebou místa s vlastní stránkou počasí (Chorvatsko → Dubrovník,
+  //    Split, Záhřeb), vypíše jejich PŘEHLED. „Vlastní" počasí by se počítalo ze
+  //    souřadnic země, a to je její geometrický střed — Chorvatsko tak hlásilo
+  //    26 °C z lesů u Plitvic, zatímco všechna tři města měla 30 °C.
+  //  · jinak jde o konkrétní místo (Londýn, Kréta) a ukáže vlastní počasí,
+  //    graf klimatu i předpověď.
+  // Země bez podřazených míst s počasím (Thajsko, Rumunsko) nedostanou nic —
+  // jejich souřadnice mají tutéž vadu a přehled není z čeho složit.
+  const isWeatherPage = page.category === PageCategory.Pocasi
+  const contextPlaceId = Number(contextPlace.id)
+  const overviewPlacesPromise =
+    isWeatherPage && Number.isInteger(contextPlaceId)
+      ? fetchWeatherOverviewPlaces(contextPlaceId)
+      : Promise.resolve([])
+  const overviewPlaces = await overviewPlacesPromise
+  const showOverview = overviewPlaces.length > 0
+  // Země BEZ podřazených míst s počasím (Japonsko, Egypt, Rumunsko…) živé
+  // počasí nedostanou vůbec: jejich souřadnice jsou geometrický střed země —
+  // japonský leží v Alpách, novozélandský v moři — takže by stránka hlásila
+  // něco, co nikde neplatí. Rozpozná se z drobečků: kontinent › země › Počasí
+  // jsou tři články, kdežto místo (Londýn, Kréta) má vždycky víc.
+  // Jakmile se pod zemi doplní město se stránkou počasí, objeví se přehled sám.
+  const isCountryLevel = (page.breadcrumbs?.length ?? 0) <= 3
+  const showOwnWeather = isWeatherPage && !showOverview && !isCountryLevel
+  // Graf klimatu patří jen konkrétním místům — u zemí by kreslil dvacetiletý
+  // průměr z jejich geometrického středu (tatáž vada jako u živého počasí).
+  const climateNormals = showOwnWeather ? climateNormalsRaw : null
+  // Živé počasí (OpenWeather One Call 3.0) — souřadnice z kontextového místa
+  // (stránka počasí vlastní nemá). Promise startuje hned, await až v poslední
+  // vlně s ostatními dotazy.
+  const weatherLat = Number.parseFloat(contextPlace.detail?.latitude ?? '')
+  const weatherLng = Number.parseFloat(contextPlace.detail?.longitude ?? '')
+  const weatherPromise =
+    showOwnWeather && Number.isFinite(weatherLat) && Number.isFinite(weatherLng)
+      ? fetchPlaceWeather(weatherLat, weatherLng)
+      : Promise.resolve(null)
+  // Přehled: počasí každého místa zvlášť (každé má vlastní cache 15 min).
+  // Dotazy jdou po dávkách, ne všechny naráz — u země s mnoha městy by jinak
+  // jeden render vystřelil desítky souběžných volání na OpenWeather.
+  // (Počet míst navíc omezuje MAX_WEATHER_OVERVIEW_PLACES v payload.ts.)
+  const OVERVIEW_WEATHER_CONCURRENCY = 6
+  const overviewWeatherPromise = showOverview
+    ? (async (): Promise<WeatherOverviewItem[]> => {
+        const items: WeatherOverviewItem[] = []
+        for (let i = 0; i < overviewPlaces.length; i += OVERVIEW_WEATHER_CONCURRENCY) {
+          const batch = overviewPlaces.slice(i, i + OVERVIEW_WEATHER_CONCURRENCY)
+          const settled = await Promise.all(
+            batch.map(async (place) => {
+              const weather = await fetchPlaceWeather(place.lat, place.lng)
+              return weather
+                ? {
+                    title: place.title,
+                    href: place.weatherFullSlug,
+                    imageUrl: place.imageUrl,
+                    weather,
+                  }
+                : null
+            }),
+          )
+          for (const item of settled) if (item) items.push(item)
+        }
+        return items
+      })()
+    : Promise.resolve([])
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
   // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
   const cmsImageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
@@ -184,6 +267,37 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const showSubnavigation =
     page.category !== PageCategory.Rubrika && page.category !== PageCategory.Staticka_stranka
 
+  // ── Pravý panel u míst: pruh „Kdy jet do…" a teplota ──────────────────
+  // Místo, které v sobě má další místa (Chorvatsko, Evropa), se chová jako
+  // ZEMĚ: jeho souřadnice jsou geometrický střed, takže se z nich nesmí nic
+  // počítat — u Chorvatska je to vnitrozemí u Plitvic. Sezónu proto vezme
+  // jedině z ručního bloku v adminu a teplotu neukáže vůbec. Konkrétní místo
+  // (Dubrovník) má střed tam, kam se opravdu jede, takže dostane obojí.
+  // Rešerše referenčních webů dopadla stejně: celozemní „kdy jet" nikdo
+  // nepočítá, je to redaktorský úsudek (Lonely Planet, Rough Guides).
+  const isPlacePage = page.category === PageCategory.Misto_k_navstiveni
+  const hasSubPlaces = pageChildren.some(
+    (child) => child.category === PageCategory.Misto_k_navstiveni,
+  )
+  // Existenci podstránky počasí zjistíme z už načtených dětí (bez dotazu);
+  // dotaz níž doplňuje jen její text a klimatická data.
+  const weatherChildMeta = pageChildren.find((child) => child.category === PageCategory.Pocasi)
+  const pageIdNumber = Number(page.id)
+  const seasonSourcePromise =
+    isPlacePage && weatherChildMeta && Number.isInteger(pageIdNumber)
+      ? fetchPlaceWeatherChild(pageIdNumber)
+      : Promise.resolve(null)
+  const panelLat = Number.parseFloat(page.detail?.latitude ?? '')
+  const panelLng = Number.parseFloat(page.detail?.longitude ?? '')
+  const panelWeatherPromise =
+    isPlacePage &&
+    !hasSubPlaces &&
+    weatherChildMeta &&
+    Number.isFinite(panelLat) &&
+    Number.isFinite(panelLng)
+      ? fetchPlaceWeather(panelLat, panelLng)
+      : Promise.resolve(null)
+
   // "Místa"/"Články" v sekundárním menu patří kontextovému místu (např. Chorvatsko),
   // ne aktuální podstránce (Vstupní podmínky). Data kontextové stránky načítáme jen když
   // se menu vůbec renderuje (jinak zbytečný fetch pro rubriky/statické stránky).
@@ -198,6 +312,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     practicalInfoSections,
     teamSection,
     inheritedDeals,
+    placeWeather,
+    overviewItems,
+    seasonSource,
+    panelWeather,
   ] = await Promise.all([
     fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -235,7 +353,32 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     // Sekce „Náš tým" — jen na stránce O nás, jinde by šlo o dotaz nazdařbůh.
     isAboutPage ? fetchTeamSection() : Promise.resolve(null),
     inheritedDealsPromise,
+    weatherPromise,
+    overviewWeatherPromise,
+    seasonSourcePromise,
+    panelWeatherPromise,
   ])
+
+  // Sezóna pro pruh v panelu: ruční blok z adminu má vždycky přednost (umí
+  // říct i „na severu jinak než na jihu"), automat z klimatu je jen záskok
+  // a jen u konkrétních míst. Když není ani jedno, pruh se nekreslí.
+  const manualSeason = seasonSource ? extractSeasonalityBlock(seasonSource.text) : null
+  const autoSeason =
+    !manualSeason && !hasSubPlaces && seasonSource
+      ? (() => {
+          const normals = parseClimateNormals(seasonSource.climateNormals)
+          return normals ? seasonFromClimate(normals) : null
+        })()
+      : null
+  const panelSeason = manualSeason ?? autoSeason
+  const seasonPanel =
+    panelSeason && seasonSource
+      ? {
+          season: panelSeason,
+          heading: `Kdy jet ${page.detail?.genitive || `do ${page.title}`}`,
+          href: seasonSource.fullSlug,
+        }
+      : null
 
   // Vstupy sekce „Akční nabídky": vlastní data stránky, jinak zděděná od
   // předka — pak karty nesou PŘEDKOVO jméno, skloňování i fotku (chorvatská
@@ -454,10 +597,91 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           timezone={page.detail?.timezone || safeRootPage?.detail?.timezone}
           currencyCode={effectiveCurrencyCode}
           exchangeRate={exchangeData?.rate}
-          practicalInfo={practicalInfo}
+          // Země (místo s dalšími místy uvnitř) kartu Praktických informací
+          // v panelu nemá — vede na tutéž stránku, kterou má hned vedle
+          // v sekundárním menu. U konkrétních míst zůstává.
+          practicalInfo={isPlacePage && hasSubPlaces ? null : practicalInfo}
+          seasonPanel={seasonPanel}
+          // Teplota do panelu jen u konkrétních míst (viz seasonPanel výš) —
+          // a jen když má místo vlastní stránku počasí, kam se dá prokliknout.
+          panelWeather={
+            panelWeather && seasonSource
+              ? {
+                  temp: panelWeather.current.temp,
+                  condition: panelWeather.current.condition,
+                  icon: panelWeather.current.icon,
+                  href: seasonSource.fullSlug,
+                }
+              : null
+          }
           createdByPublic={page.createdByPublic}
           touristPointInfo={touristPointInfo}
-          belowText={teamSection ? <TeamSection {...teamSection} /> : null}
+          // Pořadí bloků (rozhodnutí uživatele): aktuální počasí, dlouhodobé
+          // průměry po měsících, text z adminu („Kdy jet do…"), který to
+          // komentuje, a úplně nakonec předpověď na týden. Čtenář jde od toho,
+          // co je teď, k tomu, co bývá; předpověď zavírá stránku jako praktický
+          // dovětek a podpis autora patří až za ni (viz contributorAtEnd).
+          aboveText={
+            overviewItems.length > 0 ? (
+              <WeatherOverviewSection items={overviewItems} locative={climateLocative} />
+            ) : placeWeather || climateNormals ? (
+              <>
+                {placeWeather && (
+                  <WeatherNowSection weather={placeWeather} locative={climateLocative} />
+                )}
+                {climateNormals && (
+                  <ClimateSection
+                    normals={climateNormals}
+                    locative={climateLocative}
+                    genitive={climateGenitive}
+                  />
+                )}
+              </>
+            ) : null
+          }
+          // Předpověď na týden je ÚPLNĚ POSLEDNÍ blok stránky, až za textem
+          // z adminu (rozhodnutí uživatele). Nad textem tak zůstane jen to,
+          // co text komentuje — aktuální stav a dlouhodobé průměry; krátkodobá
+          // předpověď je praktický dovětek, ne úvod.
+          belowText={
+            teamSection ? (
+              <TeamSection {...teamSection} />
+            ) : placeWeather && placeWeather.days.length > 0 ? (
+              <div className="mt-10">
+                <WeatherForecastSection weather={placeWeather} locative={climateLocative} />
+              </div>
+            ) : null
+          }
+          // Obsah v pravém sloupci kopíruje pořadí bloků: aktuální počasí
+          // a graf klimatu nad textem, předpověď pod ním (extraHeadings).
+          preHeadings={[
+            ...(placeWeather || overviewItems.length > 0
+              ? [{ id: 'aktualni-pocasi', text: `Aktuální počasí ${climateLocative}`, level: 2 }]
+              : []),
+            ...(climateNormals
+              ? [
+                  {
+                    id: 'prumerne-teploty-a-srazky',
+                    text: climateHeading(climateGenitive),
+                    level: 2,
+                  },
+                ]
+              : []),
+          ]}
+          extraHeadings={
+            placeWeather && placeWeather.days.length > 0
+              ? [
+                  {
+                    id: 'predpoved-pocasi',
+                    text: forecastHeading(placeWeather, climateLocative),
+                    level: 2,
+                  },
+                ]
+              : []
+          }
+          // Na stránkách počasí patří podpis autora až za předpověď (rozhodnutí
+          // uživatele) — mezi textem a grafy by rozdělil související sekce.
+          contributorAtEnd={page.category === PageCategory.Pocasi}
           centerColumn={isStaticPage}
         />
 

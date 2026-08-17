@@ -130,6 +130,9 @@ const PAGE_SCALAR_SELECT = {
   breadcrumbs: BREADCRUMBS_SELECT,
   // Deep-linky destinace pro sekci „Příprava do …" (zájezdy/ubytování/auto).
   affiliate: true,
+  // Klimatické normály pro sekci „Průměrné měsíční teploty a srážky" na
+  // stránkách kategorie „Počasí" (plní /api/sync-climate-normals).
+  climateNormals: true,
   createdBy: true,
   // Bezpečný veřejný autor přes VIRTUÁLNÍ pole (afterRead hook čte uživatele s
   // overrideAccess: true). Stejný vzor jako u článků. Ruční dohled přes
@@ -1470,6 +1473,188 @@ export const fetchTopAffiliateDeals = cache(
       return { flights: [], tours: [] }
     }
   },
+)
+
+// ————————————————————————————————————————————————————————————————
+// Přehled počasí podřazených míst (stránka počasí u země / ostrova)
+// ————————————————————————————————————————————————————————————————
+
+/** Jedno místo v přehledu počasí — vše, co karta potřebuje vykreslit. */
+export type WeatherOverviewPlace = {
+  title: string
+  /** Adresa stránky POČASÍ toho místa (cíl prokliku karty). */
+  weatherFullSlug: string
+  imageUrl: string | null
+  lat: number
+  lng: number
+}
+
+/**
+ * Místa pod danou zemí (ostrovem, regionem), která mají vlastní stránku počasí.
+ *
+ * Stránka počasí u země nesmí ukazovat „vlastní" počasí: souřadnice země jsou
+ * její geometrický střed, takže Chorvatsko hlásilo 26 °C z lesů u Plitvic,
+ * zatímco Dubrovník, Split i Záhřeb měly 30 °C. Místo toho se vypíšou karty
+ * podřazených míst — stejné chování jako starý web (`generateWeatherOverview`).
+ */
+/**
+ * Kolik míst nejvýš se v přehledu ukáže. Každé je jeden dotaz na OpenWeather
+ * při renderu, takže bez stropu by země s mnoha městy dokázala z jednoho
+ * zobrazení stránky vyrobit desítky externích volání.
+ */
+const MAX_WEATHER_OVERVIEW_PLACES = 24
+
+async function fetchWeatherOverviewPlacesUncached(
+  parentPlaceId: number,
+): Promise<WeatherOverviewPlace[]> {
+  const payload = await getDb()
+
+  // 1) místa přímo pod zemí (Dubrovník, Split, Záhřeb)
+  const placesRes = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { parent: { equals: parentPlaceId } },
+        { category: { equals: PageCategory.Misto_k_navstiveni } },
+      ],
+    },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    select: { title: true, detail: true, featuredImage: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    id: number
+    title: string
+    detail?: { latitude?: string | null; longitude?: string | null } | null
+    featuredImage?: { image?: unknown } | null
+  }>
+  const places = placesRes.docs ?? []
+  if (places.length === 0) return []
+
+  // 2) jejich stránky počasí (jen ta místa, která ji mají)
+  const weatherRes = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { parent: { in: places.map((p) => p.id) } },
+        { category: { equals: PageCategory.Pocasi } },
+      ],
+    },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    select: { fullSlug: true, parent: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    fullSlug: string
+    parent?: number | { id: number } | null
+  }>
+  const weatherByPlaceId = new Map<number, string>()
+  for (const doc of weatherRes.docs ?? []) {
+    const parentId = typeof doc.parent === 'object' ? doc.parent?.id : doc.parent
+    if (typeof parentId === 'number' && doc.fullSlug) weatherByPlaceId.set(parentId, doc.fullSlug)
+  }
+
+  // Pořadí kroků je podstatné: nejdřív vypadnou místa, která se stejně
+  // nevykreslí (bez stránky počasí nebo bez souřadnic), pak se abecedně seřadí
+  // a teprve nakonec ořeže. Kdyby se ořezávalo dřív, země, jejíž první města
+  // v abecedě nemají souřadnice, by ukázala míň karet, než smí — a platná
+  // města za řezem by se nedostala ke slovu vůbec.
+  const withWeather = places
+    .filter((p) => weatherByPlaceId.has(p.id))
+    .map((place) => ({
+      place,
+      lat: Number.parseFloat(place.detail?.latitude ?? ''),
+      lng: Number.parseFloat(place.detail?.longitude ?? ''),
+    }))
+    .filter(({ lat, lng }) => Number.isFinite(lat) && Number.isFinite(lng))
+    .sort((a, b) => a.place.title.localeCompare(b.place.title, 'cs'))
+    // Strop na počet karet: každá znamená jeden dotaz na OpenWeather při
+    // renderu stránky, takže země s desítkami měst by z jednoho zobrazení
+    // udělala desítky externích volání.
+    .slice(0, MAX_WEATHER_OVERVIEW_PLACES)
+
+  const coordsById = new Map(withWeather.map(({ place, lat, lng }) => [place.id, { lat, lng }]))
+  // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
+  const enriched = await enrichFeaturedImages(withWeather.map(({ place }) => place))
+
+  return enriched.map((place) => {
+    const imageUrl = (place.featuredImage?.image as { url?: string } | null | undefined)?.url
+    const coords = coordsById.get(place.id)!
+    return {
+      title: place.title,
+      weatherFullSlug: weatherByPlaceId.get(place.id)!,
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+      lat: coords.lat,
+      lng: coords.lng,
+    }
+  })
+}
+
+const fetchWeatherOverviewPlacesCached = cached(
+  fetchWeatherOverviewPlacesUncached,
+  'weather-overview-places',
+  () => ['pages'],
+)
+
+/** Místa s počasím pod danou zemí — pro přehled na její stránce počasí. */
+export const fetchWeatherOverviewPlaces = cache(
+  (parentPlaceId: number): Promise<WeatherOverviewPlace[]> =>
+    fetchWeatherOverviewPlacesCached(parentPlaceId),
+)
+
+export interface PlaceWeatherChild {
+  fullSlug: string
+  /** Lexical text stránky počasí — hledá se v něm ruční blok sezónnosti. */
+  text: unknown
+  /** Dlouhodobé průměry z Meteostatu (null, dokud neproběhl sync). */
+  climateNormals: unknown
+}
+
+/**
+ * Podstránka počasí daného místa — kvůli pruhu „Kdy jet do…" v pravém panelu.
+ * Panel se vykresluje na stránce MÍSTA, ale oba zdroje sezóny (ruční blok
+ * v textu i klimatické normály) leží na jeho podstránce počasí, takže se
+ * musí dotáhnout zvlášť.
+ */
+async function fetchPlaceWeatherChildUncached(placeId: number): Promise<PlaceWeatherChild | null> {
+  const payload = await getDb()
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [{ parent: { equals: placeId } }, { category: { equals: PageCategory.Pocasi } }],
+    },
+    depth: 0,
+    limit: 1,
+    pagination: false,
+    select: { fullSlug: true, text: true, climateNormals: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    fullSlug?: string | null
+    text?: unknown
+    climateNormals?: unknown
+  }>
+  const doc = res.docs?.[0]
+  if (!doc?.fullSlug) return null
+  return {
+    fullSlug: doc.fullSlug,
+    text: doc.text ?? null,
+    climateNormals: doc.climateNormals ?? null,
+  }
+}
+
+const fetchPlaceWeatherChildCached = cached(
+  fetchPlaceWeatherChildUncached,
+  'place-weather-child',
+  () => ['pages'],
+)
+
+export const fetchPlaceWeatherChild = cache((placeId: number): Promise<PlaceWeatherChild | null> =>
+  fetchPlaceWeatherChildCached(placeId),
 )
 
 // ————————————————————————————————————————————————————————————————

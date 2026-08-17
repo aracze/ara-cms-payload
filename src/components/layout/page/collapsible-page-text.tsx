@@ -1,9 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { UserAvatar } from '@/components/user-avatar'
+import { PageContributor, type Contributor } from './page-contributor'
 
 function getPreviewHtml(html: string): {
   previewHtml: string
@@ -21,12 +20,6 @@ function getPreviewHtml(html: string): {
     previewHtml: html.slice(0, secondParagraphEnd),
     shouldCollapse: true,
   }
-}
-
-type Contributor = {
-  name?: string | null
-  profileHref?: string | null
-  avatarUrl?: string | null
 }
 
 export function CollapsiblePageTextWithContributor({
@@ -109,42 +102,7 @@ export function CollapsiblePageTextWithContributor({
 
           {contributor?.name && (
             <div className="sm:absolute sm:left-0 sm:top-1/2 sm:-translate-y-1/2">
-              <div className="flex items-start">
-                <div className="mr-[15px] shrink-0">
-                  {contributor.profileHref ? (
-                    <Link href={contributor.profileHref} className="block">
-                      <UserAvatar
-                        name={contributor.name}
-                        avatarUrl={contributor.avatarUrl}
-                        size={40}
-                      />
-                    </Link>
-                  ) : (
-                    <UserAvatar
-                      name={contributor.name}
-                      avatarUrl={contributor.avatarUrl}
-                      size={40}
-                    />
-                  )}
-                </div>
-                <div className="inline-block pt-[3px]">
-                  <div className="block text-[12px] leading-[20.4px] text-[#565656]">
-                    {contributor.profileHref ? (
-                      <Link
-                        href={contributor.profileHref}
-                        className="font-semibold text-[#565656] no-underline hover:underline"
-                      >
-                        {contributor.name}
-                      </Link>
-                    ) : (
-                      <span className="font-semibold">{contributor.name}</span>
-                    )}
-                  </div>
-                  <div className="block text-[12px] leading-[20.4px] text-[#898e95]">
-                    Cestovní průvodce
-                  </div>
-                </div>
-              </div>
+              <PageContributor contributor={contributor} align="start" />
             </div>
           )}
         </div>
@@ -153,34 +111,7 @@ export function CollapsiblePageTextWithContributor({
       {(!shouldCollapse || isExpanded) && contributor?.name && (
         /* Matches legacy .contribution { margin-top: 30px } (default, non-placeToVisit) */
         <div className="mt-[30px]">
-          <div className="flex items-center">
-            <div className="mr-[15px] shrink-0">
-              {contributor.profileHref ? (
-                <Link href={contributor.profileHref}>
-                  <UserAvatar name={contributor.name} avatarUrl={contributor.avatarUrl} size={40} />
-                </Link>
-              ) : (
-                <UserAvatar name={contributor.name} avatarUrl={contributor.avatarUrl} size={40} />
-              )}
-            </div>
-            <div className="inline-block pt-[3px]">
-              <div className="block text-[12px] leading-[20.4px] text-[#565656]">
-                {contributor.profileHref ? (
-                  <Link
-                    href={contributor.profileHref}
-                    className="font-semibold text-[#565656] no-underline hover:underline"
-                  >
-                    {contributor.name}
-                  </Link>
-                ) : (
-                  <span className="font-semibold">{contributor.name}</span>
-                )}
-              </div>
-              <div className="block text-[12px] leading-[20.4px] text-[#898e95]">
-                Cestovní průvodce
-              </div>
-            </div>
-          </div>
+          <PageContributor contributor={contributor} />
         </div>
       )}
     </>
