@@ -10,7 +10,11 @@ name: Sync climate normals
 # vzor jako sync-affiliate-deals — autentizovaný HTTP požadavek na produkci.
 on:
   schedule:
-    - cron: '17 4 3 * *' # 3. den v měsíci ve 4:17 UTC, mimo špičku i ostatní syncy
+    # 20. den v měsíci ve 4:17 UTC. Datum NENÍ libovolné: kvóta RapidAPI se
+    # obnovuje podle dne, kdy bylo předplatné zřízeno (14. 8. 2026), takže běh
+    # na začátku měsíce by narazil na vyčerpaný limit z předchozího období.
+    # Dvacátý je bezpečně po obnově a zbývá rezerva na ruční doběhy.
+    - cron: '17 4 20 * *'
   workflow_dispatch: {} # umožní ruční spuštění z webu GitHubu (např. po přidání stránky počasí)
 
 concurrency:

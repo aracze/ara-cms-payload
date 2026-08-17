@@ -414,7 +414,9 @@ bez klientského JS, pod grafem tabulka pro čtečky.
 - **Běh je přírůstkový**, takže kvótu nepřeteče ani s přibývajícími
   destinacemi: bere jen stránky bez dat a starší než 330 dní, nejvýš 200 míst
   za běh; zbytek ohlásí jako `deferred` a dopočítá ho příští běh. Cron jede
-  měsíčně (3. den ve 4:17 UTC) a většinou nemá co dělat — nové destinace se
+  měsíčně (20. den ve 4:17 UTC — kvóta RapidAPI se obnovuje podle dne zřízení
+  předplatného, 14. 8., takže běh na začátku měsíce by narazil na vyčerpaný
+  limit) a většinou nemá co dělat — nové destinace se
   tak doplní samy do měsíce.
 - Parametry pro ruční běh: `?dryRun=1` (jen vypíše), `?force=1` (přepočítá
   i čerstvá data — nutné po změně metodiky), `?slug=/anglie/londyn/pocasi`
