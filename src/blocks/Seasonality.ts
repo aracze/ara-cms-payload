@@ -54,25 +54,11 @@ export const SeasonalityBlock: Block = {
         },
       ],
     },
-    {
-      name: 'legend',
-      type: 'array',
-      label: 'Legenda',
-      fields: [
-        {
-          name: 'status',
-          type: 'select',
-          label: 'Status sezóny',
-          required: true,
-          options: SEASON_STATUS_OPTIONS,
-        },
-        {
-          name: 'label',
-          type: 'text',
-          label: 'Text legendy',
-          required: true,
-        },
-      ],
-    },
+    // Pole „Legenda" tu bývalo jako ruční seznam popisků. Odstraněné 17. 8.
+    // 2026: legenda se skládá sama ze zaškrtnutých měsíců a ze škály
+    // v `lib/climate.ts` (viz seasonalityLegendHtml), takže je všude stejná
+    // jako u klimatického grafu a nemůže se s ním rozejít. Ručně psaná se
+    // rozcházela — u Chorvatska pojmenovala jedna položka dva různé stupně,
+    // ale nesla barvu jen toho horšího.
   ],
 }

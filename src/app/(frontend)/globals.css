@@ -552,8 +552,18 @@
   }
 
   /* Legend */
+  /* Legenda: dvě skupiny (sezóna / mimo sezónu), v každé její stupně. Skládá
+     se sama ze zaškrtnutých měsíců — viz seasonalityLegendHtml. */
   .prose .seasonality-legend {
-    @apply flex flex-wrap justify-center gap-x-6 gap-y-3 mt-8 text-[11px];
+    @apply flex flex-wrap justify-center gap-x-8 gap-y-2.5 mt-8 text-[11px];
+  }
+
+  .prose .legend-group {
+    @apply flex flex-wrap items-center gap-x-4 gap-y-2;
+  }
+
+  .prose .legend-group-title {
+    @apply text-[10px] font-bold uppercase tracking-[0.1em] text-[#667085];
   }
 
   .prose .legend-item {
