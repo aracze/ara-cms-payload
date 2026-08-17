@@ -130,7 +130,11 @@ DECLARE
   cil integer;
   vazby integer;
 BEGIN
-  SELECT id INTO cil FROM pages WHERE full_slug = '/portugalsko/jidlo1726123756332';
+  -- `FOR UPDATE` řádek zamkne do konce transakce, takže mezi kontrolu vazeb
+  -- a mazání se nevejde souběžný zápis z adminu: pokus přidat sem podstránku
+  -- nebo vazbu bude čekat. Bez zámku by kontrola prošla a mazání pak dítě
+  -- odpojilo (parent_id na NULL = stránka nejvyšší úrovně) nebo vazbu smazalo.
+  SELECT id INTO cil FROM pages WHERE full_slug = '/portugalsko/jidlo1726123756332' FOR UPDATE;
   IF cil IS NULL THEN RETURN; END IF;
 
   SELECT (SELECT count(*) FROM pages WHERE parent_id = cil)
