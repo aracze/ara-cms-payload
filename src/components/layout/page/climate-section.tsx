@@ -337,13 +337,16 @@ export function ClimateSection({
         </table>
       </div>
 
-      {/* Atribuce vyžadovaná licencí dat (CC BY 4.0). Legenda zmiňuje i ikonu:
-          ta se řídí srážkami VŮČI OSTATNÍM MĚSÍCŮM téhož místa (viz rainLevel),
-          takže bez vysvětlení může slunce u londýnského července s 58 mm působit
-          jako chyba — číslo pod sloupcem přitom říká pravdu. */}
+      {/* Atribuce vyžadovaná licencí dat (CC BY 4.0). Legenda popisuje i ikonu,
+          protože bez vysvětlení může slunce u londýnského července s 58 mm
+          působit jako chyba — číslo pod sloupcem přitom říká pravdu.
+          Formulace musí pokrýt OBĚ větve `rainLevel`: nejen „víc než tu bývá"
+          (poměr k mediánu), ale i absolutní hranice. Jinak by lhala v Bergenu,
+          kde duben se 110 mm proti mediánu 180 je sušší než obvykle, a přesto
+          deštivou ikonu dostane. */}
       <p className="mt-3 text-[12px] text-[#667085]">
-        Výška sloupce = denní teplota, proužek pod číslem = srážky, ikona = měsíc nezvykle mokrý v
-        porovnání s ostatními zde · Zdroj:{' '}
+        Výška sloupce = denní teplota, proužek pod číslem = srážky, ikona = deštivost měsíce (hodně
+        srážek, nebo víc než tu bývá) · Zdroj:{' '}
         <a
           href="https://meteostat.net/"
           target="_blank"
