@@ -698,6 +698,26 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   - **Odvozené hodnocení míst**: recenze se píšou **jen k turistickým cílům** (jako na legacy webu), ale **místa** hvězdičky přebírají z cílů pod sebou — průměr ze **všech jednotlivých recenzí** (ne průměr průměrů, takže cíl s 30 recenzemi váží víc než cíl s jednou). Zobrazí se v **hero vedle názvu** místa jako „N recenzí cílů" (odkaz na `#mista`, tedy výpis cílů — místo vlastní sekci recenzí nemá) a na **dlaždicích v „Co vidět"** pod názvem. Nárok má místo, které se v seznamu chová jako koncová dlaždice: buď pod sebou nemá další místa (Budapešť), nebo má zapnuté `stopDisplayingChildPlaces` (ostrov — pak se sečtou i cíle v jeho podřazených místech). **Země, regiony ani kontinenty hodnocení nemají nikde** (ani jako dlaždice v nadřazeném seznamu) — průměr přes celou zemi se vždy usadí kolem 4,5 a nenese informaci; kontinent se proto ani nepočítá (zkratka `!page.parent`, jinak by se zbytečně procházely děti všech zemí). Hranice **3 recenzí** brání tomu, aby místo s jedinou nadšenou recenzí vypadalo jako nejlépe hodnocená destinace webu (`MIN_DERIVED_PLACE_REVIEWS`); dlaždice samotných **cílů** naopak ukazují hvězdičky od první recenze jako všude jinde. Data dodává `fetchDerivedPlaceRatings` (`src/lib/payload.ts`): dávkové BFS po úrovních (jeden dotaz na úroveň stromu, ne na dlaždici) + hromadný `fetchPageReviewStats`. Hierarchie se jde po `parent`, **ne** prefixem `fullSlug` — místo se může z URL potomků vynechat (`includeInChildUrlPaths`), takže cesta potomka nemusí začínat cestou předka.
   - Data přenesl jednorázový migrační doběh z legacy MySQL databáze. Legacy web vlákna neměl — vazby odpovědí dopočítala kontextová analýza textů. Oba skripty jsou hotové a odstraněné (viz git historie); v adminu lze `parentComment` kdykoliv ručně upravit.
 
+- **Měna a časové pásmo se DĚDÍ po předcích** (`fetchInheritedPlaceDetail`
+  v `src/lib/payload.ts`): stránka s prázdným políčkem `detail.currencyCode` /
+  `detail.timezone` si hodnotu vezme od **nejbližšího předka**, který ji má. Vyplňuje
+  se proto jen u **země** a u skutečných **výjimek** (region s jinou měnou; ruská města
+  v jiném pásmu). Dřív měla každá stránka vlastní kopii z migrace, takže po přechodu
+  Chorvatska na euro zůstalo 148 stránek na HRK — a kurz u zrušené měny nejde spočítat,
+  API ji už nekótuje. Seznam předků skládá `ancestorSlugsNearestFirst`
+  (`src/lib/page-hierarchy.ts`) z uložených `breadcrumbs`, **ne z adresy**: předci
+  s `includeInChildUrlPaths: false` (kontinenty, Karélie nad Kiži) v URL nejsou, a přitom
+  právě u nich může být výjimka. Celý řetěz jde jedním dotazem a jen tehdy, když stránce
+  něco chybí. **Kontinenty nechávej prázdné** (hodnota by se propsala do všech zemí pod
+  nimi) a stejně tak **Česko** (kurz CZK→CZK se nepočítá). **Země s víc pásmy** drží
+  na sobě referenční čas a výjimky mají jednotlivé oblasti: Rusko moskevský čas
+  - Kaliningrad/Jekatěrinburg/Omsk/Novosibirsk, USA východní čas + Aljaška,
+    Kalifornie, Wyoming a Arizona (ta nemá letní čas, proto vlastní `America/Phoenix`;
+    národní parky pásmo dědí od svého státu). Jednorázový úklid dat po zavedení dědění
+    je v `scripts/cleanup-currency-timezone.sql` (idempotentní, se zálohou; kromě polí
+    maže i rozbitý duplikát norské stránky o jídle, který visel pod Portugalskem).
+    **Na produkci spustit ručně + `force-recreate cms`.**
+
 - **Sekce „Příprava do …“** (`src/components/layout/page/preparation-section.tsx`): na
   stránkách kategorie **Místo k navštívení** mezi „Co vidět“ a „Články a cestopisy“ (legacy
   parita s `_affiliate.gsp`). Pět karet: **Cestovní pojištění** (redirect `/go/pojisteni`

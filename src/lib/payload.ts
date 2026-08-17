@@ -1306,6 +1306,67 @@ export const fetchInheritedAffiliateDeals = cache(
     fetchInheritedAffiliateDealsCached(ancestorFullSlugs),
 )
 
+/** Měna a časové pásmo zděděné po hierarchii (viz fetchInheritedPlaceDetail). */
+export type InheritedPlaceDetail = {
+  currencyCode: string | null
+  timezone: string | null
+}
+
+/**
+ * Měna a časové pásmo od NEJBLIŽŠÍHO předka, který je má (Toulouse → Francie,
+ * Kiži → Karelie). Díky tomu zůstávají políčka u potomků prázdná a přechod
+ * země na jinou měnu je jedna změna na jednom místě; vlastní hodnota stránky
+ * vždy vyhrává, takže země s víc měnami se řeší výjimkou u regionu.
+ *
+ * Slugy předků dodá volající SEŘAZENÉ od nejbližšího (viz
+ * `ancestorSlugsNearestFirst`), celý řetěz padne do jednoho dotazu.
+ */
+async function fetchInheritedPlaceDetailUncached(
+  ancestorFullSlugs: string[],
+): Promise<InheritedPlaceDetail> {
+  if (ancestorFullSlugs.length === 0) return { currencyCode: null, timezone: null }
+  const payload = await getDb()
+
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: { fullSlug: { in: ancestorFullSlugs } },
+    depth: 0,
+    limit: ancestorFullSlugs.length,
+    select: { fullSlug: true, detail: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<{
+    fullSlug: string
+    detail?: { currencyCode?: string | null; timezone?: string | null } | null
+  }>
+
+  const detailBySlug = new Map((res.docs ?? []).map((doc) => [doc.fullSlug, doc.detail ?? null]))
+  // Měna a pásmo se hledají NEZÁVISLE: region může mít vyplněnou jen měnu
+  // (výjimka) a pásmo dědit od země výš. Prázdné políčko předka se přeskakuje,
+  // aby nezastínilo vzdálenějšího předka s hodnotou.
+  const nearest = (field: 'currencyCode' | 'timezone'): string | null => {
+    for (const slug of ancestorFullSlugs) {
+      const value = detailBySlug.get(slug)?.[field]?.trim()
+      if (value) return value
+    }
+    return null
+  }
+
+  return { currencyCode: nearest('currencyCode'), timezone: nearest('timezone') }
+}
+
+const fetchInheritedPlaceDetailCached = cached(
+  fetchInheritedPlaceDetailUncached,
+  'inherited-place-detail',
+  ([slugs]) => ['pages', ...slugs.map((s) => 'page_' + s)],
+)
+
+/** Zděděná měna a časové pásmo pro stránku s prázdným políčkem (viz výše). */
+export const fetchInheritedPlaceDetail = cache(
+  (ancestorFullSlugs: string[]): Promise<InheritedPlaceDetail> =>
+    fetchInheritedPlaceDetailCached(ancestorFullSlugs),
+)
+
 // ————————————————————————————————————————————————————————————————
 // Dnešní akční nabídky pro homepage (top letenky + zájezdy dne)
 // ————————————————————————————————————————————————————————————————
