@@ -38,12 +38,29 @@ export const SeasonalityBlock: Block = {
       label: 'Měsíce (1-12)',
       minRows: 12,
       maxRows: 12,
+      // Kalendářní měsíc nese `monthNumber`, ne pořadí řádku — vykreslování si
+      // podle něj řádky srovná (monthsByCalendar). Aby ale nešlo uložit blok,
+      // ve kterém některý měsíc chybí a jiný je dvakrát, musí sada dát přesně
+      // 1–12; jinak by se tiše zobrazil měsíc, který redaktor nezadal.
+      validate: (value: unknown) => {
+        if (!Array.isArray(value)) return true
+        const cisla = value.map((row) => (row as { monthNumber?: unknown })?.monthNumber)
+        const platna = cisla.filter(
+          (n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 12,
+        )
+        if (platna.length !== cisla.length) return 'Čísla měsíců musí být celá čísla 1 až 12.'
+        if (new Set(platna).size !== platna.length)
+          return 'Každý měsíc smí být v seznamu jen jednou.'
+        return true
+      },
       fields: [
         {
           name: 'monthNumber',
           type: 'number',
           label: 'Číslo měsíce',
           required: true,
+          min: 1,
+          max: 12,
         },
         {
           name: 'status',

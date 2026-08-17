@@ -277,15 +277,21 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
           'Pro',
         ]
 
+        // Pořadí řádků v poli NENÍ zdroj pravdy — kalendářní měsíc určuje
+        // `monthNumber` (redaktor umí řádky přetáhnout). Dřív se číslo bralo
+        // z něj, ale popisek i barva z pozice v poli, takže po přeházení
+        // ukazovala dlaždice „7" nad popiskem „Led".
+        const byCalendar = monthsByCalendar(months)
+
         const html =
           `<div class="rich-text-seasonality-container">${idealText || prefixText ? `<div class="seasonality-ideal-text">${escapeHtml(prefixText)} <strong>${escapeHtml(idealText)}</strong></div>` : ''}<div class="seasonality-grid">` +
-          months
+          byCalendar
             .map(
               (m, i) =>
-                `<div class="seasonality-month status-${sanitizeSeasonalityStatus(m.status)}"><div class="month-num">${escapeHtml(String(m.monthNumber ?? i + 1))}</div><div class="month-label">${monthLabels[i]}</div></div>`,
+                `<div class="seasonality-month status-${sanitizeSeasonalityStatus(m?.status)}"><div class="month-num">${i + 1}</div><div class="month-label">${monthLabels[i]}</div></div>`,
             )
             .join('') +
-          `</div>${seasonalityLegendHtml(months, monthLabels)}</div>`
+          `</div>${seasonalityLegendHtml(byCalendar, monthLabels)}</div>`
         return html
       }
       if (fields?.blockType === 'niceToKnowBlock') {
@@ -448,6 +454,35 @@ function sanitizeSeasonalityStatus(status: unknown): 'off' | 'shoulder' | 'mid' 
   return 'off'
 }
 
+/**
+ * Řádky bloku srovnané do kalendáře: `byCalendar[0]` je vždy leden, ať jsou
+ * v poli v jakémkoli pořadí. Rozhoduje `monthNumber`; řádek bez něj (nebo
+ * s číslem mimo 1–12) padne na svou pozici v poli, aby se starší obsah
+ * nerozsypal. Když je jedno číslo dvakrát, platí první výskyt — druhý by
+ * jinak tiše přepsal cizí měsíc. Chybějící měsíc zůstane prázdný a vykreslí
+ * se jako „mimo sezónu".
+ */
+function monthsByCalendar(months: unknown[]): ({ status?: unknown } | null)[] {
+  const slots = new Array<{ status?: unknown } | null>(12).fill(null)
+  const zbyle: { status?: unknown }[] = []
+
+  months.slice(0, 12).forEach((raw) => {
+    const row = (raw ?? {}) as { monthNumber?: unknown; status?: unknown }
+    const n = typeof row.monthNumber === 'number' ? row.monthNumber : Number.NaN
+    const index = Number.isInteger(n) && n >= 1 && n <= 12 ? n - 1 : -1
+    if (index >= 0 && slots[index] === null) slots[index] = row
+    else zbyle.push(row)
+  })
+
+  // Řádky bez použitelného čísla doplní první volné místo v kalendáři.
+  for (const row of zbyle) {
+    const volny = slots.indexOf(null)
+    if (volny === -1) break
+    slots[volny] = row
+  }
+  return slots
+}
+
 /** Stav bloku → stupeň škály. Dvě jména téhož: blok mluví sezónně, škála hodnotí. */
 const STATUS_LEVEL: Record<'peak' | 'mid' | 'shoulder' | 'off', Suitability> = {
   peak: 'ideal',
@@ -489,11 +524,13 @@ function monthRangeLabel(indexes: number[], monthLabels: string[]): string {
  * stupně, ale nesla barvu jen toho horšího, a dvě zelené se obě jmenovaly
  * „hlavní". Stupeň bez jediného měsíce se vynechá, prázdná skupina taky.
  */
-function seasonalityLegendHtml(months: unknown[], monthLabels: string[]): string {
+function seasonalityLegendHtml(
+  byCalendar: ({ status?: unknown } | null)[],
+  monthLabels: string[],
+): string {
   const byLevel = new Map<Suitability, number[]>()
-  months.slice(0, 12).forEach((m, i) => {
-    const status = sanitizeSeasonalityStatus((m as { status?: unknown })?.status)
-    const level = STATUS_LEVEL[status]
+  byCalendar.forEach((m, i) => {
+    const level = STATUS_LEVEL[sanitizeSeasonalityStatus(m?.status)]
     byLevel.set(level, [...(byLevel.get(level) ?? []), i])
   })
 
