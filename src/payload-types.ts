@@ -320,7 +320,6 @@ export interface Page {
      * Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu s jinou měnou. U kontinentů nechávej prázdné.
      */
     currencyCode?: string | null;
-    showWeather?: boolean | null;
   };
   meta?: {
     title?: string | null;
@@ -791,7 +790,6 @@ export interface PagesSelect<T extends boolean = true> {
         genitive?: T;
         timezone?: T;
         currencyCode?: T;
-        showWeather?: T;
       };
   meta?:
     | T

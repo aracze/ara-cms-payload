@@ -1312,6 +1312,12 @@ export type InheritedPlaceDetail = {
   timezone: string | null
 }
 
+/** Nic se nezdědilo — stránka bez předků, nebo selhal dotaz (viz volající). */
+export const EMPTY_INHERITED_PLACE_DETAIL: InheritedPlaceDetail = {
+  currencyCode: null,
+  timezone: null,
+}
+
 /**
  * Měna a časové pásmo od NEJBLIŽŠÍHO předka, který je má (Toulouse → Francie,
  * Kiži → Karelie). Díky tomu zůstávají políčka u potomků prázdná a přechod
@@ -1324,7 +1330,7 @@ export type InheritedPlaceDetail = {
 async function fetchInheritedPlaceDetailUncached(
   ancestorFullSlugs: string[],
 ): Promise<InheritedPlaceDetail> {
-  if (ancestorFullSlugs.length === 0) return { currencyCode: null, timezone: null }
+  if (ancestorFullSlugs.length === 0) return EMPTY_INHERITED_PLACE_DETAIL
   const payload = await getDb()
 
   const res = (await payload.find({
@@ -1332,15 +1338,30 @@ async function fetchInheritedPlaceDetailUncached(
     overrideAccess: false,
     where: { fullSlug: { in: ancestorFullSlugs } },
     depth: 0,
-    limit: ancestorFullSlugs.length,
-    select: { fullSlug: true, detail: true },
+    // `pagination: false` = bez druhého dotazu na počet, který nikdo nečte.
+    // Limit zároveň nesmí být přesně na počet předků: `fullSlug` unikátní index
+    // nemá, takže duplicitní adresa by z výsledku vytlačila skutečného předka.
+    pagination: false,
+    limit: 0,
+    select: { id: true, fullSlug: true, detail: true },
     joins: false,
   })) as unknown as PayloadDocsResponse<{
+    id: number
     fullSlug: string
     detail?: { currencyCode?: string | null; timezone?: string | null } | null
   }>
 
-  const detailBySlug = new Map((res.docs ?? []).map((doc) => [doc.fullSlug, doc.detail ?? null]))
+  // `fullSlug` unikátní index nemá (duplicitu umí vyrobit migrace i zápis přímým
+  // SQL), takže při shodě adres rozhoduje NEJNIŽŠÍ id — tedy starší stránka.
+  // Bez toho by o zděděné hodnotě rozhodlo pořadí řádků z databáze, které se může
+  // změnit mezi dvěma requesty, a Dubrovník by tak jednou zdědil euro a jindy nic.
+  const detailBySlug = new Map<
+    string,
+    { currencyCode?: string | null; timezone?: string | null } | null
+  >()
+  for (const doc of [...(res.docs ?? [])].sort((a, b) => a.id - b.id)) {
+    if (!detailBySlug.has(doc.fullSlug)) detailBySlug.set(doc.fullSlug, doc.detail ?? null)
+  }
   // Měna a pásmo se hledají NEZÁVISLE: region může mít vyplněnou jen měnu
   // (výjimka) a pásmo dědit od země výš. Prázdné políčko předka se přeskakuje,
   // aby nezastínilo vzdálenějšího předka s hodnotou.

@@ -6,9 +6,11 @@ import { LEGEND_GROUPS, SUITABILITY_LABEL, type Suitability } from '@/lib/climat
 // klientské komponenty (kvůli `cn`/`getArticle*`) — držením DOMPurify jen zde se
 // nedostane do klientského bundlu. Tento modul je čistě serverový.
 
-type RichTextRenderContext = {
+export type RichTextRenderContext = {
   currencyCode?: string | null
   exchangeRate?: number | null
+  /** Časové pásmo stránky (vlastní nebo zděděné) pro kartu „Aktuální čas". */
+  timezone?: string | null
   /** Už použitá heading id v rámci jednoho dokumentu (unikátnost kotev). */
   usedHeadingIds?: Set<string>
 }
@@ -332,7 +334,11 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
               ? `<div class="nice-to-know-item__content__header"><img src="/assets/driving/${side}-side.svg" width="60" height="60" alt="Řízení" /></div>`
               : ''
           } else if (t === 'time') {
-            const tz = String(item.timezone || 'Europe/Prague')
+            // Prázdné políčko v bloku = pásmo stránky (vlastní nebo zděděné od
+            // předka), jak slibuje popisek v adminu; Praha je až poslední záskok.
+            // Bez tohoto řetězu ukazovala karta v textu pražský čas i tam, kde
+            // panel vedle ní správně tikal místní (Rusko, Japonsko, Thajsko…).
+            const tz = String(item.timezone || context.timezone || 'Europe/Prague')
             timeData = getTimeDataForTimezone(tz)
             headerHtml = `<div class="nice-to-know-item__content__header nice-to-know__item--time-header" data-timezone="${escapeHtml(
               tz,

@@ -55,11 +55,26 @@ export function buildBreadcrumbs(
  * výjimka — třeba region s jinou měnou než zbytek země.
  *
  * Aktuální stránka je v `breadcrumbs` poslední, proto se odfiltruje.
+ *
+ * Když stránka uložený řetězec nemá (starý import bez resave pluginu, zápis
+ * přímým SQL), spadne se na PREFIXY ADRESY — stejnou pojistku má i `getBreadcrumbs`.
+ * Bez ní by taková stránka nezdědila nic: potomkům se totiž vlastní hodnoty
+ * uklidily podle hierarchie v databázi, která na drobečcích nezávisí.
  */
 export function ancestorSlugsNearestFirst(page: Pick<Page, 'breadcrumbs' | 'fullSlug'>): string[] {
-  return (page.breadcrumbs ?? [])
+  const fromBreadcrumbs = (page.breadcrumbs ?? [])
     .map((item) => item?.url)
     .filter((url): url is string => typeof url === 'string' && !!url && url !== page.fullSlug)
+    .reverse()
+  if (fromBreadcrumbs.length > 0) return fromBreadcrumbs
+
+  const parts = (page.fullSlug ?? '')
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .filter(Boolean)
+  return parts
+    .slice(0, -1)
+    .map((_, index) => '/' + parts.slice(0, index + 1).join('/'))
     .reverse()
 }
 

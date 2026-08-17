@@ -414,7 +414,9 @@ bez klientského JS, pod grafem tabulka pro čtečky.
 - **Běh je přírůstkový**, takže kvótu nepřeteče ani s přibývajícími
   destinacemi: bere jen stránky bez dat a starší než 330 dní, nejvýš 200 míst
   za běh; zbytek ohlásí jako `deferred` a dopočítá ho příští běh. Cron jede
-  měsíčně (3. den ve 4:17 UTC) a většinou nemá co dělat — nové destinace se
+  měsíčně (20. den ve 4:17 UTC — kvóta RapidAPI se obnovuje podle dne zřízení
+  předplatného, 14. 8., takže běh na začátku měsíce by narazil na vyčerpaný
+  limit) a většinou nemá co dělat — nové destinace se
   tak doplní samy do měsíce.
 - Parametry pro ruční běh: `?dryRun=1` (jen vypíše), `?force=1` (přepočítá
   i čerstvá data — nutné po změně metodiky), `?slug=/anglie/londyn/pocasi`
@@ -707,16 +709,24 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   API ji už nekótuje. Seznam předků skládá `ancestorSlugsNearestFirst`
   (`src/lib/page-hierarchy.ts`) z uložených `breadcrumbs`, **ne z adresy**: předci
   s `includeInChildUrlPaths: false` (kontinenty, Karélie nad Kiži) v URL nejsou, a přitom
-  právě u nich může být výjimka. Celý řetěz jde jedním dotazem a jen tehdy, když stránce
-  něco chybí. **Kontinenty nechávej prázdné** (hodnota by se propsala do všech zemí pod
-  nimi) a stejně tak **Česko** (kurz CZK→CZK se nepočítá). **Země s víc pásmy** drží
-  na sobě referenční čas a výjimky mají jednotlivé oblasti: Rusko moskevský čas
-  - Kaliningrad/Jekatěrinburg/Omsk/Novosibirsk, USA východní čas + Aljaška,
-    Kalifornie, Wyoming a Arizona (ta nemá letní čas, proto vlastní `America/Phoenix`;
-    národní parky pásmo dědí od svého státu). Jednorázový úklid dat po zavedení dědění
-    je v `scripts/cleanup-currency-timezone.sql` (idempotentní, se zálohou; kromě polí
-    maže i rozbitý duplikát norské stránky o jídle, který visel pod Portugalskem).
-    **Na produkci spustit ručně + `force-recreate cms`.**
+  právě u nich může být výjimka. Stránka bez uloženého řetězce (starý import, zápis
+  přímým SQL) spadne na prefixy adresy, jinak by nezdědila nic. Celý řetěz jde jedním
+  dotazem a jen tehdy, když stránce něco chybí; zděděné pásmo krmí i kartu „Aktuální
+  čas" v textu (blok Nice-to-know s prázdným políčkem).
+  **Kontinenty nechávej prázdné** — hodnota by se propsala do všech zemí pod nimi.
+  U **Česka** to platí jen pro MĚNU (kurz CZK→CZK se nepočítá), pásmo `Europe/Prague`
+  tam být musí, jinak přijde o hodiny 110 českých stránek. **Země s víc pásmy** drží
+  na sobě referenční čas a výjimky mají jednotlivé oblasti — Rusko moskevský čas
+  a k tomu Kurská Kosa (Kaliningrad), Jekatěrinburg, Omsk a Novosibirsk; USA východní
+  čas a k tomu Aljaška, Kalifornie, Wyoming a Arizona (ta nemá letní čas, proto vlastní
+  `America/Phoenix`; národní parky pásmo dědí od svého státu). Kdo přidá město v jiném
+  pásmu (Chicago, Las Vegas), musí mu pásmo vyplnit — jinak zdědí referenční čas země,
+  což je horší než žádné hodiny. Jednorázový úklid dat je v
+  `scripts/cleanup-currency-timezone.sql` (`pnpm cleanup:place-detail`): idempotentní,
+  zálohy do schématu **`zaloha`** (v `public` by se o cizí tabulku zasekl dev server),
+  kromě polí maže i rozbitý duplikát norské stránky o jídle, který visel pod
+  Portugalskem. Před spuštěním vždy `pg_dump` — obsah mazané stránky v záloze polí není.
+  **Na produkci spustit ručně + `force-recreate cms`**; spuštěno tam 17. 8. 2026.
 
 - **Sekce „Příprava do …“** (`src/components/layout/page/preparation-section.tsx`): na
   stránkách kategorie **Místo k navštívení** mezi „Co vidět“ a „Články a cestopisy“ (legacy
