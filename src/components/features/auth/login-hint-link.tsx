@@ -20,6 +20,9 @@ export function LoginHintLink({ backTo }: { backTo: string }) {
   return (
     <Link
       href={`/prihlaseni?next=${encodeURIComponent(backTo)}`}
+      // Přihlašovací stránka je noindex a `next` dělá z každé stránky webu
+      // unikátní adresu — nofollow šetří vyhledávačům zbytečné procházení.
+      rel="nofollow"
       onClick={(e) => {
         // Ctrl/⌘ + klik i prostřední tlačítko necháme prohlížeči (nová karta).
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
