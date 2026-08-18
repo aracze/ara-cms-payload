@@ -42,6 +42,7 @@ už PŘI BUILDU, proto musí být tady, ne jen v serverovém `.env`):
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`                                        | klíč pro mapy (v Google Cloud omez přes "HTTP referrer")    |
 | `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`                                         | Map ID (Cloud Console → Map Management) pro nový typ značky |
 | `NEXT_PUBLIC_ADSENSE_CLIENT` / `..._ARTICLE_SLOT` / `..._ARTICLE_SLOT_2` | AdSense (nepovinné)                                         |
+| `NEXT_PUBLIC_MEDIA_BASE_URL`                                             | `https://media.ara.cz` — media proxy (workers/media-proxy)  |
 
 > Obrazy do ghcr.io se pushují automaticky pomocí vestavěného `GITHUB_TOKEN`,
 > žádný další token pro push není potřeba.

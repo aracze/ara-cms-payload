@@ -23,6 +23,28 @@ export function capImageWidth(width: number): number {
 }
 
 /**
+ * Základna media proxy (Cloudflare Worker na media.ara.cz, viz
+ * workers/media-proxy). Nastavená jen v produkčním buildu — bez ní (dev) se
+ * adresy nepřepisují a jdou přímo na Cloudinary.
+ */
+const MEDIA_BASE_URL = process.env.NEXT_PUBLIC_MEDIA_BASE_URL
+/** Jen produkční cloud `ara` — dev cloud z lokálního .env proxy nezná. */
+const CLOUDINARY_PROD_PREFIX = 'https://res.cloudinary.com/ara/'
+
+/**
+ * Přepíše produkční Cloudinary URL na media proxy. MUSÍ se volat až jako
+ * poslední krok při emisi URL (po složení transformace) — v DB, props i
+ * search indexu zůstávají adresy res.cloudinary.com, aby detektory
+ * (`isCloudinary`, regex v rich-text-html) dál fungovaly.
+ */
+export function toMediaProxy(url: string): string {
+  if (!MEDIA_BASE_URL || !url.startsWith(CLOUDINARY_PROD_PREFIX)) {
+    return url
+  }
+  return `${MEDIA_BASE_URL.replace(/\/+$/, '')}/${url.slice(CLOUDINARY_PROD_PREFIX.length)}`
+}
+
+/**
  * Vloží Cloudinary transformaci hned za `/upload/`. Ne-Cloudinary zdroje
  * (lokální /assets, Payload uploads) vrací beze změny — nedají se transformovat.
  */
@@ -30,7 +52,7 @@ export function cloudinaryVariant(src: string, transform: string): string {
   if (!isCloudinary(src)) {
     return src
   }
-  return src.replace('/upload/', `/upload/${transform}/`)
+  return toMediaProxy(src.replace('/upload/', `/upload/${transform}/`))
 }
 
 /**
