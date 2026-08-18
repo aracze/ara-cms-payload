@@ -37,7 +37,13 @@ export function HeaderAccount({
   const search = useSearchParams()
   // Kam se po přihlášení vrátit: aktuální adresa včetně dotazu.
   const query = search.toString()
-  const nextPath = `${pathname}${query ? `?${query}` : ''}`
+  // Stránky přihlašovacího toku nejsou smysluplný cíl návratu — z nich se
+  // předává dál jejich vlastní `next` (odkud uživatel původně přišel), jinak by
+  // se adresa zanořovala do sebe (/prihlaseni?next=/prihlaseni?next=…).
+  // Hodnotu `next` ověřuje až server (safeNext), tady se jen přeposílá.
+  const AUTH_PATHS = ['/prihlaseni', '/registrace', '/zapomenute-heslo', '/nove-heslo']
+  const isAuthPage = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  const nextPath = isAuthPage ? search.get('next') || '/' : `${pathname}${query ? `?${query}` : ''}`
 
   return user ? (
     <AccountMenu user={user} />
@@ -203,6 +209,9 @@ function LoginTrigger({
       <Link
         ref={triggerRef}
         href={`/prihlaseni?next=${encodeURIComponent(nextPath)}`}
+        // Přihlašovací stránka je noindex a `next` dělá z každé stránky webu
+        // unikátní adresu — nofollow šetří vyhledávačům zbytečné procházení.
+        rel="nofollow"
         onClick={(e) => {
           // Nechat prohlížeči otevření v nové kartě/okně.
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
