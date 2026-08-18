@@ -32,6 +32,11 @@ function buildResponse(upstream: Response, cacheControl: string, isHead: boolean
   headers.set('cache-control', cacheControl)
   headers.set('vary', 'Accept')
   headers.set('x-content-type-options', 'nosniff')
+  // Ladicí viditelnost: stav edge keše SUBREQUESTU (HIT = Cloudinary už
+  // o požadavku neví). Vnější cf-cache-status tu neexistuje — custom
+  // doména Workeru volá Worker vždy.
+  const upstreamCache = upstream.headers.get('cf-cache-status')
+  if (upstreamCache) headers.set('x-upstream-cache', upstreamCache)
   return new Response(isHead ? null : upstream.body, { status: 200, headers })
 }
 
