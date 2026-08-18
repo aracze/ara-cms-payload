@@ -59,6 +59,11 @@ export const timezoneField: TextField = {
       'Prázdné = zdědí se od nadřazeného místa. Vyplňuj u země — a u regionu/místa, kde je pásmo jiné.',
   },
   hooks: {
+    // Uložit „ Europe/London " s mezerami by znamenalo hodnotu, kterou musí
+    // otrimovat každý čtenář zvlášť — a prázdný řetězec by se v databázi tvářil
+    // jako vyplněná hodnota, takže by ho úklidový skript musel zase srovnávat
+    // na NULL. Normalizujeme na jednom místě, stejně jako u měny.
+    beforeChange: [({ value }) => (isEmpty(value) ? null : String(value).trim())],
     // Kopie stránky (akce Duplicate v adminu) by jinak vzala hodnotu s sebou
     // a vyrobila přesně tu nadbytečnou kopii, kterou dědění ruší. Prázdné
     // políčko si správnou hodnotu zdědí samo; skutečnou výjimku dopíše editor.

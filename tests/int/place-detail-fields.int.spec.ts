@@ -15,6 +15,7 @@ type Normalizer = (args: { value: unknown }) => unknown
 const validateTimezone = (timezoneField as { validate?: Validator }).validate!
 const validateCurrency = (currencyCodeField as { validate?: Validator }).validate!
 const normalizeCurrency = (currencyCodeField.hooks?.beforeChange as unknown as Normalizer[])[0]
+const normalizeTimezone = (timezoneField.hooks?.beforeChange as unknown as Normalizer[])[0]
 const duplicateTimezone = (timezoneField.hooks?.beforeDuplicate as unknown as Normalizer[])[0]
 const duplicateCurrency = (currencyCodeField.hooks?.beforeDuplicate as unknown as Normalizer[])[0]
 
@@ -57,6 +58,12 @@ describe('detail.timezone: validace pásma', () => {
 
   it('hlídá i zakládanou stránku bez rodiče — tudy dřív nový kontinent prošel', async () => {
     expect(await validateTimezone('Europe/London', { data: {} })).toContain('nadřazeným místem')
+  })
+
+  it('pásmo se ukládá bez mezer, prázdné jako NULL', () => {
+    expect(normalizeTimezone({ value: ' Europe/London ' })).toBe('Europe/London')
+    expect(normalizeTimezone({ value: '   ' })).toBeNull()
+    expect(normalizeTimezone({ value: null })).toBeNull()
   })
 })
 
