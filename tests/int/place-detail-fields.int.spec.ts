@@ -51,8 +51,12 @@ describe('detail.timezone: validace pásma', () => {
     )
   })
 
-  it('nová stránka bez vybraného rodiče se nehlídá (rodič se vybírá až při uložení)', async () => {
-    expect(await validateTimezone('Europe/London', { data: {} })).toBe(true)
+  it('podstránka pod místem projde i před prvním uložením', async () => {
+    expect(await validateTimezone('Europe/London', { data: { parent: 7 } })).toBe(true)
+  })
+
+  it('hlídá i zakládanou stránku bez rodiče — tudy dřív nový kontinent prošel', async () => {
+    expect(await validateTimezone('Europe/London', { data: {} })).toContain('nadřazeným místem')
   })
 })
 
@@ -71,6 +75,19 @@ describe('detail.currencyCode: validace a normalizace měny', () => {
     expect(await validateCurrency('EUR', { data: kontinent })).toContain(
       'Kontinenty a rubriky nechávej prázdné',
     )
+  })
+
+  it('neexistující kód neprojde, i když má tři písmena', async () => {
+    expect(await validateCurrency('ZZZ', { data: mistoPodZemi })).toContain('neexistuje')
+    expect(await validateCurrency('XYZ', { data: mistoPodZemi })).toContain('neexistuje')
+  })
+
+  it('zrušená HRK projde — v datech historicky je a ICU ji zná', async () => {
+    expect(await validateCurrency('HRK', { data: mistoPodZemi })).toBe(true)
+  })
+
+  it('malá písmena projdou, ukládají se velkými', async () => {
+    expect(await validateCurrency('eur', { data: mistoPodZemi })).toBe(true)
   })
 
   it('kód se ukládá velkými písmeny a bez mezer', () => {

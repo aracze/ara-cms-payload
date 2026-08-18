@@ -20,10 +20,19 @@ const isEmpty = (value: unknown): boolean =>
 /**
  * Kontinenty a rubriky (stránky bez rodiče) musí zůstat prázdné — hodnota by se
  * propsala do VŠECH zemí pod nimi (Česko by třeba začalo hlásit euro).
- * U nové stránky se ještě rodič vybírat nemusel, proto se hlídají jen uložené.
+ * Hlídá se i při zakládání: kontrola vázaná na už uložené stránky měla přesně
+ * tam díru, kudy nový kontinent s hodnotou prošel. Kdo teprve zakládá běžnou
+ * podstránku, vybere nejdřív nadřazené místo — text chyby to říká.
  */
-const rootPageMustStayEmpty = (data: { id?: unknown; parent?: unknown } | undefined): boolean =>
-  Boolean(data?.id) && !data?.parent
+const rootPageMustStayEmpty = (data: { parent?: unknown } | undefined): boolean => !data?.parent
+
+/**
+ * Existující kód měny. Seznam bere z ICU (`Intl`), takže se nemusí udržovat
+ * ručně a přesto odmítne vymyšlené kódy: samotný tvar „tři písmena" projde
+ * i `ZZZ`, na kterém pak tiše zmizí kurz, protože ho kurzové API nezná.
+ * Ověřeno, že ICU zná všech 38 kódů, které v databázi jsou (včetně zrušené HRK).
+ */
+const KNOWN_CURRENCIES = new Set(Intl.supportedValuesOf('currency'))
 
 /**
  * Platné IANA jméno pásma. Záměrně přes `Intl` a ne přes
@@ -58,7 +67,7 @@ export const timezoneField: TextField = {
   validate: (value: string | null | undefined, { data }: { data?: Record<string, unknown> }) => {
     if (isEmpty(value)) return true
     if (rootPageMustStayEmpty(data))
-      return 'Kontinenty a rubriky nechávej prázdné — pásmo by zdědily všechny země pod nimi.'
+      return 'Pásmo patří stránce s nadřazeným místem. Kontinenty a rubriky nechávej prázdné (zdědily by ho všechny země pod nimi); pokud stránku teprve zakládáš, vyber nejdřív nadřazenou stránku.'
     const trimmed = String(value).trim()
     if (!isValidTimezone(trimmed))
       return `„${trimmed}" není platné časové pásmo. Použij jméno z databáze IANA, např. Europe/London nebo America/Phoenix.`
@@ -84,10 +93,12 @@ export const currencyCodeField: TextField = {
   validate: (value: string | null | undefined, { data }: { data?: Record<string, unknown> }) => {
     if (isEmpty(value)) return true
     if (rootPageMustStayEmpty(data))
-      return 'Kontinenty a rubriky nechávej prázdné — měnu by zdědily všechny země pod nimi.'
+      return 'Měna patří stránce s nadřazeným místem. Kontinenty a rubriky nechávej prázdné (zdědily by ji všechny země pod nimi); pokud stránku teprve zakládáš, vyber nejdřív nadřazenou stránku.'
     const trimmed = String(value).trim()
     if (!/^[A-Za-z]{3}$/.test(trimmed))
       return `„${trimmed}" není kód měny. Čekají se tři písmena podle ISO 4217, např. EUR, GBP nebo NOK.`
+    if (!KNOWN_CURRENCIES.has(trimmed.toUpperCase()))
+      return `Měna „${trimmed.toUpperCase()}" neexistuje. Zkontroluj kód podle ISO 4217 — např. EUR, GBP, NOK.`
     return true
   },
 }

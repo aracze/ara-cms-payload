@@ -1240,18 +1240,14 @@ export type InheritedAffiliateDeals = {
   deals: unknown
 }
 
-/** Předek načtený pro dědění hodnot — pole pro všechny dnešní konzumenty. */
-type AncestorDoc = {
-  id: number
-  title: string
-  fullSlug: string
-  detail?: {
-    genitive?: string | null
-    currencyCode?: string | null
-    timezone?: string | null
-  } | null
+/**
+ * Předek načtený pro dědění hodnot — pole pro všechny dnešní konzumenty.
+ * Tvar se odvozuje z kurátorovaného `Page`, aby se při změně schématu nerozšlo
+ * s realitou; `depth: 0` ale nechává `featuredImage.image` jako id (URL doplní
+ * `enrichFeaturedImages`), proto je to pole přepsané.
+ */
+type AncestorDoc = Pick<Page, 'id' | 'title' | 'fullSlug' | 'detail' | 'affiliate'> & {
   featuredImage?: { image?: unknown } | null
-  affiliate?: { deals?: unknown } | null
 }
 
 /**
@@ -1291,8 +1287,11 @@ async function fetchAncestorDocsUncached(ancestorFullSlugs: string[]): Promise<A
     joins: false,
   })) as unknown as PayloadDocsResponse<AncestorDoc>
 
+  // Stránka bez adresy (rozpracovaný záznam) by se do mapy uložila pod `null`
+  // a nikdy se nespárovala — rovnou ji vynecháme.
   const bySlug = new Map<string, AncestorDoc>()
-  for (const doc of [...(res.docs ?? [])].sort((a, b) => a.id - b.id)) {
+  for (const doc of [...(res.docs ?? [])].sort((a, b) => Number(a.id) - Number(b.id))) {
+    if (!doc.fullSlug) continue
     if (!bySlug.has(doc.fullSlug)) bySlug.set(doc.fullSlug, doc)
   }
   return ancestorFullSlugs
