@@ -42,8 +42,14 @@ export const SeasonalityBlock: Block = {
       // podle něj řádky srovná (monthsByCalendar). Aby ale nešlo uložit blok,
       // ve kterém některý měsíc chybí a jiný je dvakrát, musí sada dát přesně
       // 1–12; jinak by se tiše zobrazil měsíc, který redaktor nezadal.
+      // Pozor: vlastní `validate` NAHRAZUJE vestavěný validátor pole (Payload ho
+      // dosazuje jen `if (typeof field.validate === 'undefined'`), takže s ním
+      // přestanou platit i `minRows`/`maxRows` výš — počet řádků si proto musí
+      // pohlídat sám. Ty dvě volby nechávám kvůli adminu, kde řídí tlačítka
+      // pro přidání a odebrání řádku.
       validate: (value: unknown) => {
         if (!Array.isArray(value)) return true
+        if (value.length !== 12) return 'Seznam musí obsahovat právě 12 měsíců.'
         const cisla = value.map((row) => (row as { monthNumber?: unknown })?.monthNumber)
         const platna = cisla.filter(
           (n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 12,
