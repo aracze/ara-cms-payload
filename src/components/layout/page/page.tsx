@@ -52,6 +52,22 @@ import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import type { ReviewPublic } from '@/types/payload'
 
+/** Kategorie s panelem „Aktuální info" (čas + kurz) — viz MainContent. */
+const placePanelCategories: PageCategory[] = [
+  PageCategory.Misto_k_navstiveni,
+  PageCategory.Turisticky_cil,
+]
+
+/**
+ * Má text stránky kartu Nice-to-know? Karta „čas" i „měna" berou hodnotu ze
+ * zděděného detailu, a blok může editor vložit do JAKÉKOLI kategorie — proto se
+ * kontroluje obsah, ne jen kategorie. Hledá se v už načteném JSON (žádný dotaz).
+ */
+function hasNiceToKnowBlock(text: unknown): boolean {
+  if (!text || typeof text !== 'object') return false
+  return JSON.stringify(text).includes('niceToKnowBlock')
+}
+
 const exchangeRateCategories: PageCategory[] = [
   PageCategory.Misto_k_navstiveni,
   PageCategory.Turisticky_cil,
@@ -96,10 +112,20 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // takže bez `.catch` by jeden výpadek databáze při dohledávání měny znamenal
   // chybu 500 místo chybějících hodin a kurzu (dřív se hodnoty braly z už
   // načtených dat, takže tahle cesta selhat neumělo).
+  //
+  // Ptáme se jen tam, kde se hodnota SKUTEČNĚ VYKRESLÍ: panel s časem a kurzem
+  // mají místa a cíle, kurz navíc složené Praktické informace — a kdekoli může
+  // být v textu karta Nice-to-know (čas/měna), proto ještě kontrola obsahu.
+  // Bez toho platily dotaz i stránky jako Doprava nebo Zdraví, které výsledek
+  // jen zahodí.
   const ownCurrencyCode = page.detail?.currencyCode?.trim() || null
   const ownTimezone = page.detail?.timezone?.trim() || null
+  const rendersInheritedDetail =
+    placePanelCategories.includes(page.category) ||
+    exchangeRateCategories.includes(page.category) ||
+    hasNiceToKnowBlock(page.text)
   const inheritedDetailPromise: Promise<InheritedPlaceDetail> =
-    (!ownCurrencyCode || !ownTimezone) && ancestorSlugs.length > 0
+    rendersInheritedDetail && (!ownCurrencyCode || !ownTimezone) && ancestorSlugs.length > 0
       ? fetchInheritedPlaceDetail(ancestorSlugs).catch(() => EMPTY_INHERITED_PLACE_DETAIL)
       : Promise.resolve(EMPTY_INHERITED_PLACE_DETAIL)
 

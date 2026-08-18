@@ -710,9 +710,20 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   (`src/lib/page-hierarchy.ts`) z uložených `breadcrumbs`, **ne z adresy**: předci
   s `includeInChildUrlPaths: false` (kontinenty, Karélie nad Kiži) v URL nejsou, a přitom
   právě u nich může být výjimka. Stránka bez uloženého řetězce (starý import, zápis
-  přímým SQL) spadne na prefixy adresy, jinak by nezdědila nic. Celý řetěz jde jedním
-  dotazem a jen tehdy, když stránce něco chybí; zděděné pásmo krmí i kartu „Aktuální
-  čas" v textu (blok Nice-to-know s prázdným políčkem).
+  přímým SQL) spadne na prefixy adresy, jinak by nezdědila nic. Zděděné pásmo krmí
+  i kartu „Aktuální čas" v textu (blok Nice-to-know s prázdným políčkem).
+  **Předci se čtou JEDNÍM dotazem pro všechno, co se dědí** — `fetchAncestorDocs`
+  obsluhuje měnu, pásmo i akční nabídky (dřív měl každý svůj dotaz nad týmiž řádky),
+  duplicitní adresu řeší pravidlem „vyhrává nejnižší id" a dotaz se pustí jen tehdy,
+  když stránce něco chybí **a** zároveň to na ní jde vidět (panel u míst a cílů, kurz
+  u Praktických informací, karta Nice-to-know kdekoli v textu).
+  Políčka hlídá `src/fields/place-detail.ts`: pásmo musí být platné jméno z IANA
+  (přes `Intl`, aby prošly i aliasy v datech jako `US/Alaska`), měna tři písmena ISO
+  4217 a ukládá se velkými, kontinenty a rubriky musí zůstat prázdné, a **kopie
+  stránky (Duplicate) začíná s prázdnými políčky**, aby duplikováním města znovu
+  nevznikaly nadbytečné kopie. Validace není kosmetika: překlep na stránce země
+  zhasne hodiny všem jejím potomkům a `LocalTime` chybu spolkne, takže se nikde
+  neohlásí.
   **Kontinenty nechávej prázdné** — hodnota by se propsala do všech zemí pod nimi.
   U **Česka** to platí jen pro MĚNU (kurz CZK→CZK se nepočítá), pásmo `Europe/Prague`
   tam být musí, jinak přijde o hodiny 110 českých stránek. **Země s víc pásmy** drží

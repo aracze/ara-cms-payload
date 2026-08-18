@@ -1241,16 +1241,29 @@ export type InheritedAffiliateDeals = {
 }
 
 /**
- * Místo bez vlastních nabídek zdědí nabídky NEJBLIŽŠÍHO předka, který je má
- * (Dubrovník → Chorvatsko). Karty pak nesou předkovo jméno, skloňování
- * i fotku — inzerovat chorvatskou letenku pod titulkem „do Dubrovníku" by
- * bylo zavádějící. Slugy předků dodá volající z breadcrumbs, SEŘAZENÉ od
- * nejbližšího; jeden dotaz pro celý řetěz.
+ * Předek načtený pro dědění hodnot — pole pro všechny dnešní konzumenty.
+ * Tvar se odvozuje z kurátorovaného `Page`, aby se při změně schématu nerozšlo
+ * s realitou; `depth: 0` ale nechává `featuredImage.image` jako id (URL doplní
+ * `enrichFeaturedImages`), proto je to pole přepsané.
  */
-async function fetchInheritedAffiliateDealsUncached(
-  ancestorFullSlugs: string[],
-): Promise<InheritedAffiliateDeals | null> {
-  if (ancestorFullSlugs.length === 0) return null
+type AncestorDoc = Pick<Page, 'id' | 'title' | 'fullSlug' | 'detail' | 'affiliate'> & {
+  featuredImage?: { image?: unknown } | null
+}
+
+/**
+ * Předci stránky SEŘAZENÍ OD NEJBLIŽŠÍHO — jediný dotaz, ze kterého si berou
+ * data všichni, kdo něco dědí po hierarchii (měna, časové pásmo, akční nabídky).
+ * Dřív měl každý svůj vlastní dotaz se stejným `where`, takže se na stránce
+ * místa bez vlastních nabídek a bez vlastní měny sáhlo na tytéž řádky dvakrát.
+ *
+ * Slugy dodá volající přes `ancestorSlugsNearestFirst`. Duplicitní adresa (ta
+ * jde vyrobit migrací i zápisem přímým SQL, `fullSlug` unikátní index nemá) se
+ * řeší determinovaně: vyhrává NEJNIŽŠÍ id, tedy starší stránka. Bez toho by
+ * o zděděné hodnotě rozhodovalo pořadí řádků z databáze, a tatáž stránka by
+ * jednou zdědila euro a jindy nic.
+ */
+async function fetchAncestorDocsUncached(ancestorFullSlugs: string[]): Promise<AncestorDoc[]> {
+  if (ancestorFullSlugs.length === 0) return []
   const payload = await getDb()
 
   const res = (await payload.find({
@@ -1258,52 +1271,74 @@ async function fetchInheritedAffiliateDealsUncached(
     overrideAccess: false,
     where: { fullSlug: { in: ancestorFullSlugs } },
     depth: 0,
-    limit: ancestorFullSlugs.length,
-    select: { title: true, fullSlug: true, detail: true, featuredImage: true, affiliate: true },
+    // `pagination: false` = bez druhého dotazu na počet, který nikdo nečte.
+    // Limit nesmí být přesně na počet předků: duplicitní adresa by z výsledku
+    // vytlačila skutečného předka.
+    pagination: false,
+    limit: 0,
+    select: {
+      id: true,
+      title: true,
+      fullSlug: true,
+      detail: true,
+      featuredImage: true,
+      affiliate: true,
+    },
     joins: false,
-  })) as unknown as PayloadDocsResponse<{
-    title: string
-    fullSlug: string
-    detail?: { genitive?: string | null } | null
-    featuredImage?: { image?: unknown } | null
-    affiliate?: { deals?: unknown } | null
-  }>
+  })) as unknown as PayloadDocsResponse<AncestorDoc>
 
-  const bySlug = new Map((res.docs ?? []).map((d) => [d.fullSlug, d]))
-  for (const slug of ancestorFullSlugs) {
-    const doc = bySlug.get(slug)
-    const deals = doc?.affiliate?.deals
-    if (!doc || !deals || typeof deals !== 'object') continue
-    // Předek s prázdnými/nepoužitelnými nabídkami (kiwi i invia null — např.
-    // zájezdy bez odletu z Prahy a bez letenky) nesmí zastínit vzdálenějšího
-    // předka s platnými daty — jinak by sekce zmizela úplně.
-    const dealsObj = deals as { kiwi?: unknown; invia?: unknown }
-    if (!isValidDeal(dealsObj.kiwi) && !isValidDeal(dealsObj.invia)) continue
-    // depth 0 → featuredImage.image je id; URL doplní hromadný překlad.
-    const [enriched] = await enrichFeaturedImages([doc])
-    const imageUrl = (enriched.featuredImage?.image as { url?: string } | null | undefined)?.url
-    return {
-      title: doc.title,
-      genitive: doc.detail?.genitive ?? null,
-      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
-      deals,
-    }
+  // Stránka bez adresy (rozpracovaný záznam) by se do mapy uložila pod `null`
+  // a nikdy se nespárovala — rovnou ji vynecháme.
+  const bySlug = new Map<string, AncestorDoc>()
+  for (const doc of [...(res.docs ?? [])].sort((a, b) => Number(a.id) - Number(b.id))) {
+    if (!doc.fullSlug) continue
+    if (!bySlug.has(doc.fullSlug)) bySlug.set(doc.fullSlug, doc)
   }
-  return null
+  return ancestorFullSlugs
+    .map((slug) => bySlug.get(slug))
+    .filter((doc): doc is AncestorDoc => doc !== undefined)
 }
 
-const fetchInheritedAffiliateDealsCached = cached(
-  fetchInheritedAffiliateDealsUncached,
-  'inherited-affiliate-deals',
+const fetchAncestorDocsCached = cached(
+  fetchAncestorDocsUncached,
+  'ancestor-docs',
   // Tagy stránek předků: denní sync nabídek invaliduje page_<fullSlug> vlastníka
   // (viz syncAffiliateDeals), změna stránek obecný tag 'pages'.
   ([slugs]) => ['pages', ...slugs.map((s) => 'page_' + s)],
 )
 
-/** Nabídky nejbližšího předka pro místo bez vlastních (viz výše). */
+const fetchAncestorDocs = cache((ancestorFullSlugs: string[]): Promise<AncestorDoc[]> =>
+  fetchAncestorDocsCached(ancestorFullSlugs),
+)
+
+/**
+ * Místo bez vlastních nabídek zdědí nabídky NEJBLIŽŠÍHO předka, který je má
+ * (Dubrovník → Chorvatsko). Karty pak nesou předkovo jméno, skloňování
+ * i fotku — inzerovat chorvatskou letenku pod titulkem „do Dubrovníku" by
+ * bylo zavádějící.
+ */
 export const fetchInheritedAffiliateDeals = cache(
-  (ancestorFullSlugs: string[]): Promise<InheritedAffiliateDeals | null> =>
-    fetchInheritedAffiliateDealsCached(ancestorFullSlugs),
+  async (ancestorFullSlugs: string[]): Promise<InheritedAffiliateDeals | null> => {
+    for (const doc of await fetchAncestorDocs(ancestorFullSlugs)) {
+      const deals = doc.affiliate?.deals
+      if (!deals || typeof deals !== 'object') continue
+      // Předek s prázdnými/nepoužitelnými nabídkami (kiwi i invia null — např.
+      // zájezdy bez odletu z Prahy a bez letenky) nesmí zastínit vzdálenějšího
+      // předka s platnými daty — jinak by sekce zmizela úplně.
+      const dealsObj = deals as { kiwi?: unknown; invia?: unknown }
+      if (!isValidDeal(dealsObj.kiwi) && !isValidDeal(dealsObj.invia)) continue
+      // depth 0 → featuredImage.image je id; URL doplní hromadný (cachovaný) překlad.
+      const [enriched] = await enrichFeaturedImages([doc])
+      const imageUrl = (enriched.featuredImage?.image as { url?: string } | null | undefined)?.url
+      return {
+        title: doc.title,
+        genitive: doc.detail?.genitive ?? null,
+        imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+        deals,
+      }
+    }
+    return null
+  },
 )
 
 /** Měna a časové pásmo zděděné po hierarchii (viz fetchInheritedPlaceDetail). */
@@ -1327,65 +1362,22 @@ export const EMPTY_INHERITED_PLACE_DETAIL: InheritedPlaceDetail = {
  * Slugy předků dodá volající SEŘAZENÉ od nejbližšího (viz
  * `ancestorSlugsNearestFirst`), celý řetěz padne do jednoho dotazu.
  */
-async function fetchInheritedPlaceDetailUncached(
-  ancestorFullSlugs: string[],
-): Promise<InheritedPlaceDetail> {
-  if (ancestorFullSlugs.length === 0) return EMPTY_INHERITED_PLACE_DETAIL
-  const payload = await getDb()
-
-  const res = (await payload.find({
-    collection: 'pages',
-    overrideAccess: false,
-    where: { fullSlug: { in: ancestorFullSlugs } },
-    depth: 0,
-    // `pagination: false` = bez druhého dotazu na počet, který nikdo nečte.
-    // Limit zároveň nesmí být přesně na počet předků: `fullSlug` unikátní index
-    // nemá, takže duplicitní adresa by z výsledku vytlačila skutečného předka.
-    pagination: false,
-    limit: 0,
-    select: { id: true, fullSlug: true, detail: true },
-    joins: false,
-  })) as unknown as PayloadDocsResponse<{
-    id: number
-    fullSlug: string
-    detail?: { currencyCode?: string | null; timezone?: string | null } | null
-  }>
-
-  // `fullSlug` unikátní index nemá (duplicitu umí vyrobit migrace i zápis přímým
-  // SQL), takže při shodě adres rozhoduje NEJNIŽŠÍ id — tedy starší stránka.
-  // Bez toho by o zděděné hodnotě rozhodlo pořadí řádků z databáze, které se může
-  // změnit mezi dvěma requesty, a Dubrovník by tak jednou zdědil euro a jindy nic.
-  const detailBySlug = new Map<
-    string,
-    { currencyCode?: string | null; timezone?: string | null } | null
-  >()
-  for (const doc of [...(res.docs ?? [])].sort((a, b) => a.id - b.id)) {
-    if (!detailBySlug.has(doc.fullSlug)) detailBySlug.set(doc.fullSlug, doc.detail ?? null)
-  }
-  // Měna a pásmo se hledají NEZÁVISLE: region může mít vyplněnou jen měnu
-  // (výjimka) a pásmo dědit od země výš. Prázdné políčko předka se přeskakuje,
-  // aby nezastínilo vzdálenějšího předka s hodnotou.
-  const nearest = (field: 'currencyCode' | 'timezone'): string | null => {
-    for (const slug of ancestorFullSlugs) {
-      const value = detailBySlug.get(slug)?.[field]?.trim()
-      if (value) return value
-    }
-    return null
-  }
-
-  return { currencyCode: nearest('currencyCode'), timezone: nearest('timezone') }
-}
-
-const fetchInheritedPlaceDetailCached = cached(
-  fetchInheritedPlaceDetailUncached,
-  'inherited-place-detail',
-  ([slugs]) => ['pages', ...slugs.map((s) => 'page_' + s)],
-)
-
-/** Zděděná měna a časové pásmo pro stránku s prázdným políčkem (viz výše). */
 export const fetchInheritedPlaceDetail = cache(
-  (ancestorFullSlugs: string[]): Promise<InheritedPlaceDetail> =>
-    fetchInheritedPlaceDetailCached(ancestorFullSlugs),
+  async (ancestorFullSlugs: string[]): Promise<InheritedPlaceDetail> => {
+    const docs = await fetchAncestorDocs(ancestorFullSlugs)
+    // Měna a pásmo se hledají NEZÁVISLE: region může mít vyplněnou jen měnu
+    // (výjimka) a pásmo dědit od země výš. Prázdné políčko předka se přeskakuje,
+    // aby nezastínilo vzdálenějšího předka s hodnotou.
+    const nearest = (field: 'currencyCode' | 'timezone'): string | null => {
+      for (const doc of docs) {
+        const value = doc.detail?.[field]?.trim()
+        if (value) return value
+      }
+      return null
+    }
+
+    return { currencyCode: nearest('currencyCode'), timezone: nearest('timezone') }
+  },
 )
 
 // ————————————————————————————————————————————————————————————————
