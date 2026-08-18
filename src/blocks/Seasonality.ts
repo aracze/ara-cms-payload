@@ -38,12 +38,35 @@ export const SeasonalityBlock: Block = {
       label: 'Měsíce (1-12)',
       minRows: 12,
       maxRows: 12,
+      // Kalendářní měsíc nese `monthNumber`, ne pořadí řádku — vykreslování si
+      // podle něj řádky srovná (monthsByCalendar). Aby ale nešlo uložit blok,
+      // ve kterém některý měsíc chybí a jiný je dvakrát, musí sada dát přesně
+      // 1–12; jinak by se tiše zobrazil měsíc, který redaktor nezadal.
+      // Pozor: vlastní `validate` NAHRAZUJE vestavěný validátor pole (Payload ho
+      // dosazuje jen `if (typeof field.validate === 'undefined'`), takže s ním
+      // přestanou platit i `minRows`/`maxRows` výš — počet řádků si proto musí
+      // pohlídat sám. Ty dvě volby nechávám kvůli adminu, kde řídí tlačítka
+      // pro přidání a odebrání řádku.
+      validate: (value: unknown) => {
+        if (!Array.isArray(value)) return true
+        if (value.length !== 12) return 'Seznam musí obsahovat právě 12 měsíců.'
+        const cisla = value.map((row) => (row as { monthNumber?: unknown })?.monthNumber)
+        const platna = cisla.filter(
+          (n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 12,
+        )
+        if (platna.length !== cisla.length) return 'Čísla měsíců musí být celá čísla 1 až 12.'
+        if (new Set(platna).size !== platna.length)
+          return 'Každý měsíc smí být v seznamu jen jednou.'
+        return true
+      },
       fields: [
         {
           name: 'monthNumber',
           type: 'number',
           label: 'Číslo měsíce',
           required: true,
+          min: 1,
+          max: 12,
         },
         {
           name: 'status',
@@ -54,25 +77,11 @@ export const SeasonalityBlock: Block = {
         },
       ],
     },
-    {
-      name: 'legend',
-      type: 'array',
-      label: 'Legenda',
-      fields: [
-        {
-          name: 'status',
-          type: 'select',
-          label: 'Status sezóny',
-          required: true,
-          options: SEASON_STATUS_OPTIONS,
-        },
-        {
-          name: 'label',
-          type: 'text',
-          label: 'Text legendy',
-          required: true,
-        },
-      ],
-    },
+    // Pole „Legenda" tu bývalo jako ruční seznam popisků. Odstraněné 17. 8.
+    // 2026: legenda se skládá sama ze zaškrtnutých měsíců a ze škály
+    // v `lib/climate.ts` (viz seasonalityLegendHtml), takže je všude stejná
+    // jako u klimatického grafu a nemůže se s ním rozejít. Ručně psaná se
+    // rozcházela — u Chorvatska pojmenovala jedna položka dva různé stupně,
+    // ale nesla barvu jen toho horšího.
   ],
 }

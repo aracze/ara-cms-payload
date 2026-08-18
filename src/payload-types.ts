@@ -1176,13 +1176,6 @@ export interface SeasonalityBlock {
         id?: string | null;
       }[]
     | null;
-  legend?:
-    | {
-        status: 'off' | 'shoulder' | 'mid' | 'peak';
-        label: string;
-        id?: string | null;
-      }[]
-    | null;
   id?: string | null;
   blockName?: string | null;
   blockType: 'seasonalityBlock';

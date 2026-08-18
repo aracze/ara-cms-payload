@@ -38,10 +38,16 @@ export const SUITABILITY_LABEL: Record<Suitability, string> = {
   poor: 'Nevhodné',
 }
 
-/** Legenda: dvě skupiny po dvou stupních, vždy celá — je to pevná stupnice. */
+/**
+ * Legenda: dvě skupiny po dvou stupních, vždy celá — je to pevná stupnice.
+ * Tytéž nadpisy i názvy stupňů používá pruh „Kdy jet" v textu stránky
+ * (rich-text-html.ts), takže se čtenář učí jedno názvosloví. Nadpis skupiny
+ * proto NENÍ „Hlavní turistická sezóna": slovo „hlavní" patří až stupni
+ * „Ideální" uvnitř skupiny, nad dvojicí by mátlo.
+ */
 export const LEGEND_GROUPS: { title: string; levels: Suitability[] }[] = [
-  { title: 'Sezóna', levels: ['ideal', 'good'] },
-  { title: 'Mimo sezónu', levels: ['mid', 'poor'] },
+  { title: 'Turistická sezóna', levels: ['ideal', 'good'] },
+  { title: 'Období mimo sezónu', levels: ['mid', 'poor'] },
 ]
 
 /**
