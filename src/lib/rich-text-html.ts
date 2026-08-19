@@ -1,5 +1,6 @@
 import DOMPurify from 'isomorphic-dompurify'
 import { LEGEND_GROUPS, SUITABILITY_LABEL, type Suitability } from '@/lib/climate'
+import { toMediaProxy } from '@/lib/cloudinary-loader'
 
 // Rendering Lexical rich-textu do (sanitizovaného) HTML. Vyčleněno z `utils.ts`,
 // protože `isomorphic-dompurify` je těžká závislost a `utils.ts` importují i
@@ -183,7 +184,9 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
     }
     case 'upload': {
       const src = escapeHtml(
-        String((node.value as Record<string, unknown>)?.url ?? (node.src as string) ?? ''),
+        toMediaProxy(
+          String((node.value as Record<string, unknown>)?.url ?? (node.src as string) ?? ''),
+        ),
       )
       const alt = escapeHtml(String((node.value as Record<string, unknown>)?.alt ?? ''))
       return src ? `<img src="${src}" alt="${alt}" />` : ''
@@ -197,19 +200,24 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
         const alt = escapeHtml(String(image.alt ?? ''))
         const caption = String(fields.caption ?? '')
         const attribution = buildImageAttributionHtml(image)
+        // Verze (v123/) a přípona se do přestavěných URL vracejí schválně:
+        // bez verze by fotka vyměněná pod stejným public_id zůstala navěky
+        // v immutable keši media proxy, bez přípony nejde odvodit klíč
+        // v R2 záloze (viz workers/media-proxy).
         const cloudinaryMatch = url.match(
-          /res\.cloudinary\.com\/([^/]+)\/image\/upload\/(?:v\d+\/)?(.+?)(?:\.[^.]+)?$/,
+          /res\.cloudinary\.com\/([^/]+)\/image\/upload\/(v\d+\/)?(.+?)(\.[^.]+)?$/,
         )
         let html = ''
         if (cloudinaryMatch) {
-          const [, cloudName, publicId] = cloudinaryMatch
-          const base = `https://res.cloudinary.com/${cloudName}/image/upload`
+          const [, cloudName, version = '', publicId, extension = ''] = cloudinaryMatch
+          const base = toMediaProxy(`https://res.cloudinary.com/${cloudName}/image/upload`)
+          const file = `${version}${publicId}${extension}`
           // Odkaz otevírá lightbox (PhotoSwipe, viz RichTextLightbox) — míří na
           // skutečně velkou verzi (c_limit malé originály nezvětšuje, f_auto/q_auto
           // nechá Cloudinary zvolit moderní formát a kvalitu).
-          const fullUrl = `${base}/c_limit,w_${LIGHTBOX_MAX_WIDTH},f_auto,q_auto/${publicId}`
-          const defaultUrl = `${base}/c_fit,w_790/${publicId}`
-          const smallUrl = `${base}/c_fit,w_420/${publicId}`
+          const fullUrl = `${base}/c_limit,w_${LIGHTBOX_MAX_WIDTH},f_auto,q_auto/${file}`
+          const defaultUrl = `${base}/c_fit,w_790/${file}`
+          const smallUrl = `${base}/c_fit,w_420/${file}`
           // PhotoSwipe potřebuje rozměry otevírané fotky dopředu (animace
           // z náhledu a rozvržení) — spočítáme je z rozměrů média v DB.
           const width = Number(image.width)
@@ -221,7 +229,7 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
           }
           html = `<figure class="image-wrapper"><a href="${fullUrl}" rel="lightbox"${dimensionAttrs}><img alt="${alt}" src="${defaultUrl}" srcset="${smallUrl} 420w, ${defaultUrl} 747w" sizes="(min-width: 480px) calc(100vw - 60px), calc(100vw - 30px)" /></a>`
         } else {
-          html = `<figure class="image-wrapper"><img src="${escapeHtml(url)}" alt="${alt}" />`
+          html = `<figure class="image-wrapper"><img src="${escapeHtml(toMediaProxy(url))}" alt="${alt}" />`
         }
 
         if (caption || attribution) {

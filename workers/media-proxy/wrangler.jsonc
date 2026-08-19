@@ -1,0 +1,19 @@
+// Konfigurace media proxy (Cloudflare Worker). Nasazení:
+//   cd workers/media-proxy && pnpm install && npx wrangler login && npx wrangler deploy
+// Custom domain vytvoří DNS záznam media.ara.cz i certifikát automaticky.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "media-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "routes": [{ "pattern": "media.ara.cz", "custom_domain": true }],
+  "vars": {
+    // Produkční Cloudinary cloud. Požární cvičení fallbacku = deploy
+    // s podvrženým neexistujícím hostem (viz workers/media-proxy/README).
+    "CLOUDINARY_ORIGIN": "https://res.cloudinary.com/ara",
+    // Custom doména R2 bucketu se zálohou — zdroj pro Image Transformations.
+    "BACKUP_HOST": "media-backup.ara.cz",
+  },
+  "r2_buckets": [{ "binding": "BACKUP", "bucket_name": "aracze" }],
+  "observability": { "enabled": true },
+}

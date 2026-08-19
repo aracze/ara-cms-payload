@@ -67,3 +67,12 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           pnpm run test
+
+      # Media proxy (Cloudflare Worker) má vlastní balíček i testy —
+      # kořenový vitest je nespouští (viz workers/media-proxy/vitest.config.ts).
+      - name: Media proxy worker tests
+        working-directory: workers/media-proxy
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm run test

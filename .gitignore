@@ -45,6 +45,8 @@ next-env.d.ts
 
 # Playwright
 node_modules/
+# lokální stav wrangleru (workers/media-proxy)
+.wrangler/
 /test-results/
 /playwright-report/
 /blob-report/
