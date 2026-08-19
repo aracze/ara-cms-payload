@@ -91,7 +91,9 @@ const mediaProxy = {
     // = 5xx/timeout → záloha z R2. `raw` (SVG) se podává tak, jak je.
     const imageOptions = resourceType === 'image' ? cfImageOptions(transform) : null
     for (const r2Key of deriveR2Keys(key)) {
-      const exists = await env.BACKUP.head(r2Key)
+      // Chyba R2 bindingu (výjimka, ne jen miss) nesmí shodit celý požadavek —
+      // radši řízená odpověď níž než neodchycená 1101.
+      const exists = await env.BACKUP.head(r2Key).catch(() => null)
       if (!exists) continue
 
       if (imageOptions) {
@@ -109,7 +111,7 @@ const mediaProxy = {
 
       // Poslední záchrana: surový originál přímo z bucketu.
       // HEAD obsloužíme z metadat (exists), ať se tělo z R2 zbytečně nestahuje.
-      const object = isHead ? exists : await env.BACKUP.get(r2Key)
+      const object = isHead ? exists : await env.BACKUP.get(r2Key).catch(() => null)
       if (!object) continue
       const headers = new Headers()
       object.writeHttpMetadata(headers)
