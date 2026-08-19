@@ -15,8 +15,11 @@ export interface Env {
 }
 
 const YEAR_SECONDS = 31_536_000
-/** Adresy jsou verzované/obsahově adresované → klidně navždy. */
+const DAY_SECONDS = 86_400
+/** Verzované adresy jsou obsahově adresované → klidně navždy. */
 const IMMUTABLE_CACHE = `public, max-age=${YEAR_SECONDS}, immutable`
+/** Bez verze (legacy adresy) by výměna fotky pod stejným jménem zůstala v keši. */
+const UNVERSIONED_CACHE = `public, max-age=${DAY_SECONDS}`
 /** Nouzový režim jen krátce — po oživení Cloudinary se rychle vrátí zmenšeniny. */
 const FALLBACK_CACHE = 'public, max-age=300'
 
@@ -37,6 +40,8 @@ function buildResponse(upstream: Response, cacheControl: string, isHead: boolean
   // doména Workeru volá Worker vždy.
   const upstreamCache = upstream.headers.get('cf-cache-status')
   if (upstreamCache) headers.set('x-upstream-cache', upstreamCache)
+  // U HEAD tělo nečteme — uvolnit, ať nedrží spojení.
+  if (isHead) void upstream.body?.cancel()
   return new Response(isHead ? null : upstream.body, { status: 200, headers })
 }
 
@@ -64,19 +69,22 @@ const mediaProxy = {
       transform ? `${transform}/` : ''
     }${version}${key}`
 
+    // Roční keš jen pro verzované adresy — u legacy adres bez v123 by keš
+    // po výměně fotky pod stejným public_id držela starou verzi až rok.
+    const versioned = version !== ''
     let upstream: Response | undefined
     try {
       upstream = await fetch(upstreamUrl, {
         signal: AbortSignal.timeout(10_000),
-        cf: { cacheEverything: true, cacheTtl: YEAR_SECONDS },
+        cf: { cacheEverything: true, cacheTtl: versioned ? YEAR_SECONDS : DAY_SECONDS },
       })
     } catch {
       upstream = undefined
     }
     if (upstream?.ok) {
-      return buildResponse(upstream, IMMUTABLE_CACHE, isHead)
+      return buildResponse(upstream, versioned ? IMMUTABLE_CACHE : UNVERSIONED_CACHE, isHead)
     }
-    // Tělo neúspěšné odpovědi uvolnit, ať nedrží spojení.
+    // Tělo neúspěšné (nebo u HEAD nečtené) odpovědi uvolnit, ať nedrží spojení.
     void upstream?.body?.cancel()
 
     // Nouzový režim: deaktivovaný účet = 401, chybějící asset = 404, výpadek
@@ -100,15 +108,18 @@ const mediaProxy = {
       }
 
       // Poslední záchrana: surový originál přímo z bucketu.
-      const object = await env.BACKUP.get(r2Key)
+      // HEAD obsloužíme z metadat (exists), ať se tělo z R2 zbytečně nestahuje.
+      const object = isHead ? exists : await env.BACKUP.get(r2Key)
       if (!object) continue
       const headers = new Headers()
       object.writeHttpMetadata(headers)
       if (!headers.get('content-type')) headers.set('content-type', 'application/octet-stream')
+      headers.set('content-length', String(object.size))
       headers.set('cache-control', FALLBACK_CACHE)
       headers.set('vary', 'Accept')
       headers.set('x-content-type-options', 'nosniff')
-      return new Response(isHead ? null : object.body, { status: 200, headers })
+      const body = !isHead && 'body' in object ? (object.body as ReadableStream) : null
+      return new Response(body, { status: 200, headers })
     }
 
     // Není ani na Cloudinary, ani v záloze → propagovat stav upstreamu.

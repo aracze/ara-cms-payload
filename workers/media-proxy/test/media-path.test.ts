@@ -158,6 +158,11 @@ describe('deriveR2Keys', () => {
   it('dekóduje URL-encoded znaky (klíče v R2 jsou neenkódované)', () => {
     expect(deriveR2Keys('slo%C5%BEka/foto%20a.jpg')).toEqual(['složka/foto a.jpg'])
   })
+
+  it('zakódované .. po dekódování nevrací žádný kandidát (CodeRabbit)', () => {
+    expect(deriveR2Keys('%2E%2E/tajne.jpg')).toEqual([])
+    expect(deriveR2Keys('v1%2F..%2Ftajne.jpg')).toEqual([])
+  })
 })
 
 describe('cfImageOptions', () => {

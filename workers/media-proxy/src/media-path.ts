@@ -134,6 +134,9 @@ export function deriveR2Keys(key: string): string[] {
   } catch {
     // ponecháme původní tvar — lepší šance na shodu než žádná
   }
+  // `..` po dekódování (%2E%2E prošlo kontrolou v parsePath): R2 klíče sice
+  // nejsou cesty, ale URL na media-backup by se normalizovala — raději nic.
+  if (decoded.includes('..')) return []
   const match = decoded.match(/^(.+)\.([A-Za-z0-9]{2,5})$/)
   if (match) {
     const extension = match[2].toLowerCase() === 'jpeg' ? 'jpg' : match[2].toLowerCase()
