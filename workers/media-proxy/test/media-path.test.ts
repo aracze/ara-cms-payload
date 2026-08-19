@@ -65,6 +65,13 @@ describe('parsePath', () => {
     }
   })
 
+  it('složka s podtržítkem v public_id NENÍ transformace (CodeRabbit)', () => {
+    expect(parsePath('/image/upload/foo_bar/photo.jpg')).toEqual({
+      ok: true,
+      path: { resourceType: 'image', transform: null, version: '', key: 'foo_bar/photo.jpg' },
+    })
+  })
+
   it('odmítne /image/fetch/ (proxování cizích URL) → 404', () => {
     expect(parsePath('/image/fetch/https://example.com/x.jpg')).toEqual({ ok: false, status: 404 })
   })
@@ -113,6 +120,18 @@ describe('negotiateFormat', () => {
 
   it('f_auto se bez moderního formátu odebere (ne f_jpg — PNG průhlednost)', () => {
     expect(negotiateFormat('f_auto,q_auto,c_limit,w_640', '*/*')).toBe('q_auto,c_limit,w_640')
+  })
+
+  it('respektuje q=0 v Accept (výslovné odmítnutí formátu, CodeRabbit)', () => {
+    expect(negotiateFormat('f_auto,q_auto,c_limit,w_640', 'image/avif;q=0,image/webp')).toBe(
+      'f_webp,q_auto,c_limit,w_640',
+    )
+    expect(negotiateFormat('f_auto,q_auto,c_limit,w_640', 'image/avif;q=0.8,image/webp')).toBe(
+      'f_avif,q_auto,c_limit,w_640',
+    )
+    expect(negotiateFormat('f_auto,q_auto,c_limit,w_640', 'image/avif;q=0,image/webp;q=0')).toBe(
+      'q_auto,c_limit,w_640',
+    )
   })
 
   it('transformace bez f_auto se nemění (jediný keš záznam)', () => {

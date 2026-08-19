@@ -52,9 +52,13 @@ export function isValidTransform(segment: string): boolean {
 // Naše transformace mají VŽDY ≥2 komponenty, takže obsahují čárku. Segment
 // bez čárky ve tvaru Cloudinary parametru (`e_blur:300`, `t_named`…) web
 // nikdy negeneruje — je to pokus o ražení variant a zaslouží 400, ne tiché
-// přeposlání (Cloudinary by ho jako transformaci provedl).
+// přeposlání (Cloudinary by ho jako transformaci provedl). Poznává se podle
+// ZNÁMÝCH Cloudinary prefixů (ne libovolného `xx_`), aby složka v public_id
+// (`foo_bar/…`) neprošla omylem jako transformace → 400.
+const CLOUDINARY_PARAM_PREFIX =
+  /^(a|ar|b|bo|br|c|co|cs|d|dl|dn|dpr|du|e|eo|f|fl|fn|fps|g|h|if|ki|l|o|p|pg|q|r|so|sp|t|u|vc|vs|w|x|y|z)_/
 function looksLikeSingleTransform(segment: string): boolean {
-  return /^[a-z]{1,3}_[^/]+$/.test(segment)
+  return CLOUDINARY_PARAM_PREFIX.test(segment)
 }
 
 export function parsePath(pathname: string): ParseResult {
@@ -87,6 +91,15 @@ export function parsePath(pathname: string): ParseResult {
   return { ok: true, path: { resourceType, transform, version, key } }
 }
 
+// `image/avif;q=0` znamená „AVIF výslovně odmítám" — prostý substring test
+// by ho přesto poslal. Typ bereme jen s q > 0 (chybějící q = 1 dle RFC 9110).
+function accepts(accept: string, type: string): boolean {
+  const match = accept.match(new RegExp(`${type}\\s*(;[^,]*)?(,|$)`))
+  if (!match) return false
+  const quality = (match[1] ?? '').match(/;\s*q=([0-9.]+)/)
+  return !quality || Number(quality[1]) > 0
+}
+
 // f_auto nesmí do keše tak, jak přijde: Cloudflare keš ignoruje Vary, takže
 // by formát vybraný pro prvního návštěvníka dostali všichni (AVIF do starého
 // prohlížeče = rozbité obrázky). Přepis na konkrétní formát podle Accept —
@@ -98,9 +111,9 @@ export function negotiateFormat(transform: string | null, accept: string): strin
 
   // Bez moderního formátu token odebrat (originální formát) — f_jpg by
   // zahodil PNG průhlednost.
-  const replacement = accept.includes('image/avif')
+  const replacement = accepts(accept, 'image/avif')
     ? 'f_avif'
-    : accept.includes('image/webp')
+    : accepts(accept, 'image/webp')
       ? 'f_webp'
       : null
 
