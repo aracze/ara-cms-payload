@@ -52,8 +52,7 @@ const run = async () => {
 
   for (const doc of docs as unknown as Array<Record<string, unknown>>) {
     const publicId = doc.cloudinaryPublicId as string | undefined
-    const url = doc.url as string | undefined
-    if (!publicId || !url) continue
+    if (!publicId) continue
     const key = resolveR2Key(
       publicId,
       doc.mimeType as string | undefined,
@@ -63,7 +62,16 @@ const run = async () => {
       legacy++
       continue
     }
+    // Klíč evidujeme VŽDY (i bez url) — jinak by úklid níž smazal existující
+    // zálohu dokumentu, kterému jen chybí url, jako osiřelou.
     expectedKeys.add(key)
+
+    const url = doc.url as string | undefined
+    if (!url) {
+      console.error(`Selhalo: ${key} — dokument nemá url, zálohu nelze pořídit.`)
+      failed++
+      continue
+    }
 
     try {
       if (await r2ObjectExists(key)) {
