@@ -650,7 +650,13 @@ pod fotkou (`.image-caption`), fotky bez rozměrů v DB mají fallback z náhled
     cesta z cizího počítače a byl by veřejně v adrese.
   - Soubory jdou na **Cloudinary** stejně jako `media` (zapíná se per kolekce v
     `payload.config.ts`); lokální disk nepřipadá v úvahu, kontejner se při nasazení zahazuje.
-    ⚠️ Na rozdíl od `media` **nemají zálohu na R2**.
+  - **Záloha v R2 je ZRCADLO, ne archiv** (hooky v `Avatars.ts`, sdílená logika
+    `src/lib/r2-backup.ts`): drží vždy jen aktuální avatar — při výměně/smazání se starý
+    soubor maže i z R2 (bucket je veřejně čitelný přes `media-backup.ara.cz` kvůli nouzovému
+    režimu media proxy, odložené fotky tam nepatří). Bez status pole; dorovnání a úklid
+    osiřelých klíčů = `pnpm backup:avatars` (jednorázově po nasazení, pak jen při problémech).
+    Staré migrované avatary bez složky `avatars/` sdílejí soubor s `media` — jejich zálohu
+    vlastní `media`, zrcadlo je přeskakuje.
   - Server akce mají výchozí strop těla 1 MB — kvůli dvoumegovým fotkám je v `next.config.mjs`
     zvednutý `serverActions.bodySizeLimit` na 3 MB.
   - **Nasazení proběhlo** v tomto pořadí (zaznamenané pro případ, že by se stavěl nový
