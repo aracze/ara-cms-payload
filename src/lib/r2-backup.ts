@@ -38,6 +38,9 @@ const s3Client = new S3Client({
     accessKeyId: s3AccessKeyId || 'missing',
     secretAccessKey: s3Secret || 'missing',
   },
+  // Zálohy běží detached — zaseknuté spojení bez limitu by viselo navěky
+  // (média by zůstala `pending`, fronta avatarů by se nikdy neuvolnila).
+  requestHandler: { connectionTimeout: 5_000, requestTimeout: 30_000 },
 })
 
 export function isR2Configured(): boolean {

@@ -50,6 +50,22 @@ function avatarR2Key(doc: AvatarR2Doc): string | null {
   return key.startsWith('avatars/') ? key : null
 }
 
+// Detached operace nad STEJNÝM klíčem musí běžet v pořadí, v jakém přišly:
+// nahrání a okamžité smazání téhož avataru by se jinak mohly předběhnout
+// (DELETE doběhne dřív, pomalejší PUT pak smazanou fotku vrátí do veřejného
+// bucketu). Fronta per klíč v paměti procesu — stejný přístup jako
+// latestBackupGen u Media. Úlohy nikdy nerejectují (chyby logují uvnitř).
+const avatarR2Queue = new Map<string, Promise<void>>()
+
+function enqueueAvatarR2(key: string, task: () => Promise<void>): void {
+  const previous = avatarR2Queue.get(key) ?? Promise.resolve()
+  const run = previous.then(task)
+  avatarR2Queue.set(key, run)
+  void run.finally(() => {
+    if (avatarR2Queue.get(key) === run) avatarR2Queue.delete(key)
+  })
+}
+
 // Záloha avataru do R2 je ZRCADLO, ne archiv: drží vždy jen aktuální soubor.
 // Staré verze se mažou ze dvou důvodů: (1) uživatel po výměně/smazání čeká,
 // že fotka zmizí, (2) bucket je veřejně čitelný přes media-backup.ara.cz
@@ -199,13 +215,18 @@ export const Avatars: CollectionConfig = {
         // s tímto příznakem — až v něm jsou metadata (public_id) v dokumentu.
         if (req.context.skipCloudStorage !== true) return
 
-        void mirrorAvatarToR2(req.payload, doc as AvatarR2Doc & { url?: string | null })
+        const { payload } = req
+        const current = doc as AvatarR2Doc & { url?: string | null }
+        const currentKey = avatarR2Key(current)
+        if (currentKey) {
+          enqueueAvatarR2(currentKey, () => mirrorAvatarToR2(payload, current))
+        }
 
         // Výměna souboru pod stejným dokumentem: starý objekt v R2 nesmí zůstat.
         const previous = previousDoc as AvatarR2Doc | undefined
         const previousKey = previous ? avatarR2Key(previous) : null
-        if (previousKey && previousKey !== avatarR2Key(doc as AvatarR2Doc)) {
-          void removeAvatarFromR2(req.payload, previous as AvatarR2Doc)
+        if (previousKey && previousKey !== currentKey) {
+          enqueueAvatarR2(previousKey, () => removeAvatarFromR2(payload, previous as AvatarR2Doc))
         }
       },
     ],
@@ -213,7 +234,12 @@ export const Avatars: CollectionConfig = {
       async ({ doc, req }) => {
         // Smazání avataru (výměna z profilu maže celý dokument) → pryč i z R2.
         if (process.env.NODE_ENV !== 'production') return
-        void removeAvatarFromR2(req.payload, doc as AvatarR2Doc)
+        const { payload } = req
+        const removed = doc as AvatarR2Doc
+        const key = avatarR2Key(removed)
+        if (key) {
+          enqueueAvatarR2(key, () => removeAvatarFromR2(payload, removed))
+        }
       },
     ],
   },

@@ -34,9 +34,12 @@ const run = async () => {
 
   const payload = await getPayload({ config: configPromise })
 
+  // Bez stránkování schválně: expectedKeys MUSÍ obsahovat úplně všechny
+  // avatary, jinak by úklid „osiřelých" smazal platné zálohy z dalších stránek.
   const { docs } = await payload.find({
     collection: 'avatars',
-    limit: 1000,
+    pagination: false,
+    limit: 0,
     depth: 0,
     overrideAccess: true,
   })
