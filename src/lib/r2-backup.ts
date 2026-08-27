@@ -40,7 +40,9 @@ const s3Client = new S3Client({
   },
   // Zálohy běží detached — zaseknuté spojení bez limitu by viselo navěky
   // (média by zůstala `pending`, fronta avatarů by se nikdy neuvolnila).
-  requestHandler: { connectionTimeout: 5_000, requestTimeout: 30_000 },
+  // throwOnRequestTimeout: bez něj překročení requestTimeout jen zaloguje
+  // varování a operace visí dál (viz @smithy/node-http-handler).
+  requestHandler: { connectionTimeout: 5_000, requestTimeout: 30_000, throwOnRequestTimeout: true },
 })
 
 export function isR2Configured(): boolean {
