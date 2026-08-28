@@ -49,7 +49,7 @@ export function DealsOfDaySection({
         </h2>
         <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
         <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
-          Nejlevnější letenky a vybrané zájezdy s odletem z Prahy pro {todayLabel()}.
+          Akční letenky a zájezdy z Prahy pro {todayLabel()}.
         </p>
       </div>
 
