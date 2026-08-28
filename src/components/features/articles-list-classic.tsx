@@ -1,7 +1,7 @@
 import { Article } from '@/types/payload'
 import { getArticleExcerpt, getArticleHref, getArticleImageUrl, getArticleKey } from '@/lib/utils'
 import { ArticlesListClassicClient } from './articles-list-classic-client'
-import type { ArticleCardVM } from './article-card'
+import type { ArticleCardVM } from './article-row'
 
 // Klasický (vertikální) layout článků — podobný původnímu webu: články pod sebou
 // (titulek + perex vlevo, náhled vpravo), vedle nich reklamní sloupec.

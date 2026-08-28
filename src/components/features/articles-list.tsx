@@ -1,7 +1,7 @@
 import { Article } from '@/types/payload'
 import { getArticleExcerpt, getArticleHref, getArticleImageUrl, getArticleKey } from '@/lib/utils'
-import { ArticlesGridClient } from './articles-grid-client'
-import type { ArticleCardVM } from './article-card'
+import { ArticlesRowsClient } from './articles-rows-client'
+import type { ArticleCardVM } from './article-row'
 
 interface ArticlesProps {
   articles: Article[]
@@ -25,5 +25,5 @@ export const ArticlesList = ({ articles: articlesProp, parentFullSlug }: Article
     imageUrl: getArticleImageUrl(article),
   }))
 
-  return <ArticlesGridClient items={items} />
+  return <ArticlesRowsClient items={items} />
 }

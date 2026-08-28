@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { isCloudinary } from '@/lib/cloudinary-loader'
 import { ArticleAd } from './article-ad'
-import type { ArticleCardVM } from './article-card'
+import type { ArticleCardVM } from './article-row'
 
 // Klientský ostrůvek klasického (vertikálního) seznamu. Drží jen `visibleCount`.
 // Data = lehký VM předpočítaný na serveru (ArticlesListClassic) — bez plných těl.
