@@ -1404,6 +1404,8 @@ export type TopAffiliateDeal = {
   /** Zájezd z homepage feedu: země a lokalita zvlášť — titulek skládá až komponenta. */
   country?: string | null
   locality?: string | null
+  /** Zájezd z homepage feedu: odletové letiště v ČR (dlaždice ho zmíní, když není Praha). */
+  departure?: string | null
   /** Fotka dlaždice (letenka = místo, zájezd = hotel z feedu). */
   imageUrl: string | null
 }
@@ -1454,6 +1456,7 @@ function parseHomepageTourDeals(raw: unknown): HomepageTourDeal[] {
       days: typeof o.days === 'number' && o.days > 0 ? o.days : 0,
       food: str(o.food),
       discount: typeof o.discount === 'number' && o.discount > 0 ? o.discount : 0,
+      departure: str(o.departure),
     })
   }
   return out
@@ -1540,6 +1543,7 @@ async function fetchTopAffiliateDealsUncached(
           hotel: t.hotel,
           days: t.days,
           discount: t.discount,
+          departure: t.departure,
           imageUrl: t.photoUrl,
         }))
     : []

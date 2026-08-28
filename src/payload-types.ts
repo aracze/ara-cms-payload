@@ -971,7 +971,7 @@ export interface Homepage {
   };
   dealsOfDay?: {
     /**
-     * Feed s „Defaultním cílením Invia" z affil.invia.cz — plní dlaždice zájezdů na homepage (filtr: letecky, odlet z Prahy, řazení podle slevy). Prázdné pole = dlaždice se plní nejlevnějšími zájezdy destinací (starší chování).
+     * Feed s „Defaultním cílením Invia" z affil.invia.cz — plní dlaždice zájezdů na homepage (filtr: letecky, odlet z českého letiště, řazení podle slevy). Prázdné pole = dlaždice se plní nejlevnějšími zájezdy destinací (starší chování).
      */
     inviaFeedUrl?: string | null;
     deals?:

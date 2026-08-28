@@ -49,7 +49,7 @@ export function DealsOfDaySection({
         </h2>
         <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
         <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
-          Akční letenky a zájezdy z Prahy pro {todayLabel()}.
+          Akční letenky a zájezdy z Česka pro {todayLabel()}.
         </p>
       </div>
 
@@ -96,8 +96,24 @@ function tileTitle(deal: TopAffiliateDeal): string {
   return full.length <= TITLE_MAX_CHARS ? full : deal.title
 }
 
+/** „z Brna" — 2. pád českých letišť z Invia feedu; neznámé jméno jen s předložkou. */
+const DEPARTURE_FROM: Record<string, string> = {
+  Praha: 'z Prahy',
+  Brno: 'z Brna',
+  Ostrava: 'z Ostravy',
+  Pardubice: 'z Pardubic',
+  'Karlovy Vary': 'z Karlových Varů',
+}
+
 function tourMeta(deal: TopAffiliateDeal): string {
-  return [deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
+  // Odlet se zmiňuje jen mimo Prahu — ta je u zájezdů samozřejmost, a dlaždice
+  // je úzká; „odlet z Brna" je naopak informace, bez které by cena mátla.
+  // Proto jde PRVNÍ: řádek se ořezává zprava a dlouhý název hotelu by ho schoval.
+  const departure =
+    deal.departure && deal.departure !== 'Praha'
+      ? `odlet ${DEPARTURE_FROM[deal.departure] ?? `z ${deal.departure}`}`
+      : null
+  return [departure, deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
     .filter(Boolean)
     .join(' · ')
 }

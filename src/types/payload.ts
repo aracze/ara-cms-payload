@@ -57,6 +57,8 @@ export interface HomepageTourDeal extends AffiliateDealInvia {
   locality: string | null
   /** Sleva v procentech (0 = bez slevy). */
   discount: number
+  /** Odletové letiště v ČR („Praha", „Brno"…); null = starší záznam bez údaje. */
+  departure: string | null
 }
 
 /** Tvar JSON pole `dealsOfDay.deals` globálu Homepage. */

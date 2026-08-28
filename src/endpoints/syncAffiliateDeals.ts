@@ -188,6 +188,21 @@ async function fetchInviaOffers(feedUrl: string): Promise<InviaOffer[]> {
 const isFromPrague = (o: InviaOffer) => (o.airports?.airport ?? []).some((a) => text(a) === 'Praha')
 
 /**
+ * Česká letiště tak, jak je pojmenovává Invia feed. Homepage dlaždice berou
+ * odlet z kteréhokoli z nich (rozhodnutí uživatele 28. 8. 2026 — Brno/Ostrava
+ * jsou pro české návštěvníky stejně dobré jako Praha); feed obsahuje i Krakov,
+ * Katovice, Vídeň, Bratislavu, které se vyřazují.
+ */
+const CZECH_AIRPORTS = ['Praha', 'Brno', 'Ostrava', 'Pardubice', 'Karlovy Vary']
+
+/** Odletové letiště v ČR pro dlaždici: Praha má přednost, jinak první české; null = žádné. */
+function czechDeparture(o: InviaOffer): string | null {
+  const airports = (o.airports?.airport ?? []).map(text)
+  if (airports.includes('Praha')) return 'Praha'
+  return airports.find((a) => CZECH_AIRPORTS.includes(a)) ?? null
+}
+
+/**
  * Textová hodnota z feedu: trim + oprava dvojitě zakódovaného ampersandu
  * („Resort &amp;Amp; Spa" → po XML dekódování „&Amp;") — chyba dat Invie, která
  * se může objevit v kterémkoli textovém poli, proto jde každý text tudy.
@@ -247,7 +262,7 @@ async function fetchInviaDeal(feedUrl: string): Promise<AffiliateDealInvia | nul
 }
 
 /** Pojistka proti bobtnání JSON v globálu — feed má desítky položek, po
- * filtru leteckých z Prahy zbývá typicky 10–15; web z nich kreslí 4. */
+ * filtru leteckých z ČR zbývá typicky 10–15; web z nich kreslí 4. */
 const HOMEPAGE_TOURS_STORE_LIMIT = 20
 
 /**
@@ -255,7 +270,8 @@ const HOMEPAGE_TOURS_STORE_LIMIT = 20
  * kurátorovaného feedu (defaultní cílení = trháky z úvodky invia.cz). Feed
  * střídá letecké zájezdy k moři s horskými pobyty vlastní dopravou (Tatry,
  * Alpy) bez slevy — pro web o cestách do dalekých zemí se berou jen letecké
- * s odletem z Prahy, řazené podle výše slevy (rozhodnutí uživatele 28. 8. 2026).
+ * s odletem z českého letiště (viz CZECH_AIRPORTS), řazené podle výše slevy
+ * (rozhodnutí uživatele 28. 8. 2026).
  * Duplicitní hotely (stejný hotel ve víc termínech) drží jen nejvýhodnější
  * termín. Ukládají se VŠICHNI kandidáti: propadlé termíny a pestrost destinací
  * řeší až web při čtení (fetchTopAffiliateDeals) — kdyby se pořadí skládalo
@@ -268,7 +284,8 @@ async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal
   const candidates: { deal: HomepageTourDeal; hotelId: string }[] = []
   for (const o of offers) {
     if (text(o.transportation).toLowerCase() !== 'letecky') continue
-    if (!isFromPrague(o)) continue
+    const departure = czechDeparture(o)
+    if (!departure) continue
     const base = mapInviaOffer(o)
     const country = text(o.destination?.country)
     // Bez země není co napsat do titulku dlaždice.
@@ -282,12 +299,13 @@ async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal
         country,
         locality: text(o.destination?.locality) || null,
         discount: Number.isFinite(discount) && discount > 0 && discount <= 100 ? discount : 0,
+        departure,
       },
       hotelId: text(o.hotelinfo?.id),
     })
   }
   if (candidates.length === 0) {
-    throw new Error('Invia feed neobsahuje žádný letecký zájezd s odletem z Prahy')
+    throw new Error('Invia feed neobsahuje žádný letecký zájezd s odletem z ČR')
   }
 
   // Nejvýhodnější nabídka první: podle slevy, při shodě podle ceny.
