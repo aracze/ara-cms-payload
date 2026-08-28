@@ -79,6 +79,23 @@ function flightMeta(deal: TopAffiliateDeal): string {
     .join(' · ')
 }
 
+/** „Egypt – Marsa Alam"; bez lokality jen země (letenky lokalitu nemají). */
+function fullTitle(deal: TopAffiliateDeal): string {
+  return deal.locality ? `${deal.title} – ${deal.locality}` : deal.title
+}
+
+/**
+ * Titulek dlaždice: dlouhé kombinace by CSS truncate ořízl zrovna o lokalitu
+ * („Spojené arabské emiráty – …"), tak se u nich nechává jen země. Hranice
+ * odpovídá šířce dlaždice (4 sloupce, 14.5 px bold) — proto žije tady
+ * u stylů, ne v datové vrstvě.
+ */
+const TITLE_MAX_CHARS = 26
+function tileTitle(deal: TopAffiliateDeal): string {
+  const full = fullTitle(deal)
+  return full.length <= TITLE_MAX_CHARS ? full : deal.title
+}
+
 function tourMeta(deal: TopAffiliateDeal): string {
   return [deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
     .filter(Boolean)
@@ -105,7 +122,7 @@ function DealTile({
         {deal.imageUrl && (
           <DealCardImage
             src={deal.imageUrl}
-            alt={deal.title}
+            alt={fullTitle(deal)}
             aspect="16:9"
             sizes="(min-width: 768px) 25vw, 50vw"
           />
@@ -122,7 +139,9 @@ function DealTile({
         )}
       </div>
       <div className="px-3 pt-2.5 pb-3">
-        <p className="truncate text-[14.5px] leading-snug font-bold text-[#252a31]">{deal.title}</p>
+        <p className="truncate text-[14.5px] leading-snug font-bold text-[#252a31]">
+          {tileTitle(deal)}
+        </p>
         <p className="text-[16px] leading-snug font-semibold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
           {priceCzk(deal.price)}
         </p>

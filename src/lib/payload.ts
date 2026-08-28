@@ -1401,6 +1401,9 @@ export type TopAffiliateDeal = {
   days?: number | null
   /** Zájezd z homepage feedu: sleva v procentech (štítek na fotce); 0/null = bez štítku. */
   discount?: number | null
+  /** Zájezd z homepage feedu: země a lokalita zvlášť — titulek skládá až komponenta. */
+  country?: string | null
+  locality?: string | null
   /** Fotka dlaždice (letenka = místo, zájezd = hotel z feedu). */
   imageUrl: string | null
 }
@@ -1437,8 +1440,9 @@ function parseHomepageTourDeals(raw: unknown): HomepageTourDeal[] {
     const o = t as Record<string, unknown> & { price: number; deepLink: string }
     const country = str(o.country)
     const termFrom = str(o.termFrom)
-    // Bez země není co napsat do titulku, bez termínu nejde poznat propadlý zájezd.
-    if (!country || !termFrom) continue
+    // Bez země není co napsat do titulku; termín musí být ISO datum, jinak by
+    // porovnání řetězců s dneškem propadlé zájezdy nepoznalo.
+    if (!country || !termFrom || !/^\d{4}-\d{2}-\d{2}$/.test(termFrom)) continue
     out.push({
       price: o.price,
       deepLink: o.deepLink,
@@ -1449,10 +1453,30 @@ function parseHomepageTourDeals(raw: unknown): HomepageTourDeal[] {
       termFrom,
       days: typeof o.days === 'number' && o.days > 0 ? o.days : 0,
       food: str(o.food),
-      discount: typeof o.discount === 'number' && o.discount > 0 ? Math.round(o.discount) : 0,
+      discount: typeof o.discount === 'number' && o.discount > 0 ? o.discount : 0,
     })
   }
   return out
+}
+
+/**
+ * Pestrost dlaždic: žebříček slev občas ovládne jediné letovisko (4× Marsa
+ * Alam), tak se nabídky skládají po „kolech" přes destinace — každá dostane
+ * pořadí v rámci své lokality a stabilní sort podle něj dá v prvním kole
+ * nejvýš jednu nabídku z každé lokality; uvnitř kola zůstává řazení podle
+ * slevy (vstup je už seřazený syncem).
+ */
+function diversifyByLocality(tours: HomepageTourDeal[]): HomepageTourDeal[] {
+  const rankIn = new Map<string, number>()
+  return tours
+    .map((deal) => {
+      const key = deal.locality ?? deal.country
+      const rank = rankIn.get(key) ?? 0
+      rankIn.set(key, rank + 1)
+      return { deal, rank }
+    })
+    .sort((a, b) => a.rank - b.rank)
+    .map((r) => r.deal)
 }
 
 /**
@@ -1486,36 +1510,43 @@ async function fetchTopAffiliateDealsUncached(
       select: { title: true, fullSlug: true, featuredImage: true, affiliate: true },
       joins: false,
     }) as unknown as Promise<PayloadDocsResponse<RawDealPage>>,
-    payload.findGlobal({ slug: 'homepage', overrideAccess: false, depth: 0 }) as Promise<{
-      dealsOfDay?: { deals?: unknown } | null
-    }>,
+    payload.findGlobal({
+      slug: 'homepage',
+      overrideAccess: false,
+      depth: 0,
+      select: { dealsOfDay: true },
+    }) as Promise<{ dealsOfDay?: { inviaFeedUrl?: string | null; deals?: unknown } | null }>,
   ])
 
+  // Kurátorovaný výběr platí jen s vyplněnou URL feedu — smazání URL v adminu
+  // má vrátit staré chování hned, ne až po vypršení posledního uloženého termínu.
   // Zájezd s odjezdem dnes/v minulosti se už nedá koupit — pryč s ním (sync
   // běží jen 1× denně, samotný feed by propadlé termíny držel do dalšího běhu).
+  const dealsOfDay = homepageGlobal.dealsOfDay
   const todayPrague = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(
     new Date(),
   )
-  // Titulek dlaždice: „Egypt – Marsa Alam"; dlouhé kombinace by CSS truncate
-  // ořízl zrovna o lokalitu („Spojené arabské emiráty – …"), tak se u nich
-  // nechává jen země — stejná úroveň jako u dlaždic letenek.
-  const tourTitle = (t: HomepageTourDeal): string => {
-    if (!t.locality) return t.country
-    const combined = `${t.country} – ${t.locality}`
-    return combined.length <= 26 ? combined : t.country
-  }
-  const feedTours: TopAffiliateDeal[] = parseHomepageTourDeals(homepageGlobal.dealsOfDay?.deals)
-    .filter((t) => t.termFrom > todayPrague)
-    .slice(0, limitPerKind)
-    .map((t) => ({
-      title: tourTitle(t),
-      deepLink: t.deepLink,
-      price: t.price,
-      hotel: t.hotel || null,
-      days: t.days || null,
-      discount: t.discount || null,
-      imageUrl: t.photoUrl,
-    }))
+  const feedTours: TopAffiliateDeal[] = dealsOfDay?.inviaFeedUrl?.trim()
+    ? diversifyByLocality(
+        parseHomepageTourDeals(dealsOfDay.deals).filter((t) => t.termFrom > todayPrague),
+      )
+        .slice(0, limitPerKind)
+        .map((t) => ({
+          title: t.country,
+          country: t.country,
+          locality: t.locality,
+          deepLink: t.deepLink,
+          price: t.price,
+          hotel: t.hotel,
+          days: t.days,
+          discount: t.discount,
+          imageUrl: t.photoUrl,
+        }))
+    : []
+  // Starý výběr (nejlevnější zájezdy destinací) se počítá jen jako doplněk:
+  // bez feedu celý, s feedem jen dorovnává řádek, když z uloženého výběru
+  // přežilo méně než limitPerKind termínů.
+  const needFallbackTours = feedTours.length < limitPerKind
 
   const pages = res.docs ?? []
   if (pages.length === 0) return { flights: [], tours: feedTours }
@@ -1573,7 +1604,7 @@ async function fetchTopAffiliateDealsUncached(
         })
       }
     }
-    if (isValidDeal(deals?.invia)) {
+    if (needFallbackTours && isValidDeal(deals?.invia)) {
       const invia = deals!.invia!
       const existing = toursByLink.get(invia.deepLink)
       if (!existing || existing.specificity < specificity) {
@@ -1596,10 +1627,16 @@ async function fetchTopAffiliateDealsUncached(
       .slice(0, limitPerKind)
       .map(({ specificity: _, ...deal }) => deal)
 
-  return {
-    flights: top(flightsByLink),
-    tours: feedTours.length > 0 ? feedTours : top(toursByLink),
-  }
+  // Dorovnání řádku ze starého výběru bez duplicit (stejný deep-link).
+  const seen = new Set(feedTours.map((t) => t.deepLink))
+  const tours = needFallbackTours
+    ? [...feedTours, ...top(toursByLink).filter((t) => !seen.has(t.deepLink))].slice(
+        0,
+        limitPerKind,
+      )
+    : feedTours
+
+  return { flights: top(flightsByLink), tours }
 }
 
 const fetchTopAffiliateDealsCached = cached(

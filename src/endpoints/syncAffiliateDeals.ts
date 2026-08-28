@@ -9,6 +9,7 @@ import type {
   AffiliateDealInvia,
   AffiliateDeals,
   HomepageTourDeal,
+  HomepageTourDeals,
 } from '@/types/payload'
 
 /**
@@ -17,8 +18,10 @@ import type {
  * API, ceny v CZK) a nejlevnější zájezd s odletem z Prahy (Invia XML feed)
  * a uloží je do JSON pole `affiliate.deals`. Navíc plní dlaždice zájezdů sekce
  * „Dnešní akční nabídky" na homepage z kurátorovaného feedu (globál Homepage →
- * `dealsOfDay`, viz fetchHomepageTourDeals) — zapisuje se přes updateGlobal
- * (globál nemá verze, historie tu na rozdíl od stránek neroste).
+ * `dealsOfDay`, viz fetchHomepageTourDeals) — zapisuje se stejným přímým SQL
+ * ve stejné transakci jako stránky (updateGlobal by přes hook globálů shazoval
+ * cache menu a patičky celého webu, běžel validace nad cizími poli a vracel by
+ * do globálu URL feedu přečtenou na začátku několikaminutového běhu).
  *
  * Stejný vzor jako /api/sync-analytics: spouští GitHub Actions cron
  * (.github/workflows/sync-affiliate-deals.yml) se sdíleným tajemstvím
@@ -182,15 +185,49 @@ async function fetchInviaOffers(feedUrl: string): Promise<InviaOffer[]> {
 }
 
 /** Odlet z Prahy — filtr feedu není striktní, Praha se vybírá až u nás. */
-const isFromPrague = (o: InviaOffer) =>
-  (o.airports?.airport ?? []).some((a) => String(a).trim() === 'Praha')
+const isFromPrague = (o: InviaOffer) => (o.airports?.airport ?? []).some((a) => text(a) === 'Praha')
 
-/** Část názvů hotelů má ve feedu dvojitě zakódovaný ampersand
- * („Resort &amp;Amp; Spa" → po XML dekódování „&Amp;") — chyba dat Invie. */
-const cleanHotelName = (value: unknown) =>
+/**
+ * Textová hodnota z feedu: trim + oprava dvojitě zakódovaného ampersandu
+ * („Resort &amp;Amp; Spa" → po XML dekódování „&Amp;") — chyba dat Invie, která
+ * se může objevit v kterémkoli textovém poli, proto jde každý text tudy.
+ */
+const text = (value: unknown): string =>
   String(value ?? '')
     .replace(/&amp;/gi, '&')
     .trim()
+
+/** Datum termínu jen v ISO tvaru (YYYY-MM-DD) — web podle něj porovnáním
+ * řetězců filtruje propadlé zájezdy, jiný formát by tam tiše selhal. */
+const isoDate = (value: unknown): string | null => {
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(text(value))
+  return match ? match[1] : null
+}
+
+/**
+ * Nabídka z feedu → tvar karty zájezdu (sdílí karty destinací i homepage).
+ * null = nabídka se nedá poctivě vykreslit: bez ceny, bez https odkazu (web
+ * při čtení jiný než https deep-link zahazuje — viz isValidDeal) nebo bez
+ * ISO termínu.
+ */
+function mapInviaOffer(o: InviaOffer): AffiliateDealInvia | null {
+  const price = Number(o.totalprice)
+  const deepLink = text(o.url)
+  const termFrom = isoDate(o.term?.from)
+  if (!Number.isFinite(price) || price <= 0 || !deepLink.startsWith('https://') || !termFrom) {
+    return null
+  }
+  const photo = typeof o.image === 'object' ? o.image?.['#text'] : o.image
+  return {
+    price: Math.round(price),
+    deepLink,
+    photoUrl: text(photo) || null,
+    hotel: text(o.hotel),
+    termFrom,
+    days: Number(o.term?.length ?? 0) || 0,
+    food: text(o.food) || null,
+  }
+}
 
 /**
  * Nejlevnější zájezd s odletem z Prahy. Filtr odletu ve feedu není striktní
@@ -204,29 +241,14 @@ async function fetchInviaDeal(feedUrl: string): Promise<AffiliateDealInvia | nul
   const fromPrague = offers.filter(isFromPrague)
   if (fromPrague.length === 0) return null
 
-  const cheapest = fromPrague.reduce((a, b) =>
-    Number(b.totalprice ?? Infinity) < Number(a.totalprice ?? Infinity) ? b : a,
-  )
-  const price = Number(cheapest.totalprice)
-  const deepLink = String(cheapest.url ?? '').trim()
-  if (!Number.isFinite(price) || price <= 0 || !deepLink) {
-    throw new Error('Invia nabídka nemá cenu nebo odkaz')
-  }
-  const photo = typeof cheapest.image === 'object' ? cheapest.image?.['#text'] : cheapest.image
-  return {
-    price: Math.round(price),
-    deepLink,
-    photoUrl: photo ? String(photo).trim() : null,
-    hotel: cleanHotelName(cheapest.hotel),
-    termFrom: String(cheapest.term?.from ?? '').trim(),
-    days: Number(cheapest.term?.length ?? 0) || 0,
-    food: cheapest.food ? String(cheapest.food).trim() : null,
-  }
+  const deals = fromPrague.map(mapInviaOffer).filter((d): d is AffiliateDealInvia => d !== null)
+  if (deals.length === 0) throw new Error('Invia nabídka nemá cenu, odkaz nebo termín')
+  return deals.reduce((a, b) => (b.price < a.price ? b : a))
 }
 
-/** Kolik zájezdů se ukládá pro homepage — rezerva nad 4 dlaždice, ať mají
- * z čeho brát i poté, co web při čtení odfiltruje propadlé termíny. */
-const HOMEPAGE_TOURS_LIMIT = 8
+/** Pojistka proti bobtnání JSON v globálu — feed má desítky položek, po
+ * filtru leteckých z Prahy zbývá typicky 10–15; web z nich kreslí 4. */
+const HOMEPAGE_TOURS_STORE_LIMIT = 20
 
 /**
  * Výběr zájezdů pro dlaždice „Dnešní akční nabídky" na homepage z Inviou
@@ -235,36 +257,34 @@ const HOMEPAGE_TOURS_LIMIT = 8
  * Alpy) bez slevy — pro web o cestách do dalekých zemí se berou jen letecké
  * s odletem z Prahy, řazené podle výše slevy (rozhodnutí uživatele 28. 8. 2026).
  * Duplicitní hotely (stejný hotel ve víc termínech) drží jen nejvýhodnější
- * termín.
+ * termín. Ukládají se VŠICHNI kandidáti: propadlé termíny a pestrost destinací
+ * řeší až web při čtení (fetchTopAffiliateDeals) — kdyby se pořadí skládalo
+ * tady, po vypršení prvních termínů by na webu přestalo odpovídat slevám.
+ * Prázdný výběr je chyba (minulá data zůstávají), ne platný výsledek.
  */
 async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal[]> {
   const offers = await fetchInviaOffers(feedUrl)
 
   const candidates: HomepageTourDeal[] = []
   for (const o of offers) {
-    if (String(o.transportation ?? '').trim() !== 'Letecky') continue
+    if (text(o.transportation).toLowerCase() !== 'letecky') continue
     if (!isFromPrague(o)) continue
-    const price = Number(o.totalprice)
-    const deepLink = String(o.url ?? '').trim()
-    const country = String(o.destination?.country ?? '').trim()
-    const termFrom = String(o.term?.from ?? '').trim()
-    // Bez ceny, odkazu, země nebo termínu se nabídka nedá poctivě vykreslit
-    // (termín je nutný i k odfiltrování propadlých zájezdů při čtení).
-    if (!Number.isFinite(price) || price <= 0 || !deepLink || !country || !termFrom) continue
-    const photo = typeof o.image === 'object' ? o.image?.['#text'] : o.image
-    const locality = String(o.destination?.locality ?? '').trim()
+    const base = mapInviaOffer(o)
+    const country = text(o.destination?.country)
+    // Bez země není co napsat do titulku dlaždice.
+    if (!base || !country) continue
+    // Sleva je ve feedu celé procento; cokoli mimo 0–100 (NaN, poměr, záporné)
+    // se bere jako „bez slevy", ať se nevykreslí štítek „−1 %".
+    const discount = Math.round(Number(o.discount))
     candidates.push({
-      price: Math.round(price),
-      deepLink,
-      photoUrl: photo ? String(photo).trim() : null,
-      hotel: cleanHotelName(o.hotel),
+      ...base,
       country,
-      locality: locality || null,
-      termFrom,
-      days: Number(o.term?.length ?? 0) || 0,
-      food: o.food ? String(o.food).trim() : null,
-      discount: Math.max(0, Math.round(Number(o.discount)) || 0),
+      locality: text(o.destination?.locality) || null,
+      discount: Number.isFinite(discount) && discount > 0 && discount <= 100 ? discount : 0,
     })
+  }
+  if (candidates.length === 0) {
+    throw new Error('Invia feed neobsahuje žádný letecký zájezd s odletem z Prahy')
   }
 
   // Nejvýhodnější nabídka první: podle slevy, při shodě podle ceny.
@@ -278,26 +298,7 @@ async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal
     const key = `${deal.hotel}|${deal.locality ?? ''}`
     if (!byHotel.has(key)) byHotel.set(key, deal)
   }
-  const deduped = [...byHotel.values()]
-
-  // Pestrost: žebříček slev občas ovládne jediné letovisko (4× Marsa Alam) —
-  // dlaždice se proto skládají po kolech přes destinace (v každém kole nejvýš
-  // jedna nabídka z každé lokality), uvnitř kola drží řazení podle slevy.
-  const byLocality = new Map<string, HomepageTourDeal[]>()
-  for (const deal of deduped) {
-    const key = deal.locality ?? deal.country
-    const group = byLocality.get(key)
-    if (group) group.push(deal)
-    else byLocality.set(key, [deal])
-  }
-  const groups = [...byLocality.values()]
-  const ordered: HomepageTourDeal[] = []
-  for (let round = 0; ordered.length < deduped.length; round++) {
-    for (const group of groups) {
-      if (group[round]) ordered.push(group[round])
-    }
-  }
-  return ordered.slice(0, HOMEPAGE_TOURS_LIMIT)
+  return [...byHotel.values()].slice(0, HOMEPAGE_TOURS_STORE_LIMIT)
 }
 
 type DealPage = {
@@ -386,6 +387,7 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
       slug: 'homepage',
       overrideAccess: true,
       depth: 0,
+      select: { dealsOfDay: true },
     })) as { dealsOfDay?: { inviaFeedUrl?: string | null } | null }
     const homepageFeedUrl = homepageGlobal.dealsOfDay?.inviaFeedUrl?.trim() || null
 
@@ -516,26 +518,19 @@ async function runSync(
         sql`UPDATE pages SET affiliate_deals = ${JSON.stringify(r.deals)}::jsonb WHERE id = ${r.id}`,
       )
     }
+    // Homepage dlaždice ve stejné transakci; při selhání feedu (null) minulá
+    // data zůstávají. URL feedu se nepřepisuje — patří adminovi. Řádek globálu
+    // existuje, jakmile byla URL uložena v adminu (leží ve stejném řádku).
+    if (homepageTours !== null) {
+      const deals: HomepageTourDeals = { tours: homepageTours, updatedAt: new Date().toISOString() }
+      await tx.execute(
+        sql`UPDATE homepage SET deals_of_day_deals = ${JSON.stringify(deals)}::jsonb`,
+      )
+    }
   })
 
-  // Homepage dlaždice přes updateGlobal — globál nemá verze, historie neroste,
-  // a afterChange hook globálu rovnou invaliduje jeho cache (root_pages).
-  // Při selhání feedu (homepageTours === null) minulá data zůstávají, stejně
-  // jako u karet stránek.
-  if (homepageFeedUrl && homepageTours !== null) {
-    await req.payload.updateGlobal({
-      slug: 'homepage',
-      overrideAccess: true,
-      data: {
-        dealsOfDay: {
-          inviaFeedUrl: homepageFeedUrl,
-          deals: { tours: homepageTours, updatedAt: new Date().toISOString() },
-        },
-      },
-    })
-  }
-
-  // Zápis šel mimo hooky → invalidace cache stránek ručně (vzor revalidation.ts).
+  // Zápis šel mimo hooky → invalidace cache stránek ručně (vzor revalidation.ts);
+  // tag 'pages' kryje i homepage dlaždice (fetchTopAffiliateDealsCached).
   await safeRevalidate([
     'pages',
     ...results.filter((r) => r.fullSlug).map((r) => 'page_' + r.fullSlug),
@@ -545,7 +540,7 @@ async function runSync(
     pages: results.length,
     withKiwi: results.filter((r) => r.deals.kiwi).length,
     withInvia: results.filter((r) => r.deals.invia).length,
-    homepageTours: homepageTours === null ? null : homepageTours.length,
+    homepageTours: homepageTours?.length ?? null,
     errors,
   }
 }

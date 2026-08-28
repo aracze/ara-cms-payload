@@ -120,12 +120,14 @@ export const Homepage: GlobalConfig = {
           },
         },
         {
-          // Denně přepisuje /api/sync-affiliate-deals — viz
-          // src/endpoints/syncAffiliateDeals.ts. V adminu SKRYTÉ (stejně jako
-          // affiliate.deals na stránkách): surový JSON editor by jen mátl.
+          // Denně přepisuje /api/sync-affiliate-deals přímým SQL — viz
+          // src/endpoints/syncAffiliateDeals.ts. `disabled` (ne `hidden`):
+          // skryté pole zůstává ve stavu formuláře a uložení globálu z adminu by
+          // vrátilo nabídky načtené při otevření formuláře přes čerstvý sync;
+          // disabled pole se do formuláře vůbec nedostane.
           name: 'deals',
           type: 'json',
-          admin: { hidden: true },
+          admin: { disabled: true },
         },
       ],
     },
