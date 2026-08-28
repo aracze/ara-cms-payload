@@ -72,9 +72,12 @@ export function AvatarCropDialog({
   /** Soubor, který si člověk právě vybral (ještě neoříznutý). */
   file: File
   /**
-   * Hotový soubor k odeslání formulářem. Většinou výřez; když se fotku
-   * nepodaří v prohlížeči zpracovat (exotický formát), přijde původní soubor
-   * a ořez nechá na serveru — stejné chování jako před zavedením dialogu.
+   * Hotový soubor k odeslání formulářem. Většinou výřez; když náhled v dialogu
+   * funguje, ale samotný export výřezu selže (canvas), přijde původní soubor
+   * a ořez ze středu udělá server — stejně jako před zavedením dialogu.
+   * Fotku, kterou prohlížeč vůbec nezobrazí (HEIC), sem ZÁMĚRNĚ neposíláme:
+   * server by ji stejně odmítl, hláška v dialogu je rychlejší než chyba po
+   * odeslání formuláře.
    */
   onDone: (soubor: File) => void
   onCancel: () => void
@@ -107,7 +110,9 @@ export function AvatarCropDialog({
     return () => URL.revokeObjectURL(url)
   }, [file])
   // Prohlížeč fotku neumí zobrazit (typicky HEIC z iPhonu) — místo černého
-  // čtverce a věčně neaktivního tlačítka dostane člověk vysvětlení.
+  // čtverce a věčně neaktivního tlačítka dostane člověk vysvětlení. Potvrdit
+  // nejde schválně: server takový formát odmítá (viz kolekce Avatars), takže
+  // by odeslání skončilo jen pozdější chybou.
   const [chyba, setChyba] = useState(false)
 
   // Zrušení BĚHEM zpracování: `potvrdit` chvíli čeká na dekódování a export,
