@@ -1,38 +1,9 @@
 import type { CollectionConfig, Payload } from 'payload'
 import { APIError } from 'payload'
-import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import sharp from 'sharp'
 import { isAdmin } from '../access/isAdmin'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
-
-const s3Endpoint = process.env.S3_ENDPOINT || ''
-const s3Bucket = process.env.S3_BUCKET || ''
-const s3AccessKeyId = process.env.S3_ACCESS_KEY_ID || ''
-const s3Secret = process.env.S3_SECRET || ''
-
-// Validace S3/R2 konfigurace při inicializaci modulu
-if (
-  process.env.NODE_ENV !== 'development' &&
-  (!s3Endpoint || !s3Bucket || !s3AccessKeyId || !s3Secret)
-) {
-  console.warn(
-    'Missing R2 environment variables. Presence of S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET is highly recommended for Media collection.',
-  )
-}
-
-const cleanedEndpoint = s3Endpoint.endsWith(`/${s3Bucket}`)
-  ? s3Endpoint.replace(`/${s3Bucket}`, '')
-  : s3Endpoint
-
-// Vytvoření sdíleného S3 klienta pro celou aplikaci
-const s3Client = new S3Client({
-  region: 'auto',
-  endpoint: cleanedEndpoint || 'https://placeholder-endpoint.com', // Placeholder pro případ chybějícího env, aby aplikace nespadla při startu
-  credentials: {
-    accessKeyId: s3AccessKeyId || 'missing',
-    secretAccessKey: s3Secret || 'missing',
-  },
-})
+import { isR2Configured, r2ObjectExists, r2Put, resolveR2Key } from '../lib/r2-backup'
 
 const sanitizeFilename = (name: string): string => {
   const parts = name.split('.')
@@ -82,16 +53,6 @@ const R2_RECONCILE_BATCH = 20
 // zapíše `error` a dorovnání to zkusí příště znovu.
 const R2_FETCH_TIMEOUT_MS = 15_000
 
-// Čisté přípony pro běžné MIME typy (klíč v R2).
-const R2_MIME_EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/svg+xml': 'svg',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-  'application/octet-stream': 'bin',
-}
-
 type R2BackupMedia = {
   id: string | number
   cloudinaryPublicId: string
@@ -99,19 +60,6 @@ type R2BackupMedia = {
   mimeType?: string | null
   cloudinaryFormat?: string | null
   alt?: string | null
-}
-
-function resolveR2Key(
-  cloudinaryPublicId: string,
-  mimeType?: string | null,
-  cloudinaryFormat?: string | null,
-): string {
-  const extension =
-    cloudinaryFormat ||
-    (mimeType ? R2_MIME_EXTENSIONS[mimeType] || mimeType.split('/')[1]?.split('+')[0] : 'bin') ||
-    'bin'
-  const safeExtension = extension === 'jpeg' ? 'jpg' : extension
-  return `${cloudinaryPublicId}.${safeExtension}`
 }
 
 // Záloha JEDNOHO média do R2. Volá se `void`em (DETACHED, bez `req`): stažení
@@ -131,7 +79,7 @@ async function backupMediaToR2(
   const isStale = () => latestBackupGen.get(id) !== backupGen
 
   try {
-    if (!s3Endpoint || !s3Bucket || !s3AccessKeyId || !s3Secret) {
+    if (!isR2Configured()) {
       throw new Error('Chybí konfigurace R2 (environment variables)')
     }
 
@@ -139,19 +87,7 @@ async function backupMediaToR2(
     // a jen narovnáme status — šetří přenos i Cloudinary requesty (klíčové při
     // hromadném narovnání backlogu). Při čerstvém nahrání (bez `skipIfInR2`)
     // nahráváme vždy, ať se aktuální soubor do R2 opravdu dostane.
-    let alreadyInR2 = false
-    if (opts?.skipIfInR2) {
-      try {
-        await s3Client.send(new HeadObjectCommand({ Bucket: s3Bucket, Key: r2Key }))
-        alreadyInR2 = true
-      } catch (headError) {
-        const name = (headError as { name?: string })?.name
-        const httpStatus = (headError as { $metadata?: { httpStatusCode?: number } })?.$metadata
-          ?.httpStatusCode
-        // NotFound/404 = objekt chybí → nahrajeme. Jiná chyba = skutečný problém.
-        if (name !== 'NotFound' && httpStatus !== 404) throw headError
-      }
-    }
+    const alreadyInR2 = opts?.skipIfInR2 ? await r2ObjectExists(r2Key) : false
 
     if (alreadyInR2) {
       payload.logger.info(`R2: ${r2Key} už existuje — jen dorovnávám status na success.`)
@@ -165,15 +101,12 @@ async function backupMediaToR2(
 
       const buffer = Buffer.from(await response.arrayBuffer())
 
-      await s3Client.send(
-        new PutObjectCommand({
-          Bucket: s3Bucket,
-          Key: r2Key,
-          Body: buffer,
-          ContentType: mimeType || 'application/octet-stream',
-          Metadata: { alt: encodeURIComponent(alt || '') },
-        }),
-      )
+      await r2Put({
+        key: r2Key,
+        body: buffer,
+        contentType: mimeType,
+        metadata: { alt: encodeURIComponent(alt || '') },
+      })
 
       payload.logger.info(`Záloha souboru ${r2Key} do R2 proběhla úspěšně.`)
     }

@@ -17,6 +17,7 @@
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "promote:admin": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/promote-admin.ts",
     "backfill:affiliate-deals": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/backfill-affiliate-deals.ts",
+    "backup:avatars": "cross-env NODE_OPTIONS=--no-deprecation node --import=tsx/esm scripts/backup-avatars-r2.ts",
     "cleanup:place-detail": "docker compose exec -T postgres psql -U postgres -d aracze -f - < scripts/cleanup-currency-timezone.sql",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "pnpm run test:int && pnpm run test:e2e",

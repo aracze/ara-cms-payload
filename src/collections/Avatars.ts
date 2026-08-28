@@ -1,6 +1,7 @@
-import type { Access, CollectionConfig, FieldAccess } from 'payload'
+import type { Access, CollectionConfig, FieldAccess, Payload } from 'payload'
 import { APIError } from 'payload'
 import { AVATAR_MIME, MAX_AVATAR_BYTES } from '../lib/profile-limits'
+import { isR2Configured, r2Delete, r2Put, resolveR2Key } from '../lib/r2-backup'
 
 /**
  * Profilové fotky uživatelů — ZÁMĚRNĚ mimo kolekci Media.
@@ -31,6 +32,79 @@ const MAX_PER_USER = 3
 function isAdminUser(user: unknown): boolean {
   const roles = (user as { roles?: string[] } | null)?.roles
   return Array.isArray(roles) && roles.includes('admin')
+}
+
+/** Cloudinary data avataru potřebná pro klíč v R2 (viz resolveR2Key). */
+type AvatarR2Doc = {
+  cloudinaryPublicId?: string | null
+  mimeType?: string | null
+  cloudinaryFormat?: string | null
+}
+
+function avatarR2Key(doc: AvatarR2Doc): string | null {
+  if (!doc.cloudinaryPublicId) return null
+  const key = resolveR2Key(doc.cloudinaryPublicId, doc.mimeType, doc.cloudinaryFormat)
+  // Zrcadlo spravuje VÝHRADNĚ složku avatars/. Staré migrované avatary sdílejí
+  // soubor s kolekcí Media (public_id bez složky) — jejich zálohu vlastní Media
+  // a mirror-delete by ji smazal i médiím.
+  return key.startsWith('avatars/') ? key : null
+}
+
+// Detached operace nad STEJNÝM klíčem musí běžet v pořadí, v jakém přišly:
+// nahrání a okamžité smazání téhož avataru by se jinak mohly předběhnout
+// (DELETE doběhne dřív, pomalejší PUT pak smazanou fotku vrátí do veřejného
+// bucketu). Fronta per klíč v paměti procesu — stejný přístup jako
+// latestBackupGen u Media. Úlohy nikdy nerejectují (chyby logují uvnitř).
+const avatarR2Queue = new Map<string, Promise<void>>()
+
+function enqueueAvatarR2(key: string, task: () => Promise<void>): void {
+  const previous = avatarR2Queue.get(key) ?? Promise.resolve()
+  const run = previous.then(task)
+  avatarR2Queue.set(key, run)
+  void run.finally(() => {
+    if (avatarR2Queue.get(key) === run) avatarR2Queue.delete(key)
+  })
+}
+
+// Záloha avataru do R2 je ZRCADLO, ne archiv: drží vždy jen aktuální soubor.
+// Staré verze se mažou ze dvou důvodů: (1) uživatel po výměně/smazání čeká,
+// že fotka zmizí, (2) bucket je veřejně čitelný přes media-backup.ara.cz
+// (nouzový režim media proxy), takže odložené avatary nesmí zůstat dostupné.
+// Detached (`void`, bez `req`) stejně jako u Media — síťové I/O nesmí držet
+// DB spojení requestu. Bez status pole: avatarů je málo, selhání se loguje
+// a dorovná ho skript scripts/backup-avatars-r2.ts.
+async function mirrorAvatarToR2(payload: Payload, doc: AvatarR2Doc & { url?: string | null }) {
+  const r2Key = avatarR2Key(doc)
+  if (!r2Key || !doc.url) return
+  try {
+    if (!isR2Configured()) throw new Error('Chybí konfigurace R2 (environment variables)')
+    const response = await fetch(doc.url, { signal: AbortSignal.timeout(15_000) })
+    if (!response.ok) throw new Error(`Načtení z Cloudinary selhalo: ${response.statusText}`)
+    await r2Put({
+      key: r2Key,
+      body: Buffer.from(await response.arrayBuffer()),
+      contentType: doc.mimeType,
+    })
+    payload.logger.info(`R2 avatar: záloha ${r2Key} proběhla úspěšně.`)
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    payload.logger.error(`R2 avatar: záloha ${r2Key} selhala: ${errorMsg}`)
+  }
+}
+
+async function removeAvatarFromR2(payload: Payload, doc: AvatarR2Doc) {
+  const r2Key = avatarR2Key(doc)
+  if (!r2Key) return
+  try {
+    if (!isR2Configured()) throw new Error('Chybí konfigurace R2 (environment variables)')
+    await r2Delete(r2Key)
+    payload.logger.info(`R2 avatar: ${r2Key} smazán ze zálohy.`)
+  } catch (error) {
+    // Selhání = starý avatar zůstane v (veřejné) záloze — proto výrazný log;
+    // dorovnání řeší scripts/backup-avatars-r2.ts (maže osiřelé klíče).
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    payload.logger.error(`R2 avatar: smazání ${r2Key} selhalo: ${errorMsg}`)
+  }
 }
 
 /** Nahrát smí každý přihlášený — i role `user`. To je smysl téhle kolekce. */
@@ -130,6 +204,42 @@ export const Avatars: CollectionConfig = {
           return { ...data, owner: req.user.id }
         }
         return data
+      },
+    ],
+    afterChange: [
+      async ({ doc, previousDoc, req }) => {
+        // Zrcadlo do R2 běží JEN v produkci (dev nahrává na dev Cloudinary účet,
+        // který do produkčního bucketu nepatří) — stejná pravidla jako u Media.
+        if (process.env.NODE_ENV !== 'production') return
+        // Cloudinary plugin po dokončení uploadu spustí interní druhý cyklus
+        // s tímto příznakem — až v něm jsou metadata (public_id) v dokumentu.
+        if (req.context.skipCloudStorage !== true) return
+
+        const { payload } = req
+        const current = doc as AvatarR2Doc & { url?: string | null }
+        const currentKey = avatarR2Key(current)
+        if (currentKey) {
+          enqueueAvatarR2(currentKey, () => mirrorAvatarToR2(payload, current))
+        }
+
+        // Výměna souboru pod stejným dokumentem: starý objekt v R2 nesmí zůstat.
+        const previous = previousDoc as AvatarR2Doc | undefined
+        const previousKey = previous ? avatarR2Key(previous) : null
+        if (previousKey && previousKey !== currentKey) {
+          enqueueAvatarR2(previousKey, () => removeAvatarFromR2(payload, previous as AvatarR2Doc))
+        }
+      },
+    ],
+    afterDelete: [
+      async ({ doc, req }) => {
+        // Smazání avataru (výměna z profilu maže celý dokument) → pryč i z R2.
+        if (process.env.NODE_ENV !== 'production') return
+        const { payload } = req
+        const removed = doc as AvatarR2Doc
+        const key = avatarR2Key(removed)
+        if (key) {
+          enqueueAvatarR2(key, () => removeAvatarFromR2(payload, removed))
+        }
       },
     ],
   },
