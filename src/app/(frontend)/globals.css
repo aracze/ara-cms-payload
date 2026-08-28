@@ -61,16 +61,20 @@
     font-weight: 500;
   }
 
-  /* Motto rubriky — jednořádkové heslo vycentrované nad mřížkou článků
-     (parita se starým webem: „Štěstí při cestování přeje připraveným.").
-     Přebíjí lead odstavec výš; všech 8 rubrik má jako text právě jedno motto. */
-  .prose.rubric-motto > p:first-of-type {
+  /* Motto rubriky — heslo vycentrované nad mřížkou článků (parita se starým
+     webem: „Štěstí při cestování přeje připraveným."). Všech 8 rubrik má jako
+     text právě jedno motto. Selektor míří na PRVNÍ PRVEK, ať je to odstavec,
+     nebo nadpis: v CMS je motto zadané jako nadpis h2, takže pravidlo jen pro
+     `p` nezabíralo a motto zůstávalo vlevo s těsným řádkováním nadpisu. Vzhled
+     přebíjí lead odstavec i .prose h2. */
+  .prose.rubric-motto > :first-child {
     font-size: 26px;
-    line-height: 1.5;
-    color: #333;
-    font-weight: 600;
+    line-height: 1.4;
+    color: #005580;
     text-align: center;
+    margin-top: 0;
     margin-bottom: 0;
+    @apply font-heading font-bold;
   }
 
   /* Headings inside prose content */
