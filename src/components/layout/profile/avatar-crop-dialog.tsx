@@ -119,6 +119,15 @@ export function AvatarCropDialog({
     onCancel()
   }, [onCancel])
 
+  // Po zavření vrátit fokus tam, odkud se dialog otevřel (výběr souboru) —
+  // jinak po odstranění zaostřeného tlačítka spadne na <body> a člověk
+  // s klávesnicí ztratí místo. Zvlášť a bez závislostí: zapamatuje se JEDNOU
+  // při otevření, ne při každém překreslení rodiče.
+  useEffect(() => {
+    const predtim = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    return () => predtim?.focus()
+  }, [])
+
   // Chování modálu (zkrácená verze vzoru z header-account): stránka pod oknem
   // se neroluje, Esc zavírá, fokus zůstává uvnitř. Na zákryt kliknutím mimo
   // okno schválně nereaguje — při tažení fotky by šlo o rozdělaný výřez přijít
