@@ -5,6 +5,7 @@ import {
   isValidTransform,
   negotiateFormat,
   parsePath,
+  signTransform,
 } from '../src/media-path'
 
 describe('parsePath', () => {
@@ -195,5 +196,33 @@ describe('cfImageOptions', () => {
 
   it('bez transformace vrací null (podá se originál)', () => {
     expect(cfImageOptions(null)).toBeNull()
+  })
+})
+
+describe('signTransform', () => {
+  // Referenční hodnoty z oficiálního Node SDK: cloudinary.v2.url(public_id,
+  // { sign_url: true, api_secret: 'y', … }) — verze se do podpisu nepočítá.
+  it('shoduje se s podpisem oficiálního SDK (klíč se složkou a příponou)', async () => {
+    await expect(
+      signTransform('c_fill,f_auto,g_auto,h_150,q_auto,w_150', 'folder/abc.jpg', 'y'),
+    ).resolves.toBe('s--68Utmge6--')
+  })
+
+  it('shoduje se s podpisem oficiálního SDK (legacy klíč bez přípony)', async () => {
+    await expect(
+      signTransform('c_fill,f_auto,g_auto,h_150,q_auto,w_150', 'abc', 'y'),
+    ).resolves.toBe('s--8_GTWLDF--')
+  })
+
+  it('jiný secret nebo jiná transformace = jiný podpis', async () => {
+    const base = await signTransform('c_fit,w_790', 'abc', 'y')
+    await expect(signTransform('c_fit,w_790', 'abc', 'z')).resolves.not.toBe(base)
+    await expect(signTransform('c_fit,w_420', 'abc', 'y')).resolves.not.toBe(base)
+  })
+})
+
+describe('náhled adminu Payloadu', () => {
+  it('projde whitelistem (thumbnailURL jde od PR #78 přes proxy)', () => {
+    expect(isValidTransform('c_fill,f_auto,g_auto,h_150,q_auto,w_150')).toBe(true)
   })
 })

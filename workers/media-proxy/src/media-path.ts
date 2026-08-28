@@ -21,6 +21,10 @@ export type ParseResult = { ok: true; path: ParsedPath } | { ok: false; status: 
 // varianty přes naši doménu (a pálit Cloudinary kredity) → 400.
 const ALLOWED_WIDTHS = new Set([
   16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 44, 220, 420, 790, 1600,
+  // Náhled v adminu Payloadu (cloudinary plugin: 150×150, c_fill,g_auto).
+  // Od přepisu adres už při čtení z CMS (src/hooks/media-proxy.ts) jde
+  // i thumbnailURL přes proxy.
+  150,
 ])
 
 // Uzavřený slovník komponent, které skládá náš kód (loader, karty, rich-text,
@@ -34,7 +38,7 @@ const TRANSFORM_COMPONENT_PATTERNS = [
   /^r_max$/,
   /^bo_3px_solid_white$/,
   /^ar_(5:7|1:1|3:2|2:1|21:8|16:9)$/,
-  /^h_(44|126)$/,
+  /^h_(44|126|150)$/,
 ]
 
 /** Každá komponenta segmentu musí projít whitelistem, jinak celý segment padá. */
@@ -184,4 +188,24 @@ export function cfImageOptions(transform: string | null): CfImageOptions | null 
     options.height = Math.round((options.width * aspectHeight) / aspectWidth)
   }
   return Object.keys(options).length > 0 ? options : null
+}
+
+// Podpis doručovací URL (Cloudinary „signed URL“, segment `s--xxxxxxxx--/`).
+// Na účtu je zapnutý Strict transformations: nepodepsanou transformaci
+// Cloudinary odmítne (404), takže staré adresy v indexech botů už negenerují
+// nové odvozeniny. Proxy je jediné místo, které podepisuje — whitelist výše
+// tím pádem rozhoduje, co se na Cloudinary vůbec smí vyrobit.
+//
+// Algoritmus (ověřeno proti oficiálnímu Node SDK `cloudinary.url(…, {sign_url:
+// true})`): SHA-1 z `<transformace>/<public_id vč. přípony><api_secret>`,
+// base64url, prvních 8 znaků. Verze (`v123`) se do podpisu NEPOČÍTÁ.
+export async function signTransform(
+  transform: string,
+  key: string,
+  apiSecret: string,
+): Promise<string> {
+  const data = new TextEncoder().encode(`${transform}/${key}${apiSecret}`)
+  const digest = await crypto.subtle.digest('SHA-1', data)
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)))
+  return `s--${base64.replace(/\+/g, '-').replace(/\//g, '_').slice(0, 8)}--`
 }

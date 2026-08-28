@@ -636,6 +636,13 @@ pod fotkou (`.image-caption`), fotky bez rozměrů v DB mají fallback z náhled
     najdeš v logu serveru. **Soubory pod limitem se nepřekódovávají vůbec** — jdou na
     Cloudinary bit v bit, protože `media: true` originály schválně uchovává. Když zmenšit
     nelze (PDF, SVG), vrátí se česká chyba 400 místo 500.
+  - **Cloudinary účet běží v režimu Strict transformations** (od srpna 2026): zmenšeninu
+    vyrobí jen na podepsanou adresu, a podepisuje výhradně media proxy (`workers/media-proxy`,
+    `signTransform`). Důvod: úložiště tvořily ze ⅔ odvozeniny (57 tisíc variant, ~11 GB), které
+    si boti se starými adresami (`w_3840`, vzory starého Grails webu) vyráběli znovu i po jejich
+    smazání. Nová transformace v kódu = přidat ji do whitelistu Workeru, jinak přes proxy padá
+    na 400; adresy `res.cloudinary.com` s transformací mimo proxy Cloudinary odmítne (404),
+    originály bez transformace fungují dál. Podrobnosti v `workers/media-proxy/README.md`.
 
 - **Avatars (Profilové fotky uživatelů)**:
   - ZÁMĚRNĚ mimo `media`: do redakční knihovny (~3300 souborů) smí vkládat jen redakce, kdežto

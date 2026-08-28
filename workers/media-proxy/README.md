@@ -18,6 +18,17 @@ Frontend na proxy přepisuje adresy přes `toMediaProxy`
    (`/image/fetch/` = 404); transformační segment musí projít whitelistem
    (jinak 400 — nikdo přes nás nerazí varianty a nepálí kredity);
    query string se ignoruje; avataři v R2 nejsou → při výpadku 404.
+4. **Podpis transformací (Strict transformations):** na Cloudinary účtu je
+   zapnutý režim _Strict transformations_ — nepodepsanou transformaci odmítne
+   (404), vyrobí se jen to, co podepíše proxy (`s--xxxxxxxx--/` před
+   transformací, SHA-1 z `transformace/public_id.ext` + API secret, viz
+   `signTransform`). Staré adresy `res.cloudinary.com/ara/.../w_3840/...`
+   v indexech botů tak už negenerují nové odvozeniny (srpen 2026: po smazání
+   odvozenin si je boti za 10 dní vyrobili znovu, ~11 GB). Originály bez
+   transformace strict režim neblokuje (R2 záloha, og:image, admin upload).
+   Secret: `npx wrangler secret put CLOUDINARY_API_SECRET` (hodnota
+   = `CLOUDINARY_API_SECRET` z `/opt/aracze/.env` na serveru). Bez secretu
+   Worker posílá adresy nepodepsané → funguje jen s vypnutým strict režimem.
 
 ## Nasazení
 
@@ -26,6 +37,7 @@ cd workers/media-proxy
 pnpm install
 npx wrangler login    # jednorázově, odklik v prohlížeči
 npx wrangler deploy   # vytvoří Worker + DNS media.ara.cz + certifikát
+npx wrangler secret put CLOUDINARY_API_SECRET   # podpis transformací (viz Chování 4)
 ```
 
 Předpoklady v Cloudflare účtu (jednorázově, dashboard):
