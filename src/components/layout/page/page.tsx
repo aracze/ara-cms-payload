@@ -8,6 +8,11 @@ import { PlacesToVisit } from './places-to-visit'
 import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
 import { PreparationSection } from './preparation-section'
+import {
+  PracticalInfoLinks,
+  practicalInfoPanelDefs,
+  type PracticalInfoLinkItem,
+} from './practical-info-links'
 import { DealsSection, parseAffiliateDeals } from './deals-section'
 import { ClimateSection, parseClimateNormals, climateHeading } from './climate-section'
 import { WeatherNowSection, WeatherForecastSection, forecastHeading } from './weather-now-section'
@@ -578,6 +583,27 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       }
     : null
 
+  // Panel „Praktické informace do …" pod články (legacy `_practicalInfo.gsp`):
+  // dlaždice vede na podstránku své kategorie — hledá se nejdřív mezi vlastními
+  // dětmi, jinak u dětí nejbližšího předka s praktickými informacemi (tentýž
+  // zdroj jako karta v pravém panelu, takže žádný dotaz navíc). Dlaždice bez
+  // stránky se vynechá. Kontinent (stránka bez rodiče) panel nemá — legacy
+  // parita; jeho děti jsou země a jejich praktické informace mu nepatří.
+  const practicalInfoLinkItems: PracticalInfoLinkItem[] =
+    page.category === PageCategory.Misto_k_navstiveni && page.parent
+      ? practicalInfoPanelDefs.flatMap(({ category, label }) => {
+          const target =
+            pageChildren.find((child) => child.category === category) ??
+            practicalInfoSource.children.find((child) => child.category === category)
+          return target ? [{ category, label, href: target.fullSlug }] : []
+        })
+      : []
+  // Nadpis panelu skloňuje místo, kterému praktické informace PATŘÍ —
+  // `practicalInfoOwner` je tentýž vlastník jako u karty v pravém panelu.
+  // Dubrovník s vlastním počasím, ale chorvatskými praktickými informacemi,
+  // tak dostane „do Chorvatska" (legacy parita: titulek se řídil stránkou
+  // Praktické informace, ne jednotlivými dlaždicemi).
+
   return (
     <div className="flex flex-col bg-white transition-all duration-500">
       {/* Strukturovaná data pro vyhledávače (TouristAttraction + AggregateRating
@@ -797,6 +823,15 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
               destinationLocative={page.detail?.locative}
             />
           ))}
+
+        {/* Panel odkazů „Praktické informace do …" — poslední sekce stránky
+            místa, pod články (legacy parita s _practicalInfo.gsp). */}
+        {practicalInfoLinkItems.length > 0 && (
+          <PracticalInfoLinks
+            genitive={practicalInfoOwner.detail?.genitive || `do ${practicalInfoOwner.title}`}
+            items={practicalInfoLinkItems}
+          />
+        )}
       </article>
     </div>
   )

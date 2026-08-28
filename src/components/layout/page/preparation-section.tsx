@@ -299,13 +299,15 @@ export function PreparationCards({
  * jen s fill přepnutým na currentColor, ať jdou barvit z karet.
  * Bílé části (křížek v srdci, peřiny postele) zůstávají bílé — sedí na
  * bílém i světle šedém podkladu karet.
+ * HeartIcon a BedIcon sdílí i panel odkazů na praktické informace
+ * (practical-info-links.tsx) — na starém webu šlo o tytéž obrázky.
  */
 
 interface IconProps {
   height: number
 }
 
-function HeartIcon({ height }: IconProps) {
+export function HeartIcon({ height }: IconProps) {
   return (
     <svg viewBox="-2.73 -5.366 61.161 55" height={height} aria-hidden="true">
       <path
@@ -343,7 +345,7 @@ function TravelIcon({ height }: IconProps) {
   )
 }
 
-function BedIcon({ height }: IconProps) {
+export function BedIcon({ height }: IconProps) {
   return (
     <svg viewBox="-21.686 -12.683 88.915 52" height={height} aria-hidden="true">
       <polygon
