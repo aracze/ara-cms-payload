@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { X, ZoomIn, ZoomOut } from 'lucide-react'
 
@@ -83,13 +83,26 @@ export function AvatarCropDialog({
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [ukladam, setUkladam] = useState(false)
-  // Vybranou oblast hlásí knihovna po každém pohybu — do refu, ne do stavu:
+  // Potvrdit jde až po načtení fotky: knihovna hlásí vybranou oblast teprve
+  // od té chvíle a rychlý klik před tím by skončil v záložní větvi (odeslal by
+  // se neoříznutý originál). Ověřeno testem — 0,4 s po otevření to nastalo.
+  const [nacteno, setNacteno] = useState(false)
+  // Vybranou oblast hlásí knihovna při každé změně — do refu, ne do stavu:
   // k ničemu se nekreslí, potřebuje ji až potvrzení.
   const oblastRef = useRef<Area | null>(null)
 
   // Adresa fotky pro náhled žije jen po dobu dialogu.
   const [zdrojUrl] = useState(() => URL.createObjectURL(file))
   useEffect(() => () => URL.revokeObjectURL(zdrojUrl), [zdrojUrl])
+
+  // Zrušení BĚHEM zpracování: `potvrdit` chvíli čeká na dekódování a export,
+  // a Esc nebo „Zrušit" mezitím dialog zavřou. Bez příznaku by se hotový výřez
+  // po chvíli stejně propsal do formuláře — jako by člověk nezrušil.
+  const zrusenoRef = useRef(false)
+  const zrusit = useCallback(() => {
+    zrusenoRef.current = true
+    onCancel()
+  }, [onCancel])
 
   // Chování modálu (zkrácená verze vzoru z header-account): stránka pod oknem
   // se neroluje, Esc zavírá, fokus zůstává uvnitř. Na zákryt kliknutím mimo
@@ -110,7 +123,7 @@ export function AvatarCropDialog({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onCancel()
+        zrusit()
         return
       }
       if (e.key !== 'Tab') return
@@ -135,7 +148,7 @@ export function AvatarCropDialog({
       document.body.style.overflow = puvodniOverflow
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [onCancel])
+  }, [zrusit])
 
   const potvrdit = async () => {
     const oblast = oblastRef.current
@@ -143,9 +156,11 @@ export function AvatarCropDialog({
     try {
       if (!oblast) throw new Error('Chybí vybraná oblast.')
       const blob = await vyrizniCtverec(file, oblast)
+      if (zrusenoRef.current) return
       // Jméno je jedno — server ho z důvodu soukromí stejně přepisuje.
       onDone(new File([blob], 'avatar.jpg', { type: 'image/jpeg' }))
     } catch (err) {
+      if (zrusenoRef.current) return
       // Nepodařilo se — pošle se původní soubor a ořez udělá server (ze středu).
       // Log zůstává i v produkci: bez něj by se o tiché degradaci nevědělo.
       console.error('[avatar] výřez v prohlížeči selhal:', err)
@@ -166,7 +181,7 @@ export function AvatarCropDialog({
         >
           <button
             type="button"
-            onClick={onCancel}
+            onClick={zrusit}
             aria-label="Zavřít bez uložení výřezu"
             className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full text-[#8a939b] transition-colors hover:bg-[#f0f4f9] hover:text-[#2c3643]"
           >
@@ -192,9 +207,10 @@ export function AvatarCropDialog({
               showGrid={false}
               onCropChange={setCrop}
               onZoomChange={setZoom}
-              onCropComplete={(_, oblastPx) => {
+              onCropAreaChange={(_, oblastPx) => {
                 oblastRef.current = oblastPx
               }}
+              onMediaLoaded={() => setNacteno(true)}
             />
           </div>
 
@@ -219,7 +235,7 @@ export function AvatarCropDialog({
           <div className="mt-5 flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={onCancel}
+              onClick={zrusit}
               className="px-1.5 py-2 text-[13.5px] font-semibold text-[#8a939b] hover:text-[#2c3643] hover:underline"
             >
               Zrušit
@@ -227,7 +243,7 @@ export function AvatarCropDialog({
             <button
               type="button"
               onClick={potvrdit}
-              disabled={ukladam}
+              disabled={ukladam || !nacteno}
               className="whitespace-nowrap rounded-full bg-[#215491] px-7 py-2.5 font-heading text-[13px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a3f6c] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {ukladam ? 'Ořezávám…' : 'Použít fotku'}

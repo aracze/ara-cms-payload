@@ -32,6 +32,22 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
   const [odebrat, setOdebrat] = useState(false)
   // Soubor čekající v dialogu výřezu; do formuláře se dostane až po potvrzení.
   const [kOrezu, setKOrezu] = useState<File | null>(null)
+  // Soubor, který formulář právě ponese (potvrzený výřez). Výběr dalšího souboru
+  // ho v inputu přepíše ještě před otevřením dialogu — při zrušení se musí
+  // vrátit, jinak by náhled ukazoval fotku, kterou formulář neodešle.
+  const potvrzenyRef = useRef<File | null>(null)
+  const nastavSoubor = (soubor: File | null) => {
+    const input = fileRef.current
+    if (!input) return
+    if (!soubor) {
+      input.value = ''
+      return
+    }
+    // Input přijímá soubory jen přes DataTransfer.
+    const dt = new DataTransfer()
+    dt.items.add(soubor)
+    input.files = dt.files
+  }
   // Odebrání je tlačítko, ne psaní do pole — formulář by o něm sám nevěděl
   // a lišta by tvrdila, že nic neuloženého nemáš.
   const oznamZmenu = useOznamZmenu()
@@ -65,10 +81,8 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
         <AvatarCropDialog
           file={kOrezu}
           onDone={(soubor) => {
-            // Výřez do formuláře: input přijímá soubory jen přes DataTransfer.
-            const dt = new DataTransfer()
-            dt.items.add(soubor)
-            if (fileRef.current) fileRef.current.files = dt.files
+            nastavSoubor(soubor)
+            potvrzenyRef.current = soubor
             setNahled(URL.createObjectURL(soubor))
             setOdebrat(false)
             setKOrezu(null)
@@ -77,8 +91,9 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
             oznamZmenu()
           }}
           onCancel={() => {
-            // Zrušení = jako by si člověk žádný soubor nevybral.
-            if (fileRef.current) fileRef.current.value = ''
+            // Zrušení = jako by si člověk tenhle soubor nevybral: ve formuláři
+            // zůstane dřív potvrzený výřez (nebo nic).
+            nastavSoubor(potvrzenyRef.current)
             setKOrezu(null)
           }}
         />
@@ -109,7 +124,8 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
               onClick={() => {
                 setNahled(null)
                 setOdebrat(true)
-                if (fileRef.current) fileRef.current.value = ''
+                potvrzenyRef.current = null
+                nastavSoubor(null)
                 oznamZmenu()
               }}
               className="hover:underline"
