@@ -39,7 +39,9 @@ export interface PracticalInfoPanelDef {
  * posunutá miska se uživateli nelíbila, ostatní sedí).
  */
 export const practicalInfoPanelDefs: PracticalInfoPanelDef[] = [
-  { category: PageCategory.Pocasi, label: 'počasí', icon: <SunIcon height={46} /> },
+  // Slunce je kruh — vyplní kruhový podklad víc než ostatní tvary, proto je
+  // o kus menší, než by odpovídalo „řadě B" (46), ať nepůsobí největší.
+  { category: PageCategory.Pocasi, label: 'počasí', icon: <SunIcon height={42} /> },
   { category: PageCategory.Doprava, label: 'doprava', icon: <RoadIcon height={33} /> },
   {
     category: PageCategory.Vstupni_podminky,
