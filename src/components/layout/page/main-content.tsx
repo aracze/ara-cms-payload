@@ -320,14 +320,16 @@ export const MainContent = ({
   // vždy, držel si prázdný sloupec 340 px i s mezerou. Bez obsahu proto vůbec
   // nevznikne.
   const hasSidebar = showTouristPointCard || showAktualniInfoPanel || showTableOfContents
+  // Rubrika: krátký perex je vystředěný jako podtitul stránky a sedí těsně nad
+  // mřížkou článků (redesign rubrik, varianta C — dřív stál vlevo v širokém
+  // prázdném pruhu a ztrácel se).
+  const isRubric = pageCategory === PageCategory.Rubrika
   // Kam se čtecí sloupec postaví, když vedle sebe nemá panel:
-  //  · statická stránka (`centerColumn`) → na OSU stránky. Zaparkovaný vlevo
-  //    ležel ~190 px od středu a vpravo zela díra po panelu.
-  //  · rubrika → zůstává vlevo, protože pod textem začíná mřížka článků přes
-  //    celou šířku a vystředěný úvod by proti ní byl odsazený doprava.
+  //  · statická stránka (`centerColumn`) a rubrika → na OSU stránky. Zaparkovaný
+  //    vlevo ležel ~190 px od středu a vpravo zela díra po panelu.
   // Šířku ani vnitřní odsazení sloupce neměníme — text má pořád stejnou míru
   // řádku, mění se jen jeho poloha.
-  const justify = hasSidebar || centerColumn ? 'lg:justify-center' : 'lg:justify-start'
+  const justify = hasSidebar || centerColumn || isRubric ? 'lg:justify-center' : 'lg:justify-start'
 
   return (
     <main
@@ -335,7 +337,9 @@ export const MainContent = ({
       tabIndex={-1}
       // Turistický cíl: menší spodní odsazení — hned pod obsahem navazuje
       // sekce recenzí a plných 80 px by mezi nimi dělalo zbytečnou díru.
-      className={`max-w-7xl mx-auto px-4 pt-12 ${touristPointInfo ? 'pb-6 md:pb-8' : 'pb-12 md:pb-20'} flex flex-col items-stretch lg:flex-row ${justify} gap-8 lg:gap-10 focus:outline-none`}
+      // Rubrika: totéž kvůli mřížce článků — perex je její podtitul, ne
+      // samostatný blok, takže mezi nimi nesmí zet prázdný pruh.
+      className={`max-w-7xl mx-auto px-4 pt-12 ${touristPointInfo || isRubric ? 'pb-6 md:pb-8' : 'pb-12 md:pb-20'} flex flex-col items-stretch lg:flex-row ${justify} gap-8 lg:gap-10 focus:outline-none`}
     >
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
@@ -356,7 +360,17 @@ export const MainContent = ({
           // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
           // orientované fotky by jinak zabraly celou obrazovku. Praktické
           // informace: posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose).
-          proseClassName={touristPointInfo ? 'poi-prose' : isPracticalInfo ? 'pi-prose' : undefined}
+          // Rubrika: text je jednořádkové motto vycentrované nad mřížkou
+          // článků (viz `isRubric` a .rubric-motto v globals.css).
+          proseClassName={
+            touristPointInfo
+              ? 'poi-prose'
+              : isPracticalInfo
+                ? 'pi-prose'
+                : isRubric
+                  ? 'rubric-motto'
+                  : undefined
+          }
         />
         {belowText}
         {contributorAtEnd && contributor && (

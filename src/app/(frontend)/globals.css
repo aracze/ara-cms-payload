@@ -61,6 +61,18 @@
     font-weight: 500;
   }
 
+  /* Motto rubriky — jednořádkové heslo vycentrované nad mřížkou článků
+     (parita se starým webem: „Štěstí při cestování přeje připraveným.").
+     Přebíjí lead odstavec výš; všech 8 rubrik má jako text právě jedno motto. */
+  .prose.rubric-motto > p:first-of-type {
+    font-size: 26px;
+    line-height: 1.5;
+    color: #333;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 0;
+  }
+
   /* Headings inside prose content */
   .prose h1 {
     font-size: 36px;

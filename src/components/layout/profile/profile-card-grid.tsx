@@ -8,7 +8,7 @@ import { pluralCs } from '@/lib/utils'
  * Mřížka karet na profilu + „Zobrazit další" — jediný klientský ostrůvek
  * profilu. Samotné karty renderuje SERVER a posílá je sem jako `children`,
  * takže v prohlížeči nekončí jejich markup ani texty recenzí, jen přepínání
- * viditelnosti. Stejný vzor jako ArticlesGridClient: v HTML jsou VŠECHNY karty
+ * viditelnosti. Stejný vzor jako ArticlesRowsClient: v HTML jsou VŠECHNY karty
  * (odkazy kvůli SEO), přebytek je schovaný přes `hidden` (display:none →
  * obrázky se nenačtou, dokud uživatel nerozbalí).
  */
