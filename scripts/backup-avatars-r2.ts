@@ -9,6 +9,7 @@ import {
   r2Put,
   resolveR2Key,
 } from '../src/lib/r2-backup'
+import { fromMediaProxy } from '../src/lib/cloudinary-loader'
 
 /**
  * Dorovnání zrcadla avatarů v R2 (viz hooky v src/collections/Avatars.ts):
@@ -81,7 +82,9 @@ const run = async () => {
         skipped++
         continue
       }
-      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+      // Záloha nezávislá na media proxy (afterRead hook url přepisuje na
+      // media.ara.cz) — originál se stahuje vždy přímo z Cloudinary.
+      const response = await fetch(fromMediaProxy(url), { signal: AbortSignal.timeout(15_000) })
       if (!response.ok) throw new Error(`Cloudinary: ${response.statusText}`)
       await r2Put({
         key,

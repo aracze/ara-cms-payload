@@ -1,10 +1,21 @@
 /**
- * True, pokud jde o Cloudinary URL, kterou umíme transformovat (obsahuje
- * `/upload/`). Ostatní zdroje (lokální /assets, Payload uploads) transformovat
- * nejdou — u nich nemá `next/image` optimalizace přes tento loader smysl.
+ * True, pokud jde o Cloudinary URL (přímou, nebo už přepsanou na media proxy),
+ * kterou umíme transformovat (obsahuje `/upload/`). Ostatní zdroje (lokální
+ * /assets, Payload uploads) transformovat nejdou — u nich nemá `next/image`
+ * optimalizace přes tento loader smysl.
+ *
+ * Kontrola HOSTITELE, ne podřetězce (CodeQL: „res.cloudinary.com" může být
+ * kdekoliv v cizí URL — https://res.cloudinary.com.utocnik.cz by prošla
+ * a dostala transformace). Relativní cesty (/assets/…) URL parser odmítne.
  */
 export function isCloudinary(src: string): boolean {
-  return src.includes('res.cloudinary.com') && src.includes('/upload/')
+  if (!src.includes('/upload/')) return false
+  if (isMediaProxyUrl(src)) return true
+  try {
+    return new URL(src).hostname === 'res.cloudinary.com'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -30,18 +41,38 @@ export function capImageWidth(width: number): number {
 const MEDIA_BASE_URL = process.env.NEXT_PUBLIC_MEDIA_BASE_URL
 /** Jen produkční cloud `ara` — dev cloud z lokálního .env proxy nezná. */
 const CLOUDINARY_PROD_PREFIX = 'https://res.cloudinary.com/ara/'
+/** Prefix proxy adres vč. lomítka — pro detekci a zpětný převod. */
+const MEDIA_PROXY_PREFIX = MEDIA_BASE_URL ? `${MEDIA_BASE_URL.replace(/\/+$/, '')}/` : null
+
+/** True, pokud adresa už vede na media proxy (jen s nastavenou env, tj. prod). */
+function isMediaProxyUrl(url: string): boolean {
+  return MEDIA_PROXY_PREFIX != null && url.startsWith(MEDIA_PROXY_PREFIX)
+}
 
 /**
- * Přepíše produkční Cloudinary URL na media proxy. MUSÍ se volat až jako
- * poslední krok při emisi URL (po složení transformace) — v DB, props i
- * search indexu zůstávají adresy res.cloudinary.com, aby detektory
- * (`isCloudinary`, regex v rich-text-html) dál fungovaly.
+ * Přepíše produkční Cloudinary URL na media proxy. Adresy, které už na proxy
+ * vedou (data z CMS je od hooku `rewriteUploadUrlsToMediaProxy` nesou rovnou),
+ * i všechno ostatní nechává být — volání je idempotentní, takže zůstává
+ * posledním krokem emise URL (po složení transformace).
  */
 export function toMediaProxy(url: string): string {
-  if (!MEDIA_BASE_URL || !url.startsWith(CLOUDINARY_PROD_PREFIX)) {
+  if (!MEDIA_PROXY_PREFIX || !url.startsWith(CLOUDINARY_PROD_PREFIX)) {
     return url
   }
-  return `${MEDIA_BASE_URL.replace(/\/+$/, '')}/${url.slice(CLOUDINARY_PROD_PREFIX.length)}`
+  return `${MEDIA_PROXY_PREFIX}${url.slice(CLOUDINARY_PROD_PREFIX.length)}`
+}
+
+/**
+ * Zpětný převod proxy adresy na kanonickou Cloudinary podobu. Pro kód, který
+ * z adresy něco ODVOZUJE (regex v rich-text-html, host check v maplibre-map,
+ * stažení originálu pro R2 zálohu) — ten normalizuje vstup tudy a na konci
+ * emise zase volá `toMediaProxy`. Ne-proxy adresy vrací beze změny.
+ */
+export function fromMediaProxy(url: string): string {
+  if (!isMediaProxyUrl(url)) {
+    return url
+  }
+  return `${CLOUDINARY_PROD_PREFIX}${url.slice(MEDIA_PROXY_PREFIX!.length)}`
 }
 
 /**

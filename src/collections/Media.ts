@@ -4,6 +4,11 @@ import sharp from 'sharp'
 import { isAdmin } from '../access/isAdmin'
 import { isAdminOrEditor } from '../access/isAdminOrEditor'
 import { isR2Configured, r2ObjectExists, r2Put, resolveR2Key } from '../lib/r2-backup'
+import { fromMediaProxy } from '../lib/cloudinary-loader'
+import {
+  normalizeUploadUrlsToCloudinary,
+  rewriteUploadUrlsToMediaProxy,
+} from '../hooks/media-proxy'
 
 const sanitizeFilename = (name: string): string => {
   const parts = name.split('.')
@@ -94,7 +99,11 @@ async function backupMediaToR2(
     } else {
       payload.logger.info(`Zahajuji zálohování do R2 (stahuji z Cloudinary): ${r2Key}`)
 
-      const response = await fetch(url, { signal: AbortSignal.timeout(R2_FETCH_TIMEOUT_MS) })
+      // Záloha musí být nezávislá na media proxy (její výpadkový režim čte
+      // právě z R2) — originál se stahuje vždy přímo z Cloudinary.
+      const response = await fetch(fromMediaProxy(url), {
+        signal: AbortSignal.timeout(R2_FETCH_TIMEOUT_MS),
+      })
       if (!response.ok) {
         throw new Error(`Načtení z Cloudinary selhalo: ${response.statusText}`)
       }
@@ -332,6 +341,9 @@ export const Media: CollectionConfig = {
     delete: isAdmin,
   },
   hooks: {
+    // Adresy fotek jdou ven z CMS rovnou přes media proxy (viz src/hooks/media-proxy.ts).
+    afterRead: [rewriteUploadUrlsToMediaProxy],
+    beforeChange: [normalizeUploadUrlsToCloudinary],
     beforeOperation: [
       async ({ args, operation }) => {
         if ((operation === 'create' || operation === 'update') && args.req?.file) {

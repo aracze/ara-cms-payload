@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { preconnect } from 'react-dom'
 import DOMPurify from 'isomorphic-dompurify'
-import { toMediaProxy } from '@/lib/cloudinary-loader'
+import { fromMediaProxy, toMediaProxy } from '@/lib/cloudinary-loader'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 /**
@@ -60,14 +60,15 @@ function isCloudinaryHost(url: string): boolean {
 
 // Kruhová „avatarová" ikona markeru z Cloudinary (r_max = kruh, bo_3px = bílý
 // rámeček). Pro ne-Cloudinary URL vrací originál (kruh/rámeček doplní CSS).
-// toMediaProxy až PO složení transformace — detekce hostitele výše musí
-// pracovat s původní Cloudinary adresou.
-function buildMarkerIconUrl(url: string): string {
+// Data z CMS nesou adresy už na media proxy → fromMediaProxy je normalizuje
+// na Cloudinary podobu pro host check, toMediaProxy až PO složení transformace.
+function buildMarkerIconUrl(rawUrl: string): string {
+  const url = fromMediaProxy(rawUrl)
   return isCloudinaryHost(url)
     ? toMediaProxy(
         url.replace('/upload/', '/upload/w_44,h_44,c_fill,g_auto,r_max,bo_3px_solid_white,f_png/'),
       )
-    : url
+    : rawUrl
 }
 
 function escapeHtml(value: string): string {
@@ -79,10 +80,11 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-function toCloudinaryVariant(url: string, transform: string): string {
+function toCloudinaryVariant(rawUrl: string, transform: string): string {
+  const url = fromMediaProxy(rawUrl)
   return isCloudinaryHost(url)
     ? toMediaProxy(url.replace('/upload/', `/upload/${transform}/`))
-    : url
+    : rawUrl
 }
 
 // Obsah kartičky místa se skládá jako HTML řetězec a předává do setHTML, takže
@@ -321,7 +323,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
             img.width = MARKER_SIZE
             img.height = MARKER_SIZE
             img.style.cssText = 'display:block;width:100%;height:100%;object-fit:cover;'
-            if (!isCloudinaryHost(markerImageUrl)) {
+            if (!isCloudinaryHost(fromMediaProxy(markerImageUrl))) {
               img.style.borderRadius = '50%'
               img.style.border = '3px solid #fff'
             }

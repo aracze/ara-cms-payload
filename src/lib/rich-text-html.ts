@@ -1,6 +1,6 @@
 import DOMPurify from 'isomorphic-dompurify'
 import { LEGEND_GROUPS, SUITABILITY_LABEL, type Suitability } from '@/lib/climate'
-import { toMediaProxy } from '@/lib/cloudinary-loader'
+import { fromMediaProxy, toMediaProxy } from '@/lib/cloudinary-loader'
 
 // Rendering Lexical rich-textu do (sanitizovaného) HTML. Vyčleněno z `utils.ts`,
 // protože `isomorphic-dompurify` je těžká závislost a `utils.ts` importují i
@@ -196,7 +196,10 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
       if (fields?.blockType === 'contentImage') {
         const image = fields.image as Record<string, unknown> | undefined
         if (!image?.url) return ''
-        const url = String(image.url)
+        // Data z CMS nesou adresu už přepsanou na media proxy (hook
+        // rewriteUploadUrlsToMediaProxy) — pro regex níže se normalizuje na
+        // kanonickou Cloudinary podobu; emise na konci volá toMediaProxy zpět.
+        const url = fromMediaProxy(String(image.url))
         const alt = escapeHtml(String(image.alt ?? ''))
         const caption = String(fields.caption ?? '')
         const attribution = buildImageAttributionHtml(image)

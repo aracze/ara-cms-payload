@@ -15,12 +15,14 @@ import {
   fetchHomepageHeroPlace,
   fetchTopAffiliateDeals,
 } from '@/lib/payload'
+import { toMediaProxy } from '@/lib/cloudinary-loader'
 
 // Fallback, když se nepodaří vylosovat denní místo (např. žádné publikované
 // místo s fotkou) — konfigurovatelné přes env, ať URL není natvrdo v kódu.
-const HOMEPAGE_HERO_IMAGE_FALLBACK =
+const HOMEPAGE_HERO_IMAGE_FALLBACK = toMediaProxy(
   process.env.NEXT_PUBLIC_HOMEPAGE_HERO_IMAGE ||
-  'https://res.cloudinary.com/ara/image/upload/homepage.jpg'
+    'https://res.cloudinary.com/ara/image/upload/homepage.jpg',
+)
 
 export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
   // Všechny nezávisle — pomalejší nesmí blokovat začátek ostatních.

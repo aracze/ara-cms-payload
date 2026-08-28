@@ -1,3 +1,5 @@
+import { toMediaProxy } from '@/lib/cloudinary-loader'
+
 /**
  * Výchozí úvodní fotka stránek, které vlastní obrázek nemají — dnes veřejné
  * profily (/profil/<username>) a statické stránky (O nás, Reklama, Podmínky).
@@ -11,8 +13,9 @@
  * za `?`). Zmenšení a formát řeší `next/image` přes cloudinary-loader.
  * POZOR: s fotkou je nutné vyměnit i `DEFAULT_COVER_BLUR` níže.
  */
-export const DEFAULT_COVER_URL =
-  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg'
+export const DEFAULT_COVER_URL = toMediaProxy(
+  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg',
+)
 
 /**
  * Rozmazaný náhled TÉŽE fotky (20 × 13 px, ~340 B) vložený přímo do HTML.
