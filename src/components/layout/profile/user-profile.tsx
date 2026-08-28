@@ -122,7 +122,12 @@ export function UserProfile({
           ostatních stránek. Barvu pozadí ale při načítání skoro nikdo neuvidí:
           překryje ji rozmazaný náhled fotky (viz DEFAULT_COVER_BLUR), takže
           přechod na ostrou fotku je plynulý a neproblikne holá barva. */}
-      <section className="relative w-full h-[315px] bg-[#3b444f]">
+      {/* V režimu úprav je hlavička o 60 px vyšší: blok s formulářem je o tolik
+          vyšší než na veřejném profilu a při 315 px začínal avatar 44 px od
+          okraje — horní čtvrtinu tak zakrývala navigační lišta (65 px), najetí
+          na fotku otevíralo menu a klik neprošel. Vyšší hlavička drží avatar
+          na stejném místě (74 px) jako na veřejném profilu. */}
+      <section className={`relative w-full bg-[#3b444f] ${editing ? 'h-[375px]' : 'h-[315px]'}`}>
         <div className="absolute inset-0 overflow-hidden">
           <StaticHeroImage
             imageUrl={DEFAULT_COVER_URL}

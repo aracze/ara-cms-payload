@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Cropper, { type Area } from 'react-easy-crop'
 import { X, ZoomIn, ZoomOut } from 'lucide-react'
 
@@ -91,9 +92,23 @@ export function AvatarCropDialog({
   // k ničemu se nekreslí, potřebuje ji až potvrzení.
   const oblastRef = useRef<Area | null>(null)
 
-  // Adresa fotky pro náhled žije jen po dobu dialogu.
-  const [zdrojUrl] = useState(() => URL.createObjectURL(file))
-  useEffect(() => () => URL.revokeObjectURL(zdrojUrl), [zdrojUrl])
+  // Adresa fotky pro náhled vzniká i zaniká V EFEKTU, ne v useState: React ve
+  // vývoji komponentu zkušebně odpojí a hned připojí znovu — adresa z useState
+  // by to přežila, ale úklid by ji mezitím uvolnil a fotka by se už nenačetla
+  // (černý čtverec po zrušení a novém výběru).
+  const [zdrojUrl, setZdrojUrl] = useState<string | null>(null)
+  useEffect(() => {
+    const url = URL.createObjectURL(file)
+    // Lint tu setState v efektu nechce (obecně rozjíždí kaskádu překreslení);
+    // tady je to ale životní cyklus externího zdroje, který jinde vzniknout
+    // nemůže — viz komentář výš.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZdrojUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+  // Prohlížeč fotku neumí zobrazit (typicky HEIC z iPhonu) — místo černého
+  // čtverce a věčně neaktivního tlačítka dostane člověk vysvětlení.
+  const [chyba, setChyba] = useState(false)
 
   // Zrušení BĚHEM zpracování: `potvrdit` chvíli čeká na dekódování a export,
   // a Esc nebo „Zrušit" mezitím dialog zavřou. Bez příznaku by se hotový výřez
@@ -168,7 +183,10 @@ export function AvatarCropDialog({
     }
   }
 
-  return (
+  // Portál na <body>: dialog je vykreslený z hlavičky profilu, která má vlastní
+  // vrstvení (z-[101] + vlnka). Uvnitř ní by překryv přes celou stránku
+  // nepřekryl vlnku — kreslila se přes fotku v dialogu.
+  return createPortal(
     <>
       <div className="fixed inset-0 z-[300] bg-[#0a1626]/55 animate-in fade-in duration-150 motion-reduce:animate-none" />
       <div className="fixed inset-0 z-[310] grid place-items-center overflow-y-auto p-4">
@@ -196,22 +214,33 @@ export function AvatarCropDialog({
           </p>
 
           <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-[#0a1626]">
-            <Cropper
-              image={zdrojUrl}
-              crop={crop}
-              zoom={zoom}
-              minZoom={1}
-              maxZoom={3}
-              aspect={1}
-              cropShape="round"
-              showGrid={false}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onCropAreaChange={(_, oblastPx) => {
-                oblastRef.current = oblastPx
-              }}
-              onMediaLoaded={() => setNacteno(true)}
-            />
+            {chyba ? (
+              <p
+                role="alert"
+                className="absolute inset-0 grid place-items-center px-8 text-center text-[14px] leading-snug text-white/85"
+              >
+                Tuhle fotku prohlížeč neumí zobrazit. Zkus JPEG, PNG nebo WebP — fotky HEIC z iPhonu
+                je potřeba nejdřív převést.
+              </p>
+            ) : zdrojUrl ? (
+              <Cropper
+                image={zdrojUrl}
+                crop={crop}
+                zoom={zoom}
+                minZoom={1}
+                maxZoom={3}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropAreaChange={(_, oblastPx) => {
+                  oblastRef.current = oblastPx
+                }}
+                onMediaLoaded={() => setNacteno(true)}
+                mediaProps={{ onError: () => setChyba(true) }}
+              />
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-center gap-3 px-1">
@@ -243,7 +272,7 @@ export function AvatarCropDialog({
             <button
               type="button"
               onClick={potvrdit}
-              disabled={ukladam || !nacteno}
+              disabled={ukladam || !nacteno || chyba}
               className="whitespace-nowrap rounded-full bg-[#215491] px-7 py-2.5 font-heading text-[13px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a3f6c] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {ukladam ? 'Ořezávám…' : 'Použít fotku'}
@@ -251,6 +280,7 @@ export function AvatarCropDialog({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

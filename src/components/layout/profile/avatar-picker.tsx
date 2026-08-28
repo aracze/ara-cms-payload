@@ -135,7 +135,9 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
           </>
         )}
       </span>
-      <span className="mt-0.5 text-[10.5px] text-white/55">JPEG, PNG nebo WebP do 2 MB</span>
+      {/* Bez „do 2 MB": odesílá se až výřez (pár desítek kB), velikost původní
+          fotky člověka omezovat nemusí. */}
+      <span className="mt-0.5 text-[10.5px] text-white/55">JPEG, PNG nebo WebP</span>
     </div>
   )
 }
