@@ -3,7 +3,13 @@
 // zálohu z R2 — pokud možno zmenšenou přes Cloudflare Image Transformations.
 // Čistá logika cest je v media-path.ts, tady jen síť a hlavičky.
 
-import { cfImageOptions, deriveR2Keys, negotiateFormat, parsePath } from './media-path'
+import {
+  cfImageOptions,
+  deriveR2Keys,
+  negotiateFormat,
+  parsePath,
+  signTransform,
+} from './media-path'
 
 export interface Env {
   /** R2 bucket se zálohou originálů médií (plní hook v src/collections/Media.ts). */
@@ -12,6 +18,12 @@ export interface Env {
   CLOUDINARY_ORIGIN: string
   /** Custom doména R2 bucketu — zdroj pro Image Transformations (bez rekurze na sebe). */
   BACKUP_HOST: string
+  /**
+   * API secret Cloudinary účtu (wrangler secret) — podpis transformací pro
+   * režim Strict transformations. Bez něj jdou adresy nepodepsané (funguje
+   * jen s vypnutým strict režimem).
+   */
+  CLOUDINARY_API_SECRET?: string
 }
 
 const YEAR_SECONDS = 31_536_000
@@ -65,7 +77,13 @@ const mediaProxy = {
     // Query string se zahazuje (Cloudinary ho ignoruje, jen by kazil keš).
     // Upstream dostává holý GET bez klientských hlaviček — URL po vyjednání
     // formátu plně určuje bajty. Keš je klíčovaná URL subrequestu.
-    const upstreamUrl = `${env.CLOUDINARY_ORIGIN}/${resourceType}/upload/${
+    // Transformace se podepisuje (Strict transformations na účtu); originál
+    // bez transformace podpis nepotřebuje a strict režim ho neblokuje.
+    const signature =
+      transform && env.CLOUDINARY_API_SECRET
+        ? `${await signTransform(transform, key, env.CLOUDINARY_API_SECRET)}/`
+        : ''
+    const upstreamUrl = `${env.CLOUDINARY_ORIGIN}/${resourceType}/upload/${signature}${
       transform ? `${transform}/` : ''
     }${version}${key}`
 
