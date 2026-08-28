@@ -30,6 +30,49 @@ export interface Homepage {
     accommodationUrl?: string | null
     carRentalUrl?: string | null
   } | null
+  /**
+   * Zdroj dlaždic zájezdů v sekci „Dnešní akční nabídky" (homepage): URL Invia
+   * feedu s defaultním cílením + JSON s nasyncovaným výběrem (plní denní sync
+   * /api/sync-affiliate-deals, tvar `HomepageTourDeals`).
+   */
+  dealsOfDay?: {
+    inviaFeedUrl?: string | null
+    deals?: unknown
+  } | null
+}
+
+/**
+ * Jeden zájezd pro dlaždice „Dnešní akční nabídky" na homepage — z Invia feedu
+ * s defaultním cílením (kurátorovaný výběr invia.cz), po filtru letecky +
+ * odlet z Prahy, seřazeno podle slevy. Tvar JSON pole `dealsOfDay.deals`
+ * globálu Homepage; plní denní sync /api/sync-affiliate-deals a čte se přes
+ * type-guard v src/lib/payload.ts (JSON pole nemá v generovaných typech tvar).
+ */
+export interface HomepageTourDeal {
+  /** Celková cena v CZK. */
+  price: number
+  /** Odkaz s provizí (aid) na invia.cz. */
+  deepLink: string
+  /** Fotka hotelu z feedu (inviacdn.net); null = dlaždice bez fotky. */
+  photoUrl: string | null
+  hotel: string
+  /** Země česky („Egypt", „Kanárské ostrovy"). */
+  country: string
+  /** Oblast/město („Marsa Alam"); null = feed neuvedl. */
+  locality: string | null
+  /** Datum odjezdu ve formátu ISO (YYYY-MM-DD). */
+  termFrom: string
+  days: number
+  /** Strava („Snídaně", „All Inclusive"…); null = feed neuvedl. */
+  food: string | null
+  /** Sleva v procentech (0 = bez slevy). */
+  discount: number
+}
+
+export interface HomepageTourDeals {
+  tours: HomepageTourDeal[]
+  /** ISO timestamp posledního úspěšného syncu. */
+  updatedAt?: string
 }
 
 /**

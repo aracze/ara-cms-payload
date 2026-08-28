@@ -4,12 +4,14 @@ import { Badge, dayCount, nightCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
 /**
- * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z Prahy a 4
- * nejlevnější zájezdy s odletem z Prahy napříč destinacemi webu (dlaždice —
- * finální „ukázka 1" z výběru 14. 8. 2026). Data plní denní sync
- * /api/sync-affiliate-deals přes fetchTopAffiliateDeals; bez dat se sekce
- * nezobrazí. Letenky nesou fotku destinace, zájezdy fotku hotelu; ceny letenek
- * jsou ZPÁTEČNÍ včetně délky pobytu (viz fetchKiwiDeal).
+ * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z Prahy
+ * (dlaždice — finální „ukázka 1" z výběru 14. 8. 2026) a 4 zájezdy
+ * z kurátorovaného Invia feedu řazené podle slevy (globál Homepage →
+ * `dealsOfDay`, výběr 28. 8. 2026; bez feedu spadnou na nejlevnější zájezdy
+ * destinací — viz fetchTopAffiliateDeals). Data plní denní sync
+ * /api/sync-affiliate-deals; bez dat se sekce nezobrazí. Letenky nesou fotku
+ * destinace, zájezdy fotku hotelu; ceny letenek jsou ZPÁTEČNÍ včetně délky
+ * pobytu (viz fetchKiwiDeal).
  */
 
 /** „2026-11-12" → „12. 11." (rok se na kompaktní dlaždici vynechává). */
@@ -47,7 +49,7 @@ export function DealsOfDaySection({
         </h2>
         <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
         <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
-          Nejlevnější letenky a zájezdy z Prahy pro {todayLabel()}.
+          Nejlevnější letenky a vybrané zájezdy s odletem z Prahy pro {todayLabel()}.
         </p>
       </div>
 
@@ -111,6 +113,13 @@ function DealTile({
         <span className="absolute top-2 left-2 z-10">
           <Badge kind={badge} onPhoto />
         </span>
+        {/* Sleva z Invia feedu — hlavní lákadlo kurátorovaných zájezdů, proto
+            výrazně na fotce (vzor úvodky invia.cz); bez slevy se štítek nekreslí. */}
+        {typeof deal.discount === 'number' && deal.discount > 0 && (
+          <span className="absolute top-2 right-2 z-10 rounded-full bg-[#d45145] px-2.5 py-0.5 text-[11.5px] font-bold text-white">
+            −{deal.discount}&nbsp;%
+          </span>
+        )}
       </div>
       <div className="px-3 pt-2.5 pb-3">
         <p className="truncate text-[14.5px] leading-snug font-bold text-[#252a31]">{deal.title}</p>

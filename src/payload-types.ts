@@ -969,6 +969,21 @@ export interface Homepage {
      */
     carRentalUrl?: string | null;
   };
+  dealsOfDay?: {
+    /**
+     * Feed s „Defaultním cílením Invia" z affil.invia.cz — plní dlaždice zájezdů na homepage (filtr: letecky, odlet z Prahy, řazení podle slevy). Prázdné pole = dlaždice se plní nejlevnějšími zájezdy destinací (starší chování).
+     */
+    inviaFeedUrl?: string | null;
+    deals?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+  };
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -1067,6 +1082,12 @@ export interface HomepageSelect<T extends boolean = true> {
         toursUrl?: T;
         accommodationUrl?: T;
         carRentalUrl?: T;
+      };
+  dealsOfDay?:
+    | T
+    | {
+        inviaFeedUrl?: T;
+        deals?: T;
       };
   updatedAt?: T;
   createdAt?: T;

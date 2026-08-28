@@ -1,6 +1,7 @@
 import type { GlobalConfig } from 'payload'
 import { revalidateGlobalsAfterChange } from '../hooks/revalidation'
 import { AFFILIATE_FALLBACKS } from '../lib/affiliate-defaults'
+import { isAllowedInviaFeedUrl } from '../endpoints/syncAffiliateDeals'
 
 /**
  * Redirecty /go/* posílají návštěvníka na uloženou adresu — kontrola tu hlídá,
@@ -89,6 +90,42 @@ export const Homepage: GlobalConfig = {
             description:
               'Cíl přesměrování /go/auta. Musí to být adresa discovercars.com s ?a_aid=, jinak přestanou fungovat odkazy na konkrétní země. Výchozí: https://www.discovercars.com/cz?a_aid=aracz.',
           },
+        },
+      ],
+    },
+    {
+      // Zdroj dlaždic zájezdů v sekci „Dnešní akční nabídky" na homepage:
+      // Inviou kurátorovaný feed (defaultní cílení = výběr z úvodky invia.cz).
+      // Letenky sekce se berou dál z Kiwi přes stránky destinací.
+      name: 'dealsOfDay',
+      label: 'Dnešní akční nabídky (zájezdy z Invia feedu)',
+      type: 'group',
+      fields: [
+        {
+          name: 'inviaFeedUrl',
+          label: 'Invia XML feed (URL)',
+          type: 'text',
+          // Adresu stahuje server (denní sync) — bez omezení hosta by šla
+          // zneužít jako SSRF; stejné pravidlo hlídá i endpoint samotný.
+          validate: (value: string | null | undefined) => {
+            if (!value) return true
+            return (
+              isAllowedInviaFeedUrl(value) ||
+              'Musí být odkaz https://affil.invia.cz/… (Nástroje → XML feed → Vygenerovat XML).'
+            )
+          },
+          admin: {
+            description:
+              'Feed s „Defaultním cílením Invia" z affil.invia.cz — plní dlaždice zájezdů na homepage (filtr: letecky, odlet z Prahy, řazení podle slevy). Prázdné pole = dlaždice se plní nejlevnějšími zájezdy destinací (starší chování).',
+          },
+        },
+        {
+          // Denně přepisuje /api/sync-affiliate-deals — viz
+          // src/endpoints/syncAffiliateDeals.ts. V adminu SKRYTÉ (stejně jako
+          // affiliate.deals na stránkách): surový JSON editor by jen mátl.
+          name: 'deals',
+          type: 'json',
+          admin: { hidden: true },
         },
       ],
     },
