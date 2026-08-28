@@ -7,7 +7,8 @@ export const rootPageCategories: PageCategory[] = [
   PageCategory.Staticka_stranka,
 ]
 
-function getGenitivePlace(contextPage: PayloadPage): string {
+/** Druhý pád místa vč. předložky („do Chorvatska“) s fallbackem na název. */
+export function getGenitivePlace(contextPage: PayloadPage): string {
   return contextPage.detail?.genitive || `do ${contextPage.title}`
 }
 
