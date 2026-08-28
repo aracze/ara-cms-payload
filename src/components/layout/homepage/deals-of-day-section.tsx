@@ -4,12 +4,14 @@ import { Badge, dayCount, nightCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
 /**
- * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z Prahy a 4
- * nejlevnější zájezdy s odletem z Prahy napříč destinacemi webu (dlaždice —
- * finální „ukázka 1" z výběru 14. 8. 2026). Data plní denní sync
- * /api/sync-affiliate-deals přes fetchTopAffiliateDeals; bez dat se sekce
- * nezobrazí. Letenky nesou fotku destinace, zájezdy fotku hotelu; ceny letenek
- * jsou ZPÁTEČNÍ včetně délky pobytu (viz fetchKiwiDeal).
+ * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z Prahy
+ * (dlaždice — finální „ukázka 1" z výběru 14. 8. 2026) a 4 zájezdy
+ * z kurátorovaného Invia feedu řazené podle slevy (globál Homepage →
+ * `dealsOfDay`, výběr 28. 8. 2026; bez feedu spadnou na nejlevnější zájezdy
+ * destinací — viz fetchTopAffiliateDeals). Data plní denní sync
+ * /api/sync-affiliate-deals; bez dat se sekce nezobrazí. Letenky nesou fotku
+ * destinace, zájezdy fotku hotelu; ceny letenek jsou ZPÁTEČNÍ včetně délky
+ * pobytu (viz fetchKiwiDeal).
  */
 
 /** „2026-11-12" → „12. 11." (rok se na kompaktní dlaždici vynechává). */
@@ -47,7 +49,7 @@ export function DealsOfDaySection({
         </h2>
         <div className="mb-5 h-[1px] w-[30px] rounded-full bg-[#d45145]"></div>
         <p className="max-w-xl text-[17px] leading-relaxed text-gray-400">
-          Nejlevnější letenky a zájezdy z Prahy pro {todayLabel()}.
+          Akční letenky a zájezdy z Prahy pro {todayLabel()}.
         </p>
       </div>
 
@@ -77,6 +79,23 @@ function flightMeta(deal: TopAffiliateDeal): string {
     .join(' · ')
 }
 
+/** „Egypt – Marsa Alam"; bez lokality jen země (letenky lokalitu nemají). */
+function fullTitle(deal: TopAffiliateDeal): string {
+  return deal.locality ? `${deal.title} – ${deal.locality}` : deal.title
+}
+
+/**
+ * Titulek dlaždice: dlouhé kombinace by CSS truncate ořízl zrovna o lokalitu
+ * („Spojené arabské emiráty – …"), tak se u nich nechává jen země. Hranice
+ * odpovídá šířce dlaždice (4 sloupce, 14.5 px bold) — proto žije tady
+ * u stylů, ne v datové vrstvě.
+ */
+const TITLE_MAX_CHARS = 26
+function tileTitle(deal: TopAffiliateDeal): string {
+  const full = fullTitle(deal)
+  return full.length <= TITLE_MAX_CHARS ? full : deal.title
+}
+
 function tourMeta(deal: TopAffiliateDeal): string {
   return [deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
     .filter(Boolean)
@@ -103,7 +122,7 @@ function DealTile({
         {deal.imageUrl && (
           <DealCardImage
             src={deal.imageUrl}
-            alt={deal.title}
+            alt={fullTitle(deal)}
             aspect="16:9"
             sizes="(min-width: 768px) 25vw, 50vw"
           />
@@ -111,9 +130,18 @@ function DealTile({
         <span className="absolute top-2 left-2 z-10">
           <Badge kind={badge} onPhoto />
         </span>
+        {/* Sleva z Invia feedu — hlavní lákadlo kurátorovaných zájezdů, proto
+            výrazně na fotce (vzor úvodky invia.cz); bez slevy se štítek nekreslí. */}
+        {typeof deal.discount === 'number' && deal.discount > 0 && (
+          <span className="absolute top-2 right-2 z-10 rounded-full bg-[#d45145] px-2.5 py-0.5 text-[11.5px] font-bold text-white">
+            −{deal.discount}&nbsp;%
+          </span>
+        )}
       </div>
       <div className="px-3 pt-2.5 pb-3">
-        <p className="truncate text-[14.5px] leading-snug font-bold text-[#252a31]">{deal.title}</p>
+        <p className="truncate text-[14.5px] leading-snug font-bold text-[#252a31]">
+          {tileTitle(deal)}
+        </p>
         <p className="text-[16px] leading-snug font-semibold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
           {priceCzk(deal.price)}
         </p>

@@ -24,6 +24,7 @@ import {
   TeamSectionData,
   TeamMemberPublic,
   ContributorFace,
+  HomepageTourDeal,
 } from '@/types/payload'
 import { CONTRIBUTOR_FACES_LIMIT, NON_PERSON_USERNAMES, TEAM_USERNAMES } from './team'
 import { practicalInfoSectionCategories } from './practical-info'
@@ -1398,6 +1399,11 @@ export type TopAffiliateDeal = {
   /** Zájezd: hotel + délka. */
   hotel?: string | null
   days?: number | null
+  /** Zájezd z homepage feedu: sleva v procentech (štítek na fotce); 0/null = bez štítku. */
+  discount?: number | null
+  /** Zájezd z homepage feedu: země a lokalita zvlášť — titulek skládá až komponenta. */
+  country?: string | null
+  locality?: string | null
   /** Fotka dlaždice (letenka = místo, zájezd = hotel z feedu). */
   imageUrl: string | null
 }
@@ -1419,34 +1425,131 @@ const isValidDeal = (d: unknown): d is { price: number; deepLink: string } =>
   (d as { deepLink: string }).deepLink.startsWith('https://')
 
 /**
- * Nejlevnější letenky a zájezdy dne napříč místy s nasyncovanými nabídkami
- * (`affiliate.deals`, plní /api/sync-affiliate-deals). Stejný deep-link se
- * počítá jen jednou — Anglie a Londýn sdílí zdroje, vyhrává KONKRÉTNĚJŠÍ
- * stránka (delší fullSlug → titulek „Londýn", ne „Anglie").
+ * Type-guard nad JSON polem `dealsOfDay.deals` globálu Homepage (kurátorovaný
+ * výběr zájezdů, plní denní sync) — stejný důvod jako parseAffiliateDeals:
+ * data píše stroj, ale JSON pole nemá v generovaných typech tvar.
+ */
+function parseHomepageTourDeals(raw: unknown): HomepageTourDeal[] {
+  if (!raw || typeof raw !== 'object') return []
+  const tours = (raw as { tours?: unknown }).tours
+  if (!Array.isArray(tours)) return []
+  const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
+  const out: HomepageTourDeal[] = []
+  for (const t of tours) {
+    if (!isValidDeal(t)) continue
+    const o = t as Record<string, unknown> & { price: number; deepLink: string }
+    const country = str(o.country)
+    const termFrom = str(o.termFrom)
+    // Bez země není co napsat do titulku; termín musí být ISO datum, jinak by
+    // porovnání řetězců s dneškem propadlé zájezdy nepoznalo.
+    if (!country || !termFrom || !/^\d{4}-\d{2}-\d{2}$/.test(termFrom)) continue
+    out.push({
+      price: o.price,
+      deepLink: o.deepLink,
+      photoUrl: str(o.photoUrl),
+      hotel: str(o.hotel) ?? '',
+      country,
+      locality: str(o.locality),
+      termFrom,
+      days: typeof o.days === 'number' && o.days > 0 ? o.days : 0,
+      food: str(o.food),
+      discount: typeof o.discount === 'number' && o.discount > 0 ? o.discount : 0,
+    })
+  }
+  return out
+}
+
+/**
+ * Pestrost dlaždic: žebříček slev občas ovládne jediné letovisko (4× Marsa
+ * Alam), tak se nabídky skládají po „kolech" přes destinace — každá dostane
+ * pořadí v rámci své lokality a stabilní sort podle něj dá v prvním kole
+ * nejvýš jednu nabídku z každé lokality; uvnitř kola zůstává řazení podle
+ * slevy (vstup je už seřazený syncem).
+ */
+function diversifyByLocality(tours: HomepageTourDeal[]): HomepageTourDeal[] {
+  const rankIn = new Map<string, number>()
+  return tours
+    .map((deal) => {
+      const key = deal.locality ?? deal.country
+      const rank = rankIn.get(key) ?? 0
+      rankIn.set(key, rank + 1)
+      return { deal, rank }
+    })
+    .sort((a, b) => a.rank - b.rank)
+    .map((r) => r.deal)
+}
+
+/**
+ * Letenky a zájezdy dne pro homepage. Letenky: nejlevnější napříč místy
+ * s nasyncovanými nabídkami (`affiliate.deals`, plní /api/sync-affiliate-deals);
+ * stejný deep-link se počítá jen jednou — Anglie a Londýn sdílí zdroje, vyhrává
+ * KONKRÉTNĚJŠÍ stránka (delší fullSlug → titulek „Londýn", ne „Anglie").
+ * Zájezdy: kurátorovaný výběr z Invia feedu (globál Homepage → `dealsOfDay`,
+ * řazený syncem podle slevy) po odfiltrování propadlých termínů; bez těchto dat
+ * (feed nenastavený / ještě neproběhl sync) spadnou na starší chování —
+ * nejlevnější zájezdy destinací.
  */
 async function fetchTopAffiliateDealsUncached(
   limitPerKind: number,
 ): Promise<{ flights: TopAffiliateDeal[]; tours: TopAffiliateDeal[] }> {
   const payload = await getDb()
 
-  const res = (await payload.find({
-    collection: 'pages',
-    overrideAccess: false,
-    where: {
-      or: [
-        { 'affiliate.kiwiIataCode': { exists: true } },
-        { 'affiliate.inviaFeedUrl': { exists: true } },
-      ],
-    },
-    depth: 0,
-    limit: 0,
-    pagination: false,
-    select: { title: true, fullSlug: true, featuredImage: true, affiliate: true },
-    joins: false,
-  })) as unknown as PayloadDocsResponse<RawDealPage>
+  const [res, homepageGlobal] = await Promise.all([
+    payload.find({
+      collection: 'pages',
+      overrideAccess: false,
+      where: {
+        or: [
+          { 'affiliate.kiwiIataCode': { exists: true } },
+          { 'affiliate.inviaFeedUrl': { exists: true } },
+        ],
+      },
+      depth: 0,
+      limit: 0,
+      pagination: false,
+      select: { title: true, fullSlug: true, featuredImage: true, affiliate: true },
+      joins: false,
+    }) as unknown as Promise<PayloadDocsResponse<RawDealPage>>,
+    payload.findGlobal({
+      slug: 'homepage',
+      overrideAccess: false,
+      depth: 0,
+      select: { dealsOfDay: true },
+    }) as Promise<{ dealsOfDay?: { inviaFeedUrl?: string | null; deals?: unknown } | null }>,
+  ])
+
+  // Kurátorovaný výběr platí jen s vyplněnou URL feedu — smazání URL v adminu
+  // má vrátit staré chování hned, ne až po vypršení posledního uloženého termínu.
+  // Zájezd s odjezdem dnes/v minulosti se už nedá koupit — pryč s ním (sync
+  // běží jen 1× denně, samotný feed by propadlé termíny držel do dalšího běhu).
+  const dealsOfDay = homepageGlobal.dealsOfDay
+  const todayPrague = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(
+    new Date(),
+  )
+  const feedTours: TopAffiliateDeal[] = dealsOfDay?.inviaFeedUrl?.trim()
+    ? diversifyByLocality(
+        parseHomepageTourDeals(dealsOfDay.deals).filter((t) => t.termFrom > todayPrague),
+      )
+        .slice(0, limitPerKind)
+        .map((t) => ({
+          title: t.country,
+          country: t.country,
+          locality: t.locality,
+          deepLink: t.deepLink,
+          price: t.price,
+          hotel: t.hotel,
+          days: t.days,
+          discount: t.discount,
+          imageUrl: t.photoUrl,
+        }))
+    : []
+  // Starý výběr (nejlevnější zájezdy destinací) se počítá jen jako doplněk:
+  // bez feedu celý, s feedem jen dorovnává řádek, když z uloženého výběru
+  // přežilo méně než limitPerKind termínů.
+  const needFallbackTours = feedTours.length < limitPerKind
 
   const pages = res.docs ?? []
-  if (pages.length === 0) return { flights: [], tours: [] }
+  if (pages.length === 0) return { flights: [], tours: feedTours }
 
   // Fotky míst (id → URL) jedním hromadným dotazem.
   const enriched = await enrichFeaturedImages(pages)
@@ -1501,7 +1604,7 @@ async function fetchTopAffiliateDealsUncached(
         })
       }
     }
-    if (isValidDeal(deals?.invia)) {
+    if (needFallbackTours && isValidDeal(deals?.invia)) {
       const invia = deals!.invia!
       const existing = toursByLink.get(invia.deepLink)
       if (!existing || existing.specificity < specificity) {
@@ -1524,14 +1627,24 @@ async function fetchTopAffiliateDealsUncached(
       .slice(0, limitPerKind)
       .map(({ specificity: _, ...deal }) => deal)
 
-  return { flights: top(flightsByLink), tours: top(toursByLink) }
+  // Dorovnání řádku ze starého výběru bez duplicit (stejný deep-link).
+  const seen = new Set(feedTours.map((t) => t.deepLink))
+  const tours = needFallbackTours
+    ? [...feedTours, ...top(toursByLink).filter((t) => !seen.has(t.deepLink))].slice(
+        0,
+        limitPerKind,
+      )
+    : feedTours
+
+  return { flights: top(flightsByLink), tours }
 }
 
 const fetchTopAffiliateDealsCached = cached(
   fetchTopAffiliateDealsUncached,
   'top-affiliate-deals',
-  // Denní sync invaliduje obecný tag 'pages' (a stránky vlastníků nabídek).
-  () => ['pages'],
+  // Denní sync invaliduje obecný tag 'pages'; 'root_pages' kryje zápis do
+  // globálu Homepage (updateGlobal → hook globálů) i ruční změnu feedu v adminu.
+  () => ['pages', 'root_pages'],
 )
 
 /** Top nabídky dne pro homepage; prázdné seznamy = sekce se nezobrazí. */

@@ -247,13 +247,15 @@ export const Pages: CollectionConfig = {
             {
               // Denně přepisuje /api/sync-affiliate-deals (přímým SQL mimo hooky,
               // ať neroste historie verzí) — viz src/endpoints/syncAffiliateDeals.ts.
-              // V adminu SKRYTÉ: surový JSON editor jen mátl (a šlo do něj psát);
-              // co web zrovna ukazuje, je vidět na stránce, syrová data v DB.
+              // V adminu VYŘAZENÉ (`disabled`, ne `hidden`): surový JSON editor jen
+              // mátl, a skryté pole navíc zůstává ve stavu formuláře — redaktor,
+              // který má stránku otevřenou přes noční sync, by uložením vrátil
+              // včerejší nabídky. Co web zrovna ukazuje, je vidět na stránce.
               name: 'deals',
               label: 'Akční nabídky (stažená data)',
               type: 'json',
               admin: {
-                hidden: true,
+                disabled: true,
               },
             },
           ],
@@ -282,13 +284,14 @@ export const Pages: CollectionConfig = {
       // Klimatické normály (12 měsíců: min/max teplota, srážky) pro stránky
       // kategorie „Počasí" — plní /api/sync-climate-normals z Meteostatu
       // (přímým SQL mimo hooky, ať neroste historie verzí), souřadnice se
-      // berou z rodičovského místa. V adminu SKRYTÉ ze stejného důvodu jako
-      // affiliate.deals: surový JSON editor by jen mátl.
+      // berou z rodičovského místa. V adminu VYŘAZENÉ (`disabled`) ze stejného
+      // důvodu jako affiliate.deals: JSON editor by mátl a skryté pole by při
+      // uložení stránky z adminu přepsalo čerstvá data ze syncu starými.
       name: 'climateNormals',
       label: 'Klimatické normály (stažená data)',
       type: 'json',
       admin: {
-        hidden: true,
+        disabled: true,
       },
     },
     slugField(),

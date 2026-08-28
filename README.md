@@ -340,6 +340,21 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   update přes Local API by sypal historii verzí) a cache stránek se
   invaliduje ručně přes `revalidateTag`. Selhání zdroje nechá minulou
   nabídku beze změny.
+- Stejný běh plní i dlaždice zájezdů homepage sekce **„Dnešní akční
+  nabídky"**: z Inviou kurátorovaného feedu (globál **Homepage → Dnešní
+  akční nabídky**, feed s „Defaultním cílením Invia") vybere letecké zájezdy
+  s odletem z Prahy, seřadí podle výše slevy (štítek „−65 %" na dlaždici),
+  odstraní duplicitní hotely a kandidáty uloží do `dealsOfDay.deals` globálu
+  (přímým SQL ve stejné transakci jako stránky). Web při čtení odfiltruje
+  propadlé termíny, poskládá pestrý výběr přes destinace a kreslí první 4;
+  bez URL feedu (nebo když přežije méně termínů) dorovná řádek starším
+  chováním (nejlevnější zájezdy destinací). Letenky sekce zůstávají z Kiwi
+  přes stránky destinací.
+  **Nasazení:** sloupce globálu se na produkci nepřidávají samy (push jen
+  v dev) a globál Homepage čte i menu na každé stránce — proto **PŘED**
+  nasazením spustit
+  `ALTER TABLE homepage ADD COLUMN IF NOT EXISTS deals_of_day_invia_feed_url varchar, ADD COLUMN IF NOT EXISTS deals_of_day_deals jsonb;`
+  (starý kód sloupce navíc ignoruje), pak URL feedu v adminu a sync.
 - **Po nasazení změn v letenkách spusť sync ručně** (Actions → Sync affiliate
   deals → Run workflow). Do jeho doběhnutí drží databáze starší záznamy;
   letenka bez počtu nocí pochází z doby jednosměrného hledání a karta se
