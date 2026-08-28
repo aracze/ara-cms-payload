@@ -793,7 +793,7 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   Praktických informací je zjednodušená náhrada za 129kB originál. Robots.txt vylučuje
   `/go/` z procházení. Na mobilu karty po dvou, Praktické informace přes celou šířku.
 
-- **Panel „Praktické informace do …“** (`src/components/layout/page/practical-info-links.tsx`):
+- **Panel „Praktické informace do …"** (`src/components/layout/page/practical-info-links.tsx`):
   na stránkách kategorie **Místo k navštívení** jako poslední sekce POD články (legacy
   parita s `_practicalInfo.gsp`). Řada až 8 ikon s odkazy na podstránky praktických
   informací (Počasí, Doprava, Vstup, Měna, Zdraví, Kultura, Jídlo, Ubytování): každá
@@ -802,8 +802,8 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   panelu, takže sekce nepřidává žádný dotaz do CMS. Dlaždice bez stránky se vynechá,
   bez jediné se nevykreslí ani sekce; kontinent (stránka bez rodiče) panel nemá.
   Nadpis skloňuje vlastníka praktických informací (`practicalInfoOwner`), ne aktuální
-  stránku — Dubrovník s chorvatskými odkazy říká „do Chorvatska“. Ikony sedí na kruhových
-  podkladech v barvách karet sekce „Příprava do …“ (podklad `#f3f6fa`, rámeček `#e0e8f1`,
+  stránku — Dubrovník s chorvatskými odkazy říká „do Chorvatska". Ikony sedí na kruhových
+  podkladech v barvách karet sekce „Příprava do …" (podklad `#f3f6fa`, rámeček `#e0e8f1`,
   hover se stínem — volba uživatele 28. 8. 2026 z variant v artifactu). Ikony jsou
   originální legacy SVG (z `assets/images/information/` a base64 pozadí v kickstart.css,
   fill `currentColor`) v opticky vyvážených velikostech; silnice je glyph z SVG fontu
