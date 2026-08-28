@@ -4,7 +4,7 @@ import configPromise from '../src/payload.config'
 import {
   isR2Configured,
   r2Delete,
-  r2ListKeys,
+  r2ListObjects,
   r2ObjectExists,
   r2Put,
   resolveR2Key,
@@ -25,6 +25,9 @@ import {
  * Staré migrované avatary bez složky `avatars/` sdílejí soubor s kolekcí
  * Media — jejich záloha patří Media a tento skript je záměrně přeskakuje.
  */
+
+/** Osiřelý objekt mladší než tohle neuklízíme (viz úklid níž). */
+const ORPHAN_MIN_AGE_MS = 10 * 60 * 1000
 
 const run = async () => {
   if (!isR2Configured()) {
@@ -94,9 +97,17 @@ const run = async () => {
   }
 
   // Osiřelé klíče (dokument už neexistuje) — pryč, zrcadlo drží jen aktuální.
+  // Objekty mladší než ORPHAN_MIN_AGE_MS nemažeme: mohl je právě zapsat hook
+  // pro avatar nahraný AŽ PO našem snímku databáze — souběh bez zámků.
   let orphansRemoved = 0
-  for (const key of await r2ListKeys('avatars/')) {
+  let tooYoung = 0
+  const cutoff = Date.now() - ORPHAN_MIN_AGE_MS
+  for (const { key, lastModified } of await r2ListObjects('avatars/')) {
     if (expectedKeys.has(key)) continue
+    if (!lastModified || lastModified.getTime() > cutoff) {
+      tooYoung++
+      continue
+    }
     try {
       await r2Delete(key)
       console.log(`Osiřelý klíč smazán: ${key}`)
@@ -109,7 +120,7 @@ const run = async () => {
 
   console.log(
     `Hotovo: ${backedUp} zálohováno, ${skipped} už v R2, ${orphansRemoved} osiřelých smazáno, ` +
-      `${legacy} legacy (spravuje Media), ${failed} chyb.`,
+      `${tooYoung} čerstvých ponecháno, ${legacy} legacy (spravuje Media), ${failed} chyb.`,
   )
   process.exit(failed > 0 ? 1 : 0)
 }

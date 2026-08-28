@@ -112,9 +112,12 @@ export async function r2Delete(key: string): Promise<void> {
   await s3Client.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }))
 }
 
-/** Všechny klíče pod prefixem (stránkuje; pro malé množiny jako avatars/). */
-export async function r2ListKeys(prefix: string): Promise<string[]> {
-  const keys: string[] = []
+/** Objekt v R2 tak, jak ho vrací výpis (klíč + čas posledního zápisu). */
+export type R2ListedObject = { key: string; lastModified?: Date }
+
+/** Všechny objekty pod prefixem (stránkuje; pro malé množiny jako avatars/). */
+export async function r2ListObjects(prefix: string): Promise<R2ListedObject[]> {
+  const objects: R2ListedObject[] = []
   let continuationToken: string | undefined
   do {
     const page = await s3Client.send(
@@ -125,9 +128,9 @@ export async function r2ListKeys(prefix: string): Promise<string[]> {
       }),
     )
     for (const item of page.Contents ?? []) {
-      if (item.Key) keys.push(item.Key)
+      if (item.Key) objects.push({ key: item.Key, lastModified: item.LastModified })
     }
     continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined
   } while (continuationToken)
-  return keys
+  return objects
 }
