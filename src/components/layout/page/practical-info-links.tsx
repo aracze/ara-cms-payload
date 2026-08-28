@@ -68,7 +68,7 @@ export function PracticalInfoLinks({ genitive, items }: PracticalInfoLinksProps)
               <li key={item.category}>
                 <Link
                   href={item.href}
-                  className="group flex w-[96px] flex-col items-center gap-3 sm:w-24"
+                  className="group flex w-[96px] flex-col items-center gap-4 sm:w-24"
                 >
                   <span className="flex size-[88px] items-center justify-center rounded-full border border-[#e0e8f1] bg-[#f3f6fa] text-[#1a3f6c] transition-all duration-300 [--sun-mask:#f3f6fa] group-hover:-translate-y-0.5 group-hover:text-[#2a5a9c] group-hover:shadow-[0_10px_28px_rgba(26,63,108,0.12)]">
                     {/* Nakloněná dvojice pasů sedí opticky o fous mimo těžiště
