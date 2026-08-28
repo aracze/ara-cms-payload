@@ -265,7 +265,7 @@ const HOMEPAGE_TOURS_STORE_LIMIT = 20
 async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal[]> {
   const offers = await fetchInviaOffers(feedUrl)
 
-  const candidates: HomepageTourDeal[] = []
+  const candidates: { deal: HomepageTourDeal; hotelId: string }[] = []
   for (const o of offers) {
     if (text(o.transportation).toLowerCase() !== 'letecky') continue
     if (!isFromPrague(o)) continue
@@ -277,10 +277,13 @@ async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal
     // se bere jako „bez slevy", ať se nevykreslí štítek „−1 %".
     const discount = Math.round(Number(o.discount))
     candidates.push({
-      ...base,
-      country,
-      locality: text(o.destination?.locality) || null,
-      discount: Number.isFinite(discount) && discount > 0 && discount <= 100 ? discount : 0,
+      deal: {
+        ...base,
+        country,
+        locality: text(o.destination?.locality) || null,
+        discount: Number.isFinite(discount) && discount > 0 && discount <= 100 ? discount : 0,
+      },
+      hotelId: text(o.hotelinfo?.id),
     })
   }
   if (candidates.length === 0) {
@@ -288,14 +291,19 @@ async function fetchHomepageTourDeals(feedUrl: string): Promise<HomepageTourDeal
   }
 
   // Nejvýhodnější nabídka první: podle slevy, při shodě podle ceny.
-  candidates.sort((a, b) => b.discount - a.discount || a.price - b.price)
+  candidates.sort((a, b) => b.deal.discount - a.deal.discount || a.deal.price - b.deal.price)
 
-  // Dedup hotelů: stejný hotel bývá ve feedu ve víc termínech (klíč jméno +
-  // lokalita — id hotelu feed u části nabídek neuvádí). Díky řazení výše
-  // vyhrává termín s největší slevou.
+  // Dedup hotelů: stejný hotel bývá ve feedu ve víc termínech. Klíč je id
+  // hotelu z feedu, bez něj jméno + lokalita; nabídka bez jména hotelu se
+  // nesmí slít s ostatními bezejmennými, proto pro ni platí deep-link.
+  // Díky řazení výše vyhrává termín s největší slevou.
   const byHotel = new Map<string, HomepageTourDeal>()
-  for (const deal of candidates) {
-    const key = `${deal.hotel}|${deal.locality ?? ''}`
+  for (const { deal, hotelId } of candidates) {
+    const key = hotelId
+      ? `id:${hotelId}`
+      : deal.hotel
+        ? `${deal.hotel}|${deal.locality ?? ''}`
+        : `link:${deal.deepLink}`
     if (!byHotel.has(key)) byHotel.set(key, deal)
   }
   return [...byHotel.values()].slice(0, HOMEPAGE_TOURS_STORE_LIMIT)
