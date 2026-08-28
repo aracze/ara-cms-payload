@@ -8,6 +8,11 @@ import { PlacesToVisit } from './places-to-visit'
 import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
 import { PreparationSection } from './preparation-section'
+import {
+  PracticalInfoLinks,
+  practicalInfoPanelDefs,
+  type PracticalInfoLinkItem,
+} from './practical-info-links'
 import { DealsSection, parseAffiliateDeals } from './deals-section'
 import { ClimateSection, parseClimateNormals, climateHeading } from './climate-section'
 import { WeatherNowSection, WeatherForecastSection, forecastHeading } from './weather-now-section'
@@ -38,7 +43,7 @@ import { TeamSection } from './team-section'
 import { ABOUT_PAGE_SLUG } from '@/lib/team'
 import { composePracticalInfoHtml } from '@/lib/practical-info'
 import { fetchExchangeRate } from '@/lib/exchange-rate'
-import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
+import { buildPageTitle, getGenitivePlace, rootPageCategories } from '@/lib/page-title'
 import {
   ancestorSlugsNearestFirst,
   breadcrumbListJsonLd,
@@ -231,7 +236,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const climateLocative = contextPlace.detail?.locative || `v ${contextPlace.title}`
   // Druhý pád VČETNĚ předložky, jak ho drží admin („do Londýna", „na Maltu") —
   // nadpis z něj skládá „Nejlepší doba na cestu do Londýna".
-  const climateGenitive = contextPlace.detail?.genitive || `do ${contextPlace.title}`
+  const climateGenitive = getGenitivePlace(contextPlace)
   // Stránka počasí se chová dvojím způsobem podle toho, co je pod ní:
   //  · má-li pod sebou místa s vlastní stránkou počasí (Chorvatsko → Dubrovník,
   //    Split, Záhřeb), vypíše jejich PŘEHLED. „Vlastní" počasí by se počítalo ze
@@ -423,7 +428,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     panelSeason && seasonSource
       ? {
           season: panelSeason,
-          heading: `Kdy jet ${page.detail?.genitive || `do ${page.title}`}`,
+          heading: `Kdy jet ${getGenitivePlace(page)}`,
           href: seasonSource.fullSlug,
         }
       : null
@@ -436,7 +441,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const inheritedParsedDeals = inheritedDeals ? parseAffiliateDeals(inheritedDeals.deals) : null
   const dealsSection = ownAffiliateDeals
     ? {
-        genitive: page.detail?.genitive || `do ${page.title}`,
+        genitive: getGenitivePlace(page),
         placeTitle: page.title,
         // Vlastní fotka stránky (bez fallbacku na kořen jako u hera — cizí
         // fotka by u nabídky destinace byla zavádějící).
@@ -561,22 +566,42 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   // (San Francisco) zdědí tu nejbližšího předka (USA) — a nadpis karty se pak
   // musí týkat TOHO předka, ne aktuální stránky, jinak by odkaz na USA nesl
   // titulek San Francisca.
-  const ownPracticalInfoChild = pageChildren.find(
-    (child) => child.category === PageCategory.Prakticke_informace,
-  )
-  const practicalInfoChild =
-    ownPracticalInfoChild ??
-    practicalInfoSource.children.find(
-      (child) => child.category === PageCategory.Prakticke_informace,
-    )
-  const practicalInfoOwner = ownPracticalInfoChild ? page : practicalInfoSource.sourcePage
-  const practicalInfo = practicalInfoChild
+  // Podstránka dané kategorie: nejdřív mezi vlastními dětmi, jinak u dětí
+  // nejbližšího předka s praktickými informacemi. JEDINÉ místo s tímhle
+  // pravidlem dědění — sdílí ho karta v pravém sloupci i dlaždice panelu,
+  // aby se od sebe nemohly rozjet. Vrací i vlastníka (čí je stránka), ze
+  // kterého se skloňují nadpisy.
+  const findInheritedChild = (category: PageCategory) => {
+    const own = pageChildren.find((child) => child.category === category)
+    if (own) return { child: own, owner: page }
+    const inherited = practicalInfoSource.children.find((child) => child.category === category)
+    return inherited ? { child: inherited, owner: practicalInfoSource.sourcePage } : null
+  }
+
+  const practicalInfoLookup = findInheritedChild(PageCategory.Prakticke_informace)
+  // Nadpisy se musí týkat VLASTNÍKA praktických informací, ne aktuální
+  // stránky — jinak by odkaz na stránky USA nesl titulek San Francisca.
+  const practicalInfoOwner = practicalInfoLookup?.owner ?? practicalInfoSource.sourcePage
+  const practicalInfo = practicalInfoLookup
     ? {
-        fullSlug: practicalInfoChild.fullSlug,
+        fullSlug: practicalInfoLookup.child.fullSlug,
         ownerTitle: practicalInfoOwner.title,
         ownerGenitive: practicalInfoOwner.detail?.genitive ?? null,
       }
     : null
+
+  // Panel „Praktické informace do …" pod články (legacy `_practicalInfo.gsp`):
+  // dlaždice vede na podstránku své kategorie (dědění viz findInheritedChild;
+  // žádný dotaz navíc). Dlaždice bez stránky se vynechá. Kontinent (stránka
+  // bez rodiče) panel nemá — legacy parita; jeho děti jsou země a jejich
+  // praktické informace mu nepatří.
+  const practicalInfoLinkItems: PracticalInfoLinkItem[] =
+    page.category === PageCategory.Misto_k_navstiveni && page.parent
+      ? practicalInfoPanelDefs.flatMap((def) => {
+          const target = findInheritedChild(def.category)
+          return target ? [{ def, href: target.child.fullSlug }] : []
+        })
+      : []
 
   return (
     <div className="flex flex-col bg-white transition-all duration-500">
@@ -779,7 +804,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
             (legacy parita). */}
         {page.category === PageCategory.Misto_k_navstiveni && (
           <PreparationSection
-            genitive={page.detail?.genitive || `do ${page.title}`}
+            genitive={getGenitivePlace(page)}
             affiliate={page.affiliate}
             practicalInfo={practicalInfo}
           />
@@ -797,6 +822,19 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
               destinationLocative={page.detail?.locative}
             />
           ))}
+
+        {/* Panel odkazů „Praktické informace do …" — poslední sekce stránky
+            místa, pod články (legacy parita s _practicalInfo.gsp). Nadpis
+            skloňuje vlastníka praktických informací, ne aktuální stránku:
+            Dubrovník s vlastním počasím, ale chorvatskými praktickými
+            informacemi dostane „do Chorvatska" (legacy parita — titulek se
+            řídil stránkou Praktické informace, ne jednotlivými dlaždicemi). */}
+        {practicalInfoLinkItems.length > 0 && (
+          <PracticalInfoLinks
+            genitive={getGenitivePlace(practicalInfoOwner)}
+            items={practicalInfoLinkItems}
+          />
+        )}
       </article>
     </div>
   )
