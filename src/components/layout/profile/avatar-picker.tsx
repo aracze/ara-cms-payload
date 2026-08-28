@@ -1,17 +1,26 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Camera } from 'lucide-react'
 import { UserAvatar } from '@/components/user-avatar'
 import { AVATAR_ACCEPT } from '@/lib/profile-limits'
 import { useOznamZmenu } from '@/components/layout/profile/profile-edit-frame'
 
+// Dialog (a s ním celá knihovna react-easy-crop) se stahuje až ve chvíli,
+// kdy si člověk poprvé vybere soubor — do té doby profil nic nenese.
+const AvatarCropDialog = dynamic(
+  () => import('./avatar-crop-dialog').then((m) => m.AvatarCropDialog),
+  { ssr: false },
+)
+
 /**
  * Fotka v hlavičce profilu v režimu úprav.
  *
  * Je to obyčejný `<input type="file">` schovaný pod popiskem, který vypadá jako
- * samotná fotka — kliknutím se rovnou otevře výběr souboru. Žádné mezikroky:
- * přesně tohle si člověk představí, když chce vyměnit profilovku.
+ * samotná fotka — kliknutím se rovnou otevře výběr souboru. Po vybrání se
+ * otevře dialog ručního výřezu (viz `AvatarCropDialog`); do formuláře se pak
+ * vloží už oříznutý čtverec.
  *
  * Skryté pole `removeAvatar` řeší odebrání; server podle něj pozná rozdíl mezi
  * „nic jsem neměnil" a „chci být bez fotky".
@@ -21,6 +30,8 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
   const fileRef = useRef<HTMLInputElement>(null)
   const [nahled, setNahled] = useState<string | null>(null)
   const [odebrat, setOdebrat] = useState(false)
+  // Soubor čekající v dialogu výřezu; do formuláře se dostane až po potvrzení.
+  const [kOrezu, setKOrezu] = useState<File | null>(null)
   // Odebrání je tlačítko, ne psaní do pole — formulář by o něm sám nevěděl
   // a lišta by tvrdila, že nic neuloženého nemáš.
   const oznamZmenu = useOznamZmenu()
@@ -44,11 +55,34 @@ export function AvatarPicker({ name, avatarUrl }: { name: string; avatarUrl: str
         accept={AVATAR_ACCEPT}
         className="peer sr-only"
         onChange={(e) => {
+          // Náhled ani formulář se zatím nemění — soubor jde nejdřív do
+          // dialogu výřezu a rozhodne se tam.
           const soubor = e.target.files?.[0]
-          setNahled(soubor ? URL.createObjectURL(soubor) : null)
-          if (soubor) setOdebrat(false)
+          if (soubor) setKOrezu(soubor)
         }}
       />
+      {kOrezu && (
+        <AvatarCropDialog
+          file={kOrezu}
+          onDone={(soubor) => {
+            // Výřez do formuláře: input přijímá soubory jen přes DataTransfer.
+            const dt = new DataTransfer()
+            dt.items.add(soubor)
+            if (fileRef.current) fileRef.current.files = dt.files
+            setNahled(URL.createObjectURL(soubor))
+            setOdebrat(false)
+            setKOrezu(null)
+            // Programové nastavení `files` událost change nevyvolá — formuláři
+            // je potřeba změnu ohlásit, jinak by nevěděl o neuloženém výřezu.
+            oznamZmenu()
+          }}
+          onCancel={() => {
+            // Zrušení = jako by si člověk žádný soubor nevybral.
+            if (fileRef.current) fileRef.current.value = ''
+            setKOrezu(null)
+          }}
+        />
+      )}
       {/* Popisek JE ta fotka — proto `cursor-pointer` a zaostření z klávesnice
           přes `peer-focus-visible` (vlastní vstup je vizuálně skrytý). */}
       <label

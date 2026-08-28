@@ -646,6 +646,11 @@ pod fotkou (`.image-caption`), fotky bez rozměrů v DB mají fallback z náhled
     `upload.mimeTypes` je jen filtr dialogu pro výběr souboru a dá se obejít.
   - **Ořez na čtverec 512×512 dělá server** (`resizeOptions` + `fit: 'cover'`) — legacy web po
     uživatelích chtěl, ať si čtvercovou fotku připraví sami, jinak se avatar deformoval.
+  - **Ruční výřez v prohlížeči** (`avatar-crop-dialog.tsx`, knihovna `react-easy-crop`):
+    po vybrání souboru v profilu se otevře dialog — fotka se posune tažením a přiblíží
+    posuvníkem/štipcem, kruh odpovídá přesně budoucí profilovce. Výřez se ořízne už na
+    klientu (canvas → JPEG 512 px), takže projde i fotka větší než 2 MB; serverový ořez
+    ze středu zůstává jako pojistka, když klient fotku nepřečte (pošle se originál).
   - Původní název souboru se zahazuje (`avatar-<userId>-<čas>.<ext>`) — bývá v něm jméno nebo
     cesta z cizího počítače a byl by veřejně v adrese.
   - Soubory jdou na **Cloudinary** stejně jako `media` (zapíná se per kolekce v
