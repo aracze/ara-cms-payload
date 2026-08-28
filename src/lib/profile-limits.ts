@@ -7,8 +7,10 @@
  * (nebo naopak že mu formulář brání v něčem, co je povolené).
  *
  * Tenhle soubor je čistá data, žádný server-only kód — smí ho tedy načíst
- * i komponenta běžící v prohlížeči.
+ * i komponenta běžící v prohlížeči (toMediaProxy je taky izomorfní).
  */
+
+import { toMediaProxy } from '@/lib/cloudinary-loader'
 
 export const MAX_NAME = 80
 export const MAX_DESCRIPTION = 1000
@@ -26,5 +28,6 @@ export const AVATAR_ACCEPT = AVATAR_MIME.join(',')
  * Tady, ne v komponentě: adresu mění redakce při výměně fotky a nemá kvůli
  * tomu chodit do kódu vzhledu. Profil má vlastní (i s rozmazaným náhledem).
  */
-export const AUTH_COVER_URL =
-  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg'
+export const AUTH_COVER_URL = toMediaProxy(
+  'https://res.cloudinary.com/ara/image/upload/v1785491112/mn4obrhlr3khap1ocrej.jpg',
+)

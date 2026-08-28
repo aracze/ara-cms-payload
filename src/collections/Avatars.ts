@@ -2,6 +2,11 @@ import type { Access, CollectionConfig, FieldAccess, Payload } from 'payload'
 import { APIError } from 'payload'
 import { AVATAR_MIME, MAX_AVATAR_BYTES } from '../lib/profile-limits'
 import { isR2Configured, r2Delete, r2Put, resolveR2Key } from '../lib/r2-backup'
+import { fromMediaProxy } from '../lib/cloudinary-loader'
+import {
+  normalizeUploadUrlsToCloudinary,
+  rewriteUploadUrlsToMediaProxy,
+} from '../hooks/media-proxy'
 
 /**
  * Profilové fotky uživatelů — ZÁMĚRNĚ mimo kolekci Media.
@@ -78,7 +83,9 @@ async function mirrorAvatarToR2(payload: Payload, doc: AvatarR2Doc & { url?: str
   if (!r2Key || !doc.url) return
   try {
     if (!isR2Configured()) throw new Error('Chybí konfigurace R2 (environment variables)')
-    const response = await fetch(doc.url, { signal: AbortSignal.timeout(15_000) })
+    // Zrcadlo musí být nezávislé na media proxy (její výpadkový režim čte
+    // právě z R2) — originál se stahuje vždy přímo z Cloudinary.
+    const response = await fetch(fromMediaProxy(doc.url), { signal: AbortSignal.timeout(15_000) })
     if (!response.ok) throw new Error(`Načtení z Cloudinary selhalo: ${response.statusText}`)
     await r2Put({
       key: r2Key,
@@ -153,6 +160,8 @@ export const Avatars: CollectionConfig = {
     adminThumbnail: ({ doc }) => (doc.url as string) || null,
   },
   hooks: {
+    // Adresy avatarů jdou ven z CMS rovnou přes media proxy (viz src/hooks/media-proxy.ts).
+    afterRead: [rewriteUploadUrlsToMediaProxy],
     beforeOperation: [
       async ({ args, operation }) => {
         if (operation !== 'create' && operation !== 'update') return args
@@ -197,6 +206,7 @@ export const Avatars: CollectionConfig = {
       },
     ],
     beforeChange: [
+      normalizeUploadUrlsToCloudinary,
       ({ data, req, operation }) => {
         // Vlastník se bere ze session, ne z dat — jinak by šlo nahrát avatar
         // „za někoho jiného" a pak mu ho měnit.
