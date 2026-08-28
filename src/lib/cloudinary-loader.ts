@@ -3,9 +3,19 @@
  * kterou umíme transformovat (obsahuje `/upload/`). Ostatní zdroje (lokální
  * /assets, Payload uploads) transformovat nejdou — u nich nemá `next/image`
  * optimalizace přes tento loader smysl.
+ *
+ * Kontrola HOSTITELE, ne podřetězce (CodeQL: „res.cloudinary.com" může být
+ * kdekoliv v cizí URL — https://res.cloudinary.com.utocnik.cz by prošla
+ * a dostala transformace). Relativní cesty (/assets/…) URL parser odmítne.
  */
 export function isCloudinary(src: string): boolean {
-  return (src.includes('res.cloudinary.com') || isMediaProxyUrl(src)) && src.includes('/upload/')
+  if (!src.includes('/upload/')) return false
+  if (isMediaProxyUrl(src)) return true
+  try {
+    return new URL(src).hostname === 'res.cloudinary.com'
+  } catch {
+    return false
+  }
 }
 
 /**

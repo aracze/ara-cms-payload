@@ -54,6 +54,15 @@ describe('toMediaProxy', () => {
     )
   })
 
+  it('isCloudinary kontroluje hostitele, ne podřetězec (CodeQL)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_MEDIA_BASE_URL', 'https://media.ara.cz')
+    const { isCloudinary } = await import('@/lib/cloudinary-loader')
+    expect(isCloudinary(ORIGINAL)).toBe(true)
+    expect(isCloudinary('https://res.cloudinary.com.utocnik.cz/image/upload/x.jpg')).toBe(false)
+    expect(isCloudinary('https://utocnik.cz/res.cloudinary.com/image/upload/x.jpg')).toBe(false)
+    expect(isCloudinary('/assets/upload/logo.svg')).toBe(false)
+  })
+
   it('adresa už přepsaná na proxy (data z CMS) projde variantou i loaderem', async () => {
     vi.stubEnv('NEXT_PUBLIC_MEDIA_BASE_URL', 'https://media.ara.cz')
     const { cloudinaryVariant, isCloudinary, toMediaProxy } =
