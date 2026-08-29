@@ -1,10 +1,8 @@
 'use client'
 
+import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
-import Image from 'next/image'
-import Link from 'next/link'
-import { isCloudinary } from '@/lib/cloudinary-loader'
+import { ThumbRow, thumbTitleClass } from './thumb-row'
 import { ArticleRowCard, type ArticleCardVM } from './article-row'
 
 // Klientský ostrůvek: drží jen `visibleCount` a přepíná viditelnost přebytku.
@@ -152,20 +150,18 @@ export const ArticlesRowsClient = ({ items }: { items: ArticleCardVM[] }) => {
 
           {hasMore && (
             <div className="mt-10 flex justify-center">
-              <button
-                type="button"
-                onClick={() => setVisibleCount((c) => c + ARTICLES_STEP)}
-                className="inline-flex items-center gap-2 rounded-full border-2 border-[#215491]/30 px-7 py-3 text-sm font-bold uppercase tracking-wider text-[#215491] font-heading transition-all hover:border-[#215491] hover:bg-[#215491] hover:text-white"
-              >
+              <LoadMoreButton onClick={() => setVisibleCount((c) => c + ARTICLES_STEP)}>
                 Zobrazit další články
-                <ChevronDown className="h-4 w-4" />
-              </button>
+              </LoadMoreButton>
             </div>
           )}
         </div>
 
         {/* Pravý panel: přehled všech článků rubriky s miniaturami (nápad
             uživatele, 28.8.2026 — „ať čtenář hned vidí, co v sekci je").
+            Nadpis „Články v rubrice · N" ve stejném stylu jako „Nejnovější
+            články" na homepage (normální řez, ne uppercase) — vyzkoušena
+            i podoba bez nadpisu, uživatel ho chtěl zpět (29. 8.).
             Odkazy vedou rovnou na články. Jen desktop. Panel NEMÁ vnitřní
             rolování — jede celý se stránkou a o fixaci nahoře/dole se stará
             „chytré" lepení (useEffect výš), takže na konci stránky je vidět
@@ -175,35 +171,19 @@ export const ArticlesRowsClient = ({ items }: { items: ArticleCardVM[] }) => {
               přepnutí kotvy (viz useEffect výš). */}
           <div ref={spacerRef} aria-hidden="true" />
           <div ref={panelRef} className="sticky">
-            <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-gray-400">
+            <p className="font-heading mb-3 text-[16px] font-bold text-[#1a3f6c]">
               Články v rubrice · {items.length}
             </p>
             <nav aria-label="Seznam článků v rubrice" className="pr-2">
-              <ul>
+              <ul className="divide-y divide-gray-100">
                 {items.map((item) => (
-                  <li key={item.key} className="border-b border-gray-100 last:border-0">
-                    <Link
-                      href={item.href}
-                      className="group/toc grid grid-cols-[40px_1fr] items-center gap-2.5 py-2"
-                    >
-                      <span className="relative block h-10 w-10 overflow-hidden rounded-lg">
-                        {item.imageUrl ? (
-                          <Image
-                            src={item.imageUrl}
-                            alt=""
-                            fill
-                            className="object-cover"
-                            sizes="40px"
-                            unoptimized={!isCloudinary(item.imageUrl)}
-                          />
-                        ) : (
-                          <span className="block h-full w-full bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10" />
-                        )}
-                      </span>
-                      <span className="line-clamp-2 text-[13px] font-semibold leading-snug text-[#3d4a57] transition-colors group-hover/toc:text-[#215491]">
+                  <li key={item.key}>
+                    {/* Kompaktní velikost (44 px) — rejstřík s 18+ položkami. */}
+                    <ThumbRow href={item.href} src={item.imageUrl} size="sm" className="py-2">
+                      <span className={`${thumbTitleClass('sm')} line-clamp-2 block`}>
                         {item.title}
                       </span>
-                    </Link>
+                    </ThumbRow>
                   </li>
                 ))}
               </ul>

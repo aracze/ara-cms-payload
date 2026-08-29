@@ -1,8 +1,9 @@
 'use client'
 
+import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
+import { Thumb } from '@/components/features/thumb-row'
 import { MapPin, Star, MessageCircle, type LucideIcon } from 'lucide-react'
 import type { ActivityItem } from '@/types/payload'
 import { formatCommentDate } from '@/lib/relative-time'
@@ -111,13 +112,12 @@ export function WhatsNewSection({
 
       {filtered.length > visibleCount && (
         <div className="relative text-center mt-3">
-          <button
-            type="button"
+          <LoadMoreButton
+            variant="text"
             onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-            className="text-[13px] font-bold text-[#215491] hover:text-[#1a4579] tracking-wide px-4 py-2 rounded-lg hover:bg-[#215491]/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#215491]/50"
           >
-            Zobrazit další ↓
-          </button>
+            Zobrazit další
+          </LoadMoreButton>
         </div>
       )}
     </section>
@@ -147,13 +147,7 @@ function ActivityRow({
     >
       <span className="relative shrink-0">
         {item.image ? (
-          <Image
-            src={item.image}
-            alt=""
-            width={48}
-            height={48}
-            className="w-12 h-12 rounded-xl object-cover"
-          />
+          <Thumb src={item.image} />
         ) : (
           <UserAvatar name={item.authorName || '?'} avatarUrl={item.avatarUrl} size={48} />
         )}
