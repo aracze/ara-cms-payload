@@ -173,6 +173,34 @@ const runPgRestoreDockerAuto = async (service: string, dbUrl: string, filePath: 
   return { code: 1, stderr: lastStderr || 'unknown error' }
 }
 
+/**
+ * Smaže všechna ne-systémová schémata (CASCADE) a znovu založí prázdné `public`.
+ * Import je destruktivní už z definice (README: „overwrites all existing data“),
+ * takže tím o nic navíc nepřicházíme — jen se restore stane deterministický.
+ */
+const wipeUserSchemas = async (db: unknown) => {
+  const drizzle = (db as { drizzle?: { execute: (q: unknown) => Promise<unknown> } } | null)
+    ?.drizzle
+  if (!drizzle) return
+
+  await drizzle.execute(sql`
+    DO $$
+    DECLARE
+      schema_name text;
+    BEGIN
+      FOR schema_name IN
+        SELECT nspname FROM pg_namespace
+        WHERE left(nspname, 3) <> 'pg_' AND nspname <> 'information_schema'
+      LOOP
+        EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', schema_name);
+      END LOOP;
+    END
+    $$;
+    CREATE SCHEMA public;
+    GRANT ALL ON SCHEMA public TO public;
+  `)
+}
+
 export const dbImportEndpoint: Endpoint = {
   path: '/db-import',
   method: 'post',
@@ -215,18 +243,13 @@ export const dbImportEndpoint: Endpoint = {
       const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER
       let result: { code: number; stderr: string }
 
-      if (isProduction) {
-        // Wipe the schema manualy first to prevent dependency errors during restore
-        const db = req.payload.db as any
-        if (db && db.drizzle) {
-          await db.drizzle.execute(sql`
-            DROP SCHEMA IF EXISTS public CASCADE;
-            CREATE SCHEMA public;
-            GRANT ALL ON SCHEMA public TO public;
-            GRANT ALL ON SCHEMA public TO postgres;
-          `)
-        }
+      // Před obnovou zahodíme VŠECHNA uživatelská schémata (public, zaloha, …), ne jen
+      // `public`. `pg_restore --clean` maže pouze objekty obsažené v dumpu; když v cílové
+      // DB leží ve stejném schématu tabulky navíc (lokální zálohy, rozpracované větve),
+      // `DROP SCHEMA` selže na závislostech a celý import se v transakci vrátí zpět.
+      await wipeUserSchemas(req.payload.db)
 
+      if (isProduction) {
         // Direct pg_restore in production
         result = await runPgRestoreDirect(databaseUrl, filePath)
       } else {
