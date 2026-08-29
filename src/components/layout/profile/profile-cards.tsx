@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { PlaceCardImage } from '@/components/layout/page/place-card-image'
-import { PhotoTile, PinIcon } from '@/components/features/photo-tile'
+import { PHOTO_TILE_FRAME, PhotoTile, PinIcon } from '@/components/features/photo-tile'
 import { StarRating } from '@/components/features/reviews/star-rating'
 import { formatReviewDate } from '@/lib/relative-time'
 import type {
@@ -23,8 +23,7 @@ import type {
  */
 
 /** Sdílený rám karty: stejná výška, rádius, stín a chování při přejezdu. */
-const CARD =
-  'group relative flex h-[280px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] transition-shadow duration-500 hover:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.3)]'
+const CARD = `group relative flex h-[280px] flex-col overflow-hidden ${PHOTO_TILE_FRAME}`
 
 /** Odznak na bílé kartě — plný modrý kruh s bílou ikonou. */
 function SolidBadge({ children }: { children: React.ReactNode }) {
@@ -123,8 +122,11 @@ function PhotoCard({
         size="lg"
         titleLines={3}
         badge={<Icon className="h-4 w-4 text-[#1a3f6c]" />}
+        // Na profilu jsou karty v jednom sloupci i na mobilu a sousedí s bílými
+        // kartami recenzí (280 px) — drž 280 všude, ne 240 jako v mřížce míst.
+        className="h-[280px]"
       >
-        <PlaceCardImage src={imageUrl} alt={title} hasMap={false} className="object-cover" />
+        <PlaceCardImage src={imageUrl} alt="" hasMap={false} className="object-cover" />
       </PhotoTile>
     )
   }

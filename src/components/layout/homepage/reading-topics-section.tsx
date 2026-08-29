@@ -101,7 +101,9 @@ export function ReadingTopicsSection({ rubriky }: { rubriky: InspirationLink[] }
               // Krátké názvy rubrik: všechny dlaždice stejný titulek (17 px),
               // ať se v jedné mřížce nestřídají dvě velikosti písma.
               titleSize="md"
-              className={`${mobileFull ? 'col-span-2' : ''} ${SPAN_CLASS[tile.span]}`}
+              // Mobil: dvě dlaždice v řadě bez ohledu na desktopové velikosti —
+              // řada musí mít jednu výšku, jinak by velká vedle malé zubatila.
+              className={`h-32 ${mobileFull ? 'col-span-2' : ''} ${SPAN_CLASS[tile.span]}`}
             >
               {rubrika.imageUrl && (
                 <Image

@@ -4,7 +4,7 @@ import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ReviewPublic } from '@/types/payload'
-import { reviewsCountLabel } from '@/lib/utils'
+import { reviewsCountLabel, pluralCs } from '@/lib/utils'
 import {
   createReview,
   getPageReviews,
@@ -334,7 +334,8 @@ export function InlineReviews({
         ))}
         {hiddenCount > 0 && (
           <LoadMoreButton variant="text" onClick={() => setShowAll(true)} className="mt-3">
-            Zobrazit další {hiddenCount === 1 ? 'recenzi' : 'recenze'} ({hiddenCount})
+            Zobrazit další {pluralCs(hiddenCount, ['recenzi', 'recenze', 'recenze'])} ({hiddenCount}
+            )
           </LoadMoreButton>
         )}
       </div>

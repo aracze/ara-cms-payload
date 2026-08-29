@@ -211,7 +211,6 @@ function SuperordinateGrid({
             poiId={place.id}
             size="lg"
             title={place.title}
-            className="poi-article"
             badge={<PinIcon className="h-4 w-4 text-[#1a3f6c]" />}
             topRight={
               showAnalyticsDebug ? (
@@ -232,7 +231,8 @@ function SuperordinateGrid({
             {imageUrl && (
               <PlaceCardImage
                 src={imageUrl}
-                alt={place.title}
+                // Název je hned pod fotkou v <h3> — alt by ho čtečce četl dvakrát.
+                alt=""
                 hasMap={hasMap}
                 className="object-cover"
               />

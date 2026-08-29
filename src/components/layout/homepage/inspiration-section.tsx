@@ -15,6 +15,8 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
   if (!data) return null
   const { rady, radyHref, articles } = data
   const hasRady = rady.length > 0
+  // První rada s fotkou (u rad bez fotky by nebylo co přednačíst).
+  const preloadKey = rady.find((rada) => rada.imageUrl)?.key
   const hasArticles = articles.length > 0
   if (!hasRady && !hasArticles) return null
 
@@ -27,28 +29,36 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
           sloupce — rozhodnutí uživatele 29. 8. 2026); odkaz „Všechny rady"
           je v dalším řádku pod dlaždicemi, tak jako dřív. Seznam je bez
           krabice — rámeček byl jediný orámovaný prvek v sekci a působil
-          jako přilepený. Řádky se rozdělí o výšku rovnoměrně (flex-1). */}
+          jako přilepený. Pořadí v DOM = pořadí na mobilu (dlaždice, odkaz,
+          články); na desktopu se články automaticky umístí do 3. sloupce
+          1. řádku a odkaz je explicitně v 2. řádku pod dlaždicemi.
+          Výšku řádku určují dlaždice (4 rady = 2 řady × 150 px) — seznam
+          4 článků je nižší a natáhne se; limity INSPIRATION_*_LIMIT
+          v lib/payload.ts musí zůstat sladěné (víc článků / méně rad by
+          poměr obrátilo a pod dlaždicemi by vznikl prázdný pás). */}
       <div className="grid gap-6 items-stretch md:grid-cols-3 md:gap-x-6 md:gap-y-3">
         {hasRady && (
           // Osamocený blok (bez článků) zabere celou šířku, jinak by vedle
           // něj zela prázdná třetina mřížky.
           <div
-            className={`order-1 grid grid-cols-2 gap-3 md:order-none md:gap-3.5 ${
+            className={`grid grid-cols-2 gap-3 md:gap-3.5 ${
               hasArticles ? 'md:col-span-2' : 'md:col-span-3'
             }`}
           >
-            {rady.map((rada, index) => (
+            {rady.map((rada) => (
               <PhotoTile key={rada.key} href={rada.href} title={rada.title} size="sm">
                 {rada.imageUrl && (
                   <Image
                     src={rada.imageUrl}
                     alt=""
                     fill
-                    // Dlaždice jsou hned pod herem (nad ohybem) a první z nich bývá LCP
-                    // elementem stránky — přednačíst (`preload`, v Next 16 náhrada za
-                    // `priority`) jen tu; přednačítání všech čtyř soupeřilo o síť
-                    // (připomínka z review PR #86). Ostatní se načtou líně.
-                    preload={index === 0}
+                    // Dlaždice jsou hned pod herem (nad ohybem). Přednačíst (`preload`,
+                    // v Next 16 náhrada za `priority`) jen PRVNÍ dlaždici s fotkou — je
+                    // LCP kandidátem; čtyři preloady soupeřily o síť (review PR #86).
+                    // Ostatní se nesmí načítat líně (jsou nad ohybem) → eager.
+                    preload={rada.key === preloadKey}
+                    fetchPriority={rada.key === preloadKey ? 'high' : undefined}
+                    loading={rada.key === preloadKey ? undefined : 'eager'}
                     className="object-cover"
                     sizes="(max-width: 768px) 50vw, 340px"
                   />
@@ -58,12 +68,18 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
           </div>
         )}
 
-        {hasArticles && (
-          <div
-            className={`order-3 flex flex-col md:order-none ${
-              hasRady ? 'md:col-start-3 md:row-start-1' : 'md:col-span-3'
-            }`}
+        {hasRady && (
+          <Link
+            href={radyHref}
+            // -mt-3: na mobilu má mřížka gap-6, odkaz ale patří těsně k dlaždicím (12 px).
+            className="-mt-3 justify-self-start text-[13px] font-bold text-[#215491] hover:text-[#1a4579] transition-colors md:mt-0 md:col-start-1 md:row-start-2"
           >
+            Všechny rady na cestu →
+          </Link>
+        )}
+
+        {hasArticles && (
+          <div className={`flex flex-col ${hasRady ? '' : 'md:col-span-3'}`}>
             <h3 className="font-heading text-[16px] font-bold text-[#1a3f6c] mb-3">
               Nejnovější články
             </h3>
@@ -87,15 +103,6 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
               ))}
             </ul>
           </div>
-        )}
-
-        {hasRady && (
-          <Link
-            href={radyHref}
-            className="order-2 justify-self-start text-[13px] font-bold text-[#215491] hover:text-[#1a4579] transition-colors md:order-none md:col-start-1 md:row-start-2"
-          >
-            Všechny rady na cestu →
-          </Link>
         )}
       </div>
     </section>

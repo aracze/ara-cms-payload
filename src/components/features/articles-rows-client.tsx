@@ -180,9 +180,7 @@ export const ArticlesRowsClient = ({ items }: { items: ArticleCardVM[] }) => {
                   <li key={item.key}>
                     {/* Kompaktní velikost (44 px) — rejstřík s 18+ položkami. */}
                     <ThumbRow href={item.href} src={item.imageUrl} size="sm" className="py-2">
-                      <span className={`${thumbTitleClass('sm')} line-clamp-2 block`}>
-                        {item.title}
-                      </span>
+                      <span className={`${thumbTitleClass('sm')} line-clamp-2`}>{item.title}</span>
                     </ThumbRow>
                   </li>
                 ))}

@@ -64,7 +64,7 @@ export function RelatedTouristPoints({
               {item.imageUrl && (
                 <PlaceCardImage
                   src={item.imageUrl}
-                  alt={item.title}
+                  alt=""
                   hasMap={false}
                   className="object-cover"
                 />

@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { isCloudinary } from '@/lib/cloudinary-loader'
 
 /**
  * Řádek s miniaturou — JEDEN vzor pro kompaktní výpisy „miniatura + text":
@@ -10,8 +11,8 @@ import { cn } from '@/lib/utils'
  * kopie s miniaturami 40/46/48 px, rohy 8/12 a titulky černé/modré/šedomodré.
  *
  * Rozhodnutí uživatele (29. 8. 2026, artifact „Výpisy článků", sekce 8):
- *  · rohy miniatur 12 px, titulek polotučný modrý #1a3f6c (při najetí #215491),
- *    řádky odděluje tenká linka (rodič: `divide-y divide-gray-100`);
+ *  · rohy miniatur 12 px, titulek modrý #1a3f6c (při najetí #215491) — tučnost
+ *    podle velikosti, viz `thumbTitleClass`; řádky odděluje tenká linka;
  *  · DVĚ velikosti: `md` 48 px pro seznamy k prohlížení, `sm` 44 px pro hustý
  *    rejstřík (panel rubriky s 18+ položkami) — jedna velikost by rejstřík
  *    natáhla o ~200 px;
@@ -48,6 +49,9 @@ export function Thumb({
         width={THUMB_PX[size]}
         height={THUMB_PX[size]}
         className={cn(box, 'object-cover')}
+        // Ne-Cloudinary zdroje (Payload uploady, /assets) se nedají
+        // transformovat — bez `unoptimized` by srcset nesl duplicitní URL.
+        unoptimized={!isCloudinary(src)}
       />
     )
   }

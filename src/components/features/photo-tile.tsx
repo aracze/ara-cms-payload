@@ -26,6 +26,21 @@ import { cn } from '@/lib/utils'
 
 export type PhotoTileSize = 'sm' | 'md' | 'lg'
 
+/** Rám dlaždice (rohy, stín, přejezd) — sdílí i bílé karty profilu bez fotky. */
+export const PHOTO_TILE_FRAME =
+  'rounded-2xl bg-white shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] transition-shadow duration-500 hover:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.3)]'
+
+/** Náhradní podklad bez fotky — jeden pro dlaždice i karty článků. */
+export function NoPreview() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10">
+      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1a3f6c]/20">
+        Bez náhledu
+      </span>
+    </div>
+  )
+}
+
 const SIZE_CLASS: Record<PhotoTileSize, string> = {
   // Mobil: dvě dlaždice vedle sebe → nižší, ale ne pruh (dřív h-20 = 80 px).
   sm: 'h-32 md:h-[150px]',
@@ -94,7 +109,8 @@ export function PhotoTile({
       href={href}
       data-poiid={poiId}
       className={cn(
-        'group relative block overflow-hidden rounded-2xl bg-white shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] transition-shadow duration-500 hover:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.3)]',
+        'group relative block overflow-hidden',
+        PHOTO_TILE_FRAME,
         SIZE_CLASS[size],
         className,
       )}
@@ -104,11 +120,7 @@ export function PhotoTile({
           {children}
         </div>
       ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10">
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1a3f6c]/20">
-            Bez náhledu
-          </span>
-        </div>
+        <NoPreview />
       )}
 
       {badge && (
@@ -119,10 +131,15 @@ export function PhotoTile({
       {topRight && <div className="absolute right-3 top-3">{topRight}</div>}
 
       {/* Ztmavení Z3 — viz hlavičku souboru. Arbitrary value, ať jsou tři
-          stupně přechodu přesně tam, kde mají být. */}
+          stupně přechodu přesně tam, kde mají být. Malé dlaždice (S) mají
+          titulky i na 3–4 řádky (rady na homepage), proto u nich přechod sahá
+          výš (78 % jako dřív), aby horní řádek nevyjel do světlé fotky. */}
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-[62%] bg-[linear-gradient(to_top,rgba(0,0,0,0.82),rgba(0,0,0,0.55)_30%,rgba(0,0,0,0.18)_70%,transparent)]"
+        className={cn(
+          'absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.82),rgba(0,0,0,0.55)_30%,rgba(0,0,0,0.18)_70%,transparent)]',
+          size === 'sm' ? 'h-[78%]' : 'h-[62%]',
+        )}
       />
 
       <div className="absolute bottom-0 left-0 right-0 px-3 pb-3 sm:px-4 sm:pb-3.5">
