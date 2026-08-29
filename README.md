@@ -42,6 +42,8 @@ To spin up this project locally, follow these steps:
    - In the Admin UI, use the **Import DB Dump** action.
    - Upload a `pg_dump` custom-format file (the same format downloaded by the dump action).
    - The import uses `pg_restore` with `--clean --if-exists` and overwrites all existing data.
+   - The uploaded file is first validated with `pg_restore --list` (also proves `pg_restore`/Docker are reachable). Only then are **all user schemas** in the target DB (`public`, `zaloha`, …) dropped with `CASCADE` and the restore runs. Without the wipe, `--clean` fails on tables that exist locally but not in the dump (e.g. local backup tables in `zaloha`) and the whole import rolls back.
+   - The restore itself runs in a single transaction, but the schema wipe happens before it — if the restore still fails (e.g. a dump from an incompatible Postgres version), the database is left empty. Download a fresh dump first if you may need to roll back.
    - Requires the same Docker Compose access as the dump action.
 
 ---
