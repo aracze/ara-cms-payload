@@ -1,5 +1,4 @@
 import React from 'react'
-import Link from 'next/link'
 import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import { MapLibreMap, MapMarker } from '@/components/features/maplibre-map'
 import { richTextToHtml } from '@/lib/rich-text-html'
@@ -9,6 +8,7 @@ import { StarRating } from '@/components/features/reviews/star-rating'
 import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
 import { PlaceCardImage } from './place-card-image'
 import { AnalyticsDebugBadge } from './analytics-debug-badge'
+import { PhotoTile, PinIcon } from '@/components/features/photo-tile'
 import type { PageReviewStats } from '@/lib/payload'
 
 /**
@@ -205,53 +205,39 @@ function SuperordinateGrid({
         // mapy — co v ní je, se kreslí.
         const rating = cardRatings?.[Number(place.id)]
         return (
-          <Link
+          <PhotoTile
             key={place.id}
             href={place.fullSlug}
-            data-poiid={place.id}
-            className="poi-article group relative flex flex-col bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 h-[240px] sm:h-[280px]"
+            poiId={place.id}
+            size="lg"
+            title={place.title}
+            className="poi-article"
+            badge={<PinIcon className="h-4 w-4 text-[#1a3f6c]" />}
+            topRight={
+              showAnalyticsDebug ? (
+                <AnalyticsDebugBadge views={place.analyticsPageViews ?? 0} />
+              ) : undefined
+            }
+            meta={
+              rating ? (
+                <span className="mt-1.5 flex items-center gap-[7px] text-[12.5px] font-semibold text-white/95 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]">
+                  <StarRating rating={Math.round(rating.avg * 2) / 2} size={13} />
+                  <span className="font-normal text-white/85">
+                    {rating.count} {reviewsCountLabel(rating.count)}
+                  </span>
+                </span>
+              ) : undefined
+            }
           >
-            <div className="relative h-full w-full overflow-hidden">
-              {imageUrl ? (
-                <PlaceCardImage
-                  src={imageUrl}
-                  alt={place.title}
-                  hasMap={hasMap}
-                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10 flex items-center justify-center">
-                  <span className="text-[#1a3f6c]/20 font-bold uppercase tracking-[0.2em] text-[10px]">
-                    Bez náhledu
-                  </span>
-                </div>
-              )}
-              <div className="absolute top-3 left-3 w-7 h-7 bg-white/80 rounded-full flex items-center justify-center shadow-sm">
-                <svg className="w-4 h-4 text-[#1a3f6c]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-                </svg>
-              </div>
-              {showAnalyticsDebug && (
-                <div className="absolute top-3 right-3">
-                  <AnalyticsDebugBadge views={place.analyticsPageViews ?? 0} />
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
-              <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                <h3 className="text-lg font-bold text-white leading-tight drop-shadow-md">
-                  {place.title}
-                </h3>
-                {rating && (
-                  <span className="mt-1.5 flex items-center gap-[7px] text-[12.5px] font-semibold text-white/95 drop-shadow-md">
-                    <StarRating rating={Math.round(rating.avg * 2) / 2} size={13} />
-                    <span className="font-normal text-white/85">
-                      {rating.count} {reviewsCountLabel(rating.count)}
-                    </span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </Link>
+            {imageUrl && (
+              <PlaceCardImage
+                src={imageUrl}
+                alt={place.title}
+                hasMap={hasMap}
+                className="object-cover"
+              />
+            )}
+          </PhotoTile>
         )
       })}
     </div>

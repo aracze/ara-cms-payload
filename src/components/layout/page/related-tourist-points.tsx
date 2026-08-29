@@ -1,6 +1,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { PlaceCardImage } from './place-card-image'
+import { PhotoTile } from '@/components/features/photo-tile'
 
 export interface RelatedTouristPointItem {
   id: number
@@ -12,7 +13,7 @@ export interface RelatedTouristPointItem {
 /**
  * Pás „Co dalšího vidět…" pod recenzemi na detailu cíle: až 4 karty sousedních
  * cílů stejného místa. Zobrazuje se jen při více než 2 sousedech (pravidlo
- * legacy webu). Bílé pozadí, karty s měkkým stínem (legacy `.page-preview`);
+ * legacy webu). Bílé pozadí; karty = sdílená fotodlaždice PhotoTile (M 180);
  * nadpis navazuje na sekci „Co vidět…" ze stránek míst, vpravo odkaz na místo.
  */
 export function RelatedTouristPoints({
@@ -54,29 +55,21 @@ export function RelatedTouristPoints({
           </Link>
         </div>
 
+        {/* Sdílená fotodlaždice (M 180, titulek v obrázku) — jednotné s „Co vidět"
+            i homepage; podoba s titulkem pod fotkou zrušena po živém srovnání
+            (rozhodnutí uživatele 29. 8. 2026). */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {shown.map((item) => (
-            <Link key={item.id} href={item.fullSlug} className="group block">
-              <div className="relative h-[150px] overflow-hidden rounded-lg">
-                {item.imageUrl ? (
-                  <PlaceCardImage
-                    src={item.imageUrl}
-                    alt={item.title}
-                    hasMap={false}
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1a3f6c]/20">
-                      Bez náhledu
-                    </span>
-                  </div>
-                )}
-              </div>
-              <h3 className="mt-3 text-[17px] font-bold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
-                {item.title}
-              </h3>
-            </Link>
+            <PhotoTile key={item.id} href={item.fullSlug} title={item.title} size="md">
+              {item.imageUrl && (
+                <PlaceCardImage
+                  src={item.imageUrl}
+                  alt={item.title}
+                  hasMap={false}
+                  className="object-cover"
+                />
+              )}
+            </PhotoTile>
           ))}
         </div>
       </div>

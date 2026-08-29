@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import Image from 'next/image'
 import type { InspirationLink } from '@/types/payload'
 import { SectionHeading } from './section-heading'
+import { PhotoTile } from '@/components/features/photo-tile'
 
 // Sekce „Témata ke čtení" na konci homepage — rozcestník rubrik článků
 // (náhrada /inspirace starého webu, který se záměrně nestaví). Rozložení
@@ -9,8 +9,8 @@ import { SectionHeading } from './section-heading'
 // velké, zbytek menší v řadách po čtyřech. Dynamiku dělá výškový kontrast
 // řádků, ne střídání šířek — hrany dlaždic na sebe v řádku vždy navazují.
 // Pořadí rubrik se denně obměňuje (seedovaný los ve fetchHomepageInspiration),
-// takže velké dlaždice připadnou každý den jiným rubrikám. Dlaždice jsou
-// vědomě menší než u „Inspirace na cestu": rubriky jsou druhořadý obsah.
+// takže velké dlaždice připadnou každý den jiným rubrikám. Dlaždice = sdílená
+// PhotoTile: velké M 180, malé S 150 (dřív 178/124 — malé byly „pruhy").
 
 type TopicTile = { span: 3 | 4 | 6 | 12; big: boolean }
 
@@ -93,36 +93,26 @@ export function ReadingTopicsSection({ rubriky }: { rubriky: InspirationLink[] }
           // ať nezůstává osamocená v půlce řádku.
           const mobileFull = rubriky.length % 2 === 1 && index === rubriky.length - 1
           return (
-            <Link
+            <PhotoTile
               key={rubrika.key}
               href={rubrika.href}
-              className={`group relative block h-20 rounded-2xl overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)] ${
-                mobileFull ? 'col-span-2' : ''
-              } ${SPAN_CLASS[tile.span]} ${tile.big ? 'md:h-[178px]' : 'md:h-[124px]'}`}
+              title={rubrika.title}
+              size={tile.big ? 'md' : 'sm'}
+              // Krátké názvy rubrik: všechny dlaždice stejný titulek (17 px),
+              // ať se v jedné mřížce nestřídají dvě velikosti písma.
+              titleSize="md"
+              className={`${mobileFull ? 'col-span-2' : ''} ${SPAN_CLASS[tile.span]}`}
             >
-              {rubrika.imageUrl ? (
+              {rubrika.imageUrl && (
                 <Image
                   src={rubrika.imageUrl}
                   alt=""
                   fill
-                  className="object-cover transition-transform duration-700 group-hover:scale-105"
+                  className="object-cover"
                   sizes={`(max-width: 768px) ${mobileFull ? '100vw' : '50vw'}, ${DESKTOP_SIZES[tile.span]}`}
                 />
-              ) : (
-                <span className="absolute inset-0 bg-gradient-to-br from-[#1a3f6c]/10 to-[#1a3f6c]/20" />
               )}
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-0 h-[58%] bg-gradient-to-t from-[#0f1a2a]/70 to-transparent"
-              />
-              <span
-                className={`absolute left-4 right-3 text-white font-bold leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.35)] ${
-                  tile.big ? 'bottom-3.5 text-[16.5px]' : 'bottom-3 text-[15px]'
-                }`}
-              >
-                {rubrika.title}
-              </span>
-            </Link>
+            </PhotoTile>
           )
         })}
       </div>

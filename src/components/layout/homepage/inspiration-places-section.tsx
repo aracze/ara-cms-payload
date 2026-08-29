@@ -1,11 +1,10 @@
-import Link from 'next/link'
 import Image from 'next/image'
 import type { InspirationLink } from '@/types/payload'
 import { SectionHeading } from './section-heading'
+import { PhotoTile } from '@/components/features/photo-tile'
 
 // Dlaždicová sekce „Inspirace na cestu" (pod sekcí článků) — denní výběr míst
-// s fotkou (schválený styl varianty A). Jméno místa sedí na lokálním gradientu
-// u spodní hrany (žádné celoplošné ztmavení — viz designová pravidla).
+// s fotkou. Dlaždice = sdílená PhotoTile (S 150), viz photo-tile.tsx.
 
 export function InspirationPlacesSection({ places }: { places: InspirationLink[] }) {
   if (places.length === 0) return null
@@ -16,33 +15,23 @@ export function InspirationPlacesSection({ places }: { places: InspirationLink[]
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {places.map((place) => (
-          <Link
+          <PhotoTile
             key={place.key}
             href={place.href}
-            className="group relative block h-36 md:h-40 rounded-2xl overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.18)]"
+            title={place.title}
+            sub={place.sub}
+            size="sm"
           >
-            {place.imageUrl ? (
+            {place.imageUrl && (
               <Image
                 src={place.imageUrl}
                 alt=""
                 fill
-                className="object-cover transition-transform duration-700 group-hover:scale-105"
+                className="object-cover"
                 sizes="(max-width: 768px) 50vw, 25vw"
               />
-            ) : (
-              <span className="absolute inset-0 bg-gradient-to-br from-[#1a3f6c]/10 to-[#1a3f6c]/20" />
             )}
-            <span
-              aria-hidden="true"
-              className="absolute inset-x-0 bottom-0 h-[62%] bg-gradient-to-t from-[#0f1a2a]/70 to-transparent"
-            />
-            <span className="absolute left-4 right-3 bottom-3 flex flex-col">
-              <span className="text-white font-bold text-[17px] leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]">
-                {place.title}
-              </span>
-              {place.sub && <span className="text-white/75 text-xs mt-0.5">{place.sub}</span>}
-            </span>
-          </Link>
+          </PhotoTile>
         ))}
       </div>
     </section>
