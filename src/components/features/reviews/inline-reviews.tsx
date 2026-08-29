@@ -1,5 +1,6 @@
 'use client'
 
+import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ReviewPublic } from '@/types/payload'
@@ -332,13 +333,9 @@ export function InlineReviews({
           />
         ))}
         {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAll(true)}
-            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#1a3f6c] transition-colors hover:text-[#d45145]"
-          >
+          <LoadMoreButton variant="text" onClick={() => setShowAll(true)} className="mt-3">
             Zobrazit další {hiddenCount === 1 ? 'recenzi' : 'recenze'} ({hiddenCount})
-          </button>
+          </LoadMoreButton>
         )}
       </div>
     </div>

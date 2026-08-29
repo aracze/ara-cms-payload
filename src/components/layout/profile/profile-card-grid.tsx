@@ -1,7 +1,7 @@
 'use client'
 
+import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
 import { pluralCs } from '@/lib/utils'
 
 /**
@@ -65,14 +65,9 @@ export function ProfileCardGrid({
 
       {hasMore && (
         <div className="mt-12 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setVisibleCount((c) => c + STEP)}
-            className="inline-flex items-center gap-2 rounded-full border-2 border-[#215491]/30 px-7 py-3 text-sm font-bold uppercase tracking-wider text-[#215491] font-heading transition-all hover:border-[#215491] hover:bg-[#215491] hover:text-white"
-          >
+          <LoadMoreButton onClick={() => setVisibleCount((c) => c + STEP)}>
             {moreLabel}
-            <ChevronDown className="h-4 w-4" />
-          </button>
+          </LoadMoreButton>
         </div>
       )}
     </>

@@ -1,7 +1,7 @@
 'use client'
 
+import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
@@ -93,14 +93,9 @@ export const ArticlesListClassicClient = ({
 
         {hasMore && (
           <div className="mt-12 flex justify-center">
-            <button
-              type="button"
-              onClick={() => setVisibleCount((c) => c + ARTICLES_STEP)}
-              className="inline-flex items-center gap-2 rounded-full border-2 border-[#215491]/30 px-7 py-3 text-sm font-bold uppercase tracking-wider text-[#215491] font-heading transition-all hover:border-[#215491] hover:bg-[#215491] hover:text-white"
-            >
+            <LoadMoreButton onClick={() => setVisibleCount((c) => c + ARTICLES_STEP)}>
               Zobrazit další články
-              <ChevronDown className="h-4 w-4" />
-            </button>
+            </LoadMoreButton>
           </div>
         )}
       </div>
