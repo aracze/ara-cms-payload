@@ -37,17 +37,18 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
               hasArticles ? 'md:col-span-2' : 'md:col-span-3'
             }`}
           >
-            {rady.map((rada) => (
+            {rady.map((rada, index) => (
               <PhotoTile key={rada.key} href={rada.href} title={rada.title} size="sm">
                 {rada.imageUrl && (
                   <Image
                     src={rada.imageUrl}
                     alt=""
                     fill
-                    // Dlaždice jsou hned pod herem (nad ohybem) a bývají LCP
-                    // elementem stránky — bez priority je next/image načítá
-                    // líně a prohlížeč hlásí pomalé LCP.
-                    priority
+                    // Dlaždice jsou hned pod herem (nad ohybem) a první z nich bývá LCP
+                    // elementem stránky — přednačíst (`preload`, v Next 16 náhrada za
+                    // `priority`) jen tu; přednačítání všech čtyř soupeřilo o síť
+                    // (připomínka z review PR #86). Ostatní se načtou líně.
+                    preload={index === 0}
                     className="object-cover"
                     sizes="(max-width: 768px) 50vw, 340px"
                   />
