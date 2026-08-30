@@ -416,7 +416,7 @@ export const Media: CollectionConfig = {
       type: 'text',
       admin: {
         description:
-          'Co je na fotce, jednou větou (např. „Přístav v Dubrovníku při západu slunce"). Čtou ho čtečky obrazovky a Google Obrázky; bez něj fotka ve vyhledávání obrázků nefiguruje.',
+          'Co je na fotce, jednou větou (např. „Přístav v Dubrovníku při západu slunce"). Čtou ho čtečky obrazovky a je to důležitý signál pro Google Obrázky (spolu s textem kolem fotky).',
       },
     },
     {

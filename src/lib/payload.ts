@@ -335,16 +335,17 @@ async function enrichFeaturedImages<T extends { featuredImage?: { image?: unknow
 
   if (ids.length === 0) return docs
 
-  const urlMap = await fetchMediaUrlsByIds([...new Set(ids)])
+  const mediaMap = await fetchMediaBasicsByIds([...new Set(ids)])
 
   return docs.map((d) => {
     const img = d.featuredImage?.image
-    if (d.featuredImage && typeof img === 'number' && urlMap.has(img)) {
+    if (d.featuredImage && typeof img === 'number' && mediaMap.has(img)) {
+      const media = mediaMap.get(img)!
       return {
         ...d,
         featuredImage: {
           ...d.featuredImage,
-          image: { url: urlMap.get(img)!, alternativeText: null },
+          image: { url: media.url, alternativeText: media.alt },
         },
       }
     }
@@ -2663,9 +2664,15 @@ export const fetchFooter = cache(async (): Promise<GlobalFooter | null> => {
  * Returns a Map of mediaId → URL string.
  * (Bez cache — lokální dotaz je ~ms a Map není serializovatelná.)
  */
-export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, string>> {
+export type MediaBasics = { url: string; alt: string | null }
+
+/**
+ * URL + alt text médií podle id jedním dotazem. Alt jde do `alternativeText`
+ * populovaných obrázků (hero fotka ho čte pro `alt`), URL do karet a náhledů.
+ */
+export async function fetchMediaBasicsByIds(ids: number[]): Promise<Map<number, MediaBasics>> {
   if (ids.length === 0) return new Map()
-  const map = new Map<number, string>()
+  const map = new Map<number, MediaBasics>()
   try {
     const payload = await getDb()
     const res = await payload.find({
@@ -2674,15 +2681,22 @@ export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, st
       where: { id: { in: ids } },
       limit: ids.length,
       depth: 0,
+      // Bez `select`: `url` uploadu Payload skládá až v afterRead z ostatních
+      // polí — s výběrem sloupců by se ztratilo (ověřeno: zmizely hero fotky).
     })
     for (const doc of res.docs || []) {
-      const d = doc as unknown as { id: number; url?: string | null }
-      if (d.url) map.set(d.id, d.url)
+      const d = doc as unknown as { id: number; url?: string | null; alt?: string | null }
+      if (d.url) map.set(d.id, { url: d.url, alt: d.alt?.trim() || null })
     }
   } catch {
     // bez URL — karty zobrazí placeholder
   }
   return map
+}
+
+export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, string>> {
+  const basics = await fetchMediaBasicsByIds(ids)
+  return new Map([...basics].map(([id, b]) => [id, b.url]))
 }
 
 /**

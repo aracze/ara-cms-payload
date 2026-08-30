@@ -8,7 +8,7 @@ import type { Breadcrumb } from '@/lib/page-hierarchy'
 interface HeroSectionProps {
   title: string
   imageUrl: string | null
-  /** Popisek hero fotky; výchozí = název. Prázdný řetězec u dekorativní obálky. */
+  /** Popisek hero fotky (alt média z CMS); výchozí = název stránky. Prázdný řetězec u dekorativní obálky. */
   imageAlt?: string
   styleCss?: string
   filterId?: string

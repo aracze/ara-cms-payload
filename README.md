@@ -542,8 +542,9 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
 - **Ikony a manifest**: `src/app/icon.png` (512 px) + `public/icon-192.png`, `icon-512.png`,
   `icon-maskable-512.png` (papoušek z loga v CMS, vykreslený ze SVG přes sharp),
   `src/app/manifest.ts` a `themeColor` (`viewport` v layoutu) v modré hlavičky `#215491`.
-- **Obrázky**: hero fotka má `alt` = název stránky/článku (sdílená výchozí obálka — profil,
-  přihlášení, hledání, statické stránky bez fotky — `alt=""`, je to dekorace); fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
+- **Obrázky**: hero fotka má `alt` = popisek média z CMS (`Media.alt`, doplňuje ho
+  `fetchMediaBasicsByIds`), bez něj název stránky/článku; sdílená výchozí obálka (profil,
+  přihlášení, hledání, statické stránky bez fotky) `alt=""`, je to dekorace; fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
   `loading="lazy"` a `decoding="async"`. Rich text renderuje `h1` z editoru jako `h2` (jediný
   h1 je název v heru) a nebezpečný odkaz vypíše jen jako text (dřív `href="#"`).
 - **Písma**: načítají se jen používané řezy — Open Sans 300–700, Poppins 400/600/700/800

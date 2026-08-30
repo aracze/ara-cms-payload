@@ -13,6 +13,10 @@
 -- produkční databázi"), potom `docker compose up -d --force-recreate cms`
 -- (cache dat).
 
+-- Při chybě kteréhokoli příkazu psql skončí a transakce se odvolá (bez toho by
+-- pokračoval a COMMIT by potvrdil částečný výsledek).
+\set ON_ERROR_STOP on
+
 BEGIN;
 
 WITH fill (full_slug, meta_title, meta_description) AS (
@@ -81,11 +85,22 @@ FROM (
 WHERE a.slug = v.slug
   AND (COALESCE(a.meta_title, '') = '' OR COALESCE(a.meta_description, '') = '');
 
--- Kontrola: po doběhu má být 0.
-SELECT 'pages_missing' AS what, count(*) FROM pages
- WHERE _status = 'published' AND (COALESCE(meta_title, '') = '' OR COALESCE(meta_description, '') = '')
-UNION ALL
-SELECT 'articles_missing', count(*) FROM articles
- WHERE COALESCE(meta_title, '') = '' OR COALESCE(meta_description, '') = '';
+-- Kontrola: po doběhu musí být obojí 0 — jinak (překlep ve slugu, nová stránka
+-- bez SEO) skript spadne a NIC se nepotvrdí.
+DO $$
+DECLARE
+  pages_missing integer;
+  articles_missing integer;
+BEGIN
+  SELECT count(*) INTO pages_missing FROM pages
+   WHERE _status = 'published' AND (COALESCE(meta_title, '') = '' OR COALESCE(meta_description, '') = '');
+  SELECT count(*) INTO articles_missing FROM articles
+   WHERE COALESCE(meta_title, '') = '' OR COALESCE(meta_description, '') = '';
+  IF pages_missing > 0 OR articles_missing > 0 THEN
+    RAISE EXCEPTION 'SEO backfill neúplný: % stránek a % článků bez titulku/popisku — transakce odvolána',
+      pages_missing, articles_missing;
+  END IF;
+  RAISE NOTICE 'SEO backfill OK: žádná stránka ani článek bez SEO polí.';
+END $$;
 
 COMMIT;

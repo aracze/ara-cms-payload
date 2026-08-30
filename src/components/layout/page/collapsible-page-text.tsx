@@ -58,6 +58,11 @@ export function CollapsiblePageTextWithContributor({
       <div
         ref={boxRef}
         className={cn('relative', !isExpanded && shouldCollapse && 'max-h-[250px] overflow-hidden')}
+        // `overflow: hidden` odkazy z oříznuté části nevyřadí z tabulátoru —
+        // klávesnice by fokusovala neviditelný odkaz. Fokus dovnitř box rozbalí.
+        onFocus={() => {
+          if (shouldCollapse && !isExpanded) setIsExpanded(true)
+        }}
       >
         {/* prose třídy jsou přímo na boxu s textem, aby odstavce byly PŘÍMÝMI
             potomky .prose — jinak selže selektor `.prose > p:first-of-type`
