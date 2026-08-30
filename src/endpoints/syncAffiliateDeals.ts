@@ -6,6 +6,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { safeRevalidate } from '@/hooks/revalidation'
 import {
   CZECH_AIRPORT_NAMES,
+  addMonthsClamped,
   appendPricePoint,
   isSuspiciousPrice,
   isValidKiwiCode,
@@ -79,9 +80,7 @@ function kiwiDate(iso: string): string {
  */
 function kiwiDateWindow(): { from: string; to: string } {
   const today = pragueToday()
-  const end = new Date(`${today}T00:00:00Z`)
-  end.setUTCMonth(end.getUTCMonth() + 6)
-  return { from: kiwiDate(today), to: kiwiDate(end.toISOString().slice(0, 10)) }
+  return { from: kiwiDate(today), to: kiwiDate(addMonthsClamped(today, 6)) }
 }
 
 /**

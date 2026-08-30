@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addMonthsClamped,
   appendPricePoint,
   belowUsualPercent,
   departureCity,
@@ -134,6 +135,14 @@ describe('česká letiště', () => {
 })
 
 describe('historie cen', () => {
+  it('addMonthsClamped nepřeteče na konci měsíce', () => {
+    expect(addMonthsClamped('2026-08-31', 6)).toBe('2027-02-28')
+    expect(addMonthsClamped('2026-08-30', 6)).toBe('2027-02-28')
+    expect(addMonthsClamped('2026-03-15', 6)).toBe('2026-09-15')
+    expect(addMonthsClamped('2026-12-31', 2)).toBe('2027-02-28')
+    expect(addMonthsClamped('2027-08-29', 6)).toBe('2028-02-29')
+  })
+
   it('isIsoDate chce tvar i platný kalendář', () => {
     expect(isIsoDate('2026-08-30')).toBe(true)
     expect(isIsoDate('2026-02-31')).toBe(false)

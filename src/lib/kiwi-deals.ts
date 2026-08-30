@@ -158,6 +158,21 @@ export function pragueToday(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(now)
 }
 
+/**
+ * Konec okna hledání: ISO datum o `months` měsíců později, den ořezaný na
+ * délku cílového měsíce (31. 8. + 6 → 28. 2., ne 3. 3. — `setUTCMonth` by
+ * přetekl do dalšího měsíce).
+ */
+export function addMonthsClamped(iso: string, months: number): string {
+  const start = new Date(`${iso}T00:00:00Z`)
+  const firstOfTarget = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, 1))
+  const lastDay = new Date(
+    Date.UTC(firstOfTarget.getUTCFullYear(), firstOfTarget.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  firstOfTarget.setUTCDate(Math.min(start.getUTCDate(), lastDay))
+  return firstOfTarget.toISOString().slice(0, 10)
+}
+
 /** Platné kalendářní datum ve tvaru YYYY-MM-DD („2026-02-31" regexem projde, Date ho posune). */
 export function isIsoDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
