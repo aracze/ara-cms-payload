@@ -33,8 +33,10 @@ export function RatingSummary({
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
       <StarRating rating={halfStarRating(avg)} size={size} />
+      {/* Počet se nikdy nefiltruje — nula je platná hodnota („0 recenzí"),
+          `filter(Boolean)` by ji vyhodil (postřeh z review PR #87). */}
       <span className={countClassName}>
-        {[count, reviewsCountLabel(count), suffix].filter(Boolean).join(' ')}
+        {`${count} ${reviewsCountLabel(count)}${suffix ? ` ${suffix}` : ''}`}
       </span>
     </span>
   )
