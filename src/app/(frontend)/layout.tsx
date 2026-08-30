@@ -5,10 +5,17 @@
  * Next.js ho automaticky použije pro každou trasu (route).
  */
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Open_Sans, Poppins } from 'next/font/google'
 import './globals.css'
 import { isProduction } from '@/lib/utils'
+import {
+  DEFAULT_DESCRIPTION,
+  getSiteURLObject,
+  RSS_ALTERNATE,
+  SITE_NAME,
+  SITE_TITLE_SUFFIX,
+} from '@/lib/seo'
 import { Header } from '@/components/layout/header/header'
 import { sanitizeHeaderLogoSvg } from '@/lib/rich-text-html'
 import { Footer } from '@/components/layout/footer/footer'
@@ -21,31 +28,51 @@ import { getCurrentUser } from '@/lib/auth'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
 
 // 1. NASTAVENÍ PÍSEM (Google Fonts)
+// Jen řezy, které web opravdu používá — každý řez × subset je samostatný soubor
+// s <link rel=preload> v hlavičce a soupeří o síť s hero fotkou (LCP).
+// Open Sans (text): 300 perex v řádku článku, 400/500/600/700 běžný text
+// (`.prose a` 500, tučné 600/700). Bez 800 — extra tučné jsou jen nadpisy (Poppins).
 const openSans = Open_Sans({
   subsets: ['latin', 'latin-ext'],
-  weight: ['300', '400', '500', '600', '700', '800'],
+  weight: ['300', '400', '500', '600', '700'],
   variable: '--font-open-sans',
   display: 'swap',
 })
 
 const poppins = Poppins({
-  // 800: extra tučné nadpisy sekcí na složených Praktických informacích —
-  // Poppins má bold (700) opticky slabý, bez nahraného řezu by ho prohlížeč
-  // jen uměle ztučnil (nehezké) nebo nechal na 700.
-  weight: ['300', '400', '500', '600', '700', '800'],
+  // Poppins nesou jen nadpisy (font-heading): 600 semibold (panely, h3–h6),
+  // 700 bold (h1–h2, sekce), 800 extra tučné nadpisy sekcí na složených
+  // Praktických informacích — Poppins má bold (700) opticky slabý, bez nahraného
+  // řezu by ho prohlížeč jen uměle ztučnil (nehezké) nebo nechal na 700.
+  // 400 pro `font-normal` u nadpisů z rich textu. Žádný nadpis není light (300)
+  // ani medium (500), ty řezy se nenačítají.
+  weight: ['400', '600', '700', '800'],
   subsets: ['latin', 'latin-ext'],
   variable: '--font-poppins',
   display: 'swap',
 })
 
 // 2. SEO METADATA
-// Definují <title> a <meta name="description"> v hlavičce webu
+// Výchozí <title>/<meta description> a společné části Open Graph. Stránky si
+// titulek, popisek, canonical a OG skládají přes `buildPageMetadata` v
+// src/lib/seo.ts (Next vnořená pole jako `openGraph` mezi layoutem a stránkou
+// neslučuje, proto je tady jen fallback pro routy bez vlastních metadat).
+// `metadataBase` dělá z relativních adres (canonical, og:image) absolutní.
 export const metadata: Metadata = {
+  metadataBase: getSiteURLObject(),
   title: {
-    template: '%s | Ara.cz - Cestovní průvodce',
-    default: 'Ara.cz - Cestovní průvodce',
+    template: `%s | ${SITE_TITLE_SUFFIX}`,
+    default: `${SITE_TITLE_SUFFIX} – Cestovní průvodce`,
   },
-  description: 'Váš průvodce po světě',
+  description: DEFAULT_DESCRIPTION,
+  alternates: { types: RSS_ALTERNATE },
+  openGraph: { type: 'website', siteName: SITE_NAME, locale: 'cs_CZ' },
+  twitter: { card: 'summary' },
+}
+
+// Barva lišty prohlížeče na mobilu (a v manifestu) = modrá hlavičky webu.
+export const viewport: Viewport = {
+  themeColor: '#215491',
 }
 
 export default async function RootLayout({

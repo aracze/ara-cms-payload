@@ -1,7 +1,9 @@
 import React from 'react'
 import { Article as ArticleType, type Page as PayloadPage } from '@/types/payload'
-import { getPayloadURL, getSiteURL } from '@/lib/utils'
+import { articlePath, getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
+import { articleJsonLd, resolveSeoDescription } from '@/lib/seo'
+import { formatPublishDate } from '@/lib/relative-time'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { fetchPageLightByFullSlug, pageHasArticles, fetchArticleComments } from '@/lib/payload'
@@ -73,14 +75,44 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
 
   // Kanonická adresa článku (mainPage + slug) — tu samou dává i generateMetadata,
   // takže strukturovaná data ukazují na stejnou URL jako `rel=canonical`.
+  // Bez mainPage stejná cesta, jakou má generateMetadata (aktuální rodič z URL
+  // = contextPage), ne nejbližší místo — JSON-LD a rel=canonical musí sedět.
   const canonicalHref = article.mainPage?.fullSlug
-    ? `${article.mainPage.fullSlug}/${article.slug}`
-    : placePage
-      ? `${placePage.fullSlug}/${article.slug}`
+    ? articlePath(article.mainPage.fullSlug, article.slug)
+    : contextPage
+      ? articlePath(contextPage.fullSlug, article.slug)
       : null
+
+  // Datum vydání — viditelně u autora a ve strukturovaných datech (Google
+  // datum článku bere z JSON-LD, ale chce ho vidět i na stránce).
+  const publishedIso = article.publishedAt ?? article.createdAt ?? null
+  const publishDate = formatPublishDate(publishedIso)
+  const publishedLine = publishDate && (
+    <p className="text-sm text-gray-500">
+      Publikováno <time dateTime={publishDate.dateTime}>{publishDate.text}</time>
+    </p>
+  )
 
   return (
     <div className="bg-white min-h-screen">
+      {/* Strukturovaná data článku (schema.org Article): autor, datum vydání
+          a aktualizace, fotka, vydavatel. */}
+      {canonicalHref && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: articleJsonLd({
+              title: article.title,
+              description: resolveSeoDescription(article.meta, article.text),
+              path: canonicalHref,
+              imageUrl: heroImage.url,
+              publishedAt: publishedIso,
+              modifiedAt: article.updatedAt ?? null,
+              author: authorName ? { name: authorName, profilePath: profileHref } : null,
+            }),
+          }}
+        />
+      )}
       {/* Drobečky pro vyhledávače (BreadcrumbList) — cesta ve výsledku hledání. */}
       {breadcrumbs.length > 0 && canonicalHref && (
         <script
@@ -98,6 +130,7 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
       <HeroSection
         title={article.title}
         imageUrl={heroImage.url}
+        imageAlt={heroImage.alt ?? undefined}
         styleCss={heroImage.styleCss}
         filterId={`blurFilter-article-${article.documentId}`}
         breadcrumbs={breadcrumbs}
@@ -165,9 +198,14 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
                   ) : (
                     <span className="font-semibold text-[#215491]">{authorName}</span>
                   )}
+                  {publishedLine}
                   {authorBio && <p className="mt-1 leading-relaxed text-gray-600">{authorBio}</p>}
                 </div>
               </div>
+            )}
+            {/* Bez autora aspoň samotné datum (dnes nemá autora žádný článek). */}
+            {!authorName && publishedLine && (
+              <div className="mt-8 border-t border-[#dadbdc] pt-5 pb-2.5">{publishedLine}</div>
             )}
 
             {/* Comment count + "Vložit komentář" + "Sdílet" */}
@@ -294,7 +332,7 @@ async function resolveContextPages(contextPageSlug: string | null) {
 function resolveHeroImage(
   page: {
     featuredImage?: {
-      image?: { url?: string } | null
+      image?: { url?: string; alternativeText?: string | null } | null
       featureImageStyleCss?: string | null
     } | null
   } | null,
@@ -304,9 +342,14 @@ function resolveHeroImage(
   const articleImage = article.featuredImage?.image
   const articleUrl = articleImage && typeof articleImage === 'object' ? articleImage.url : null
   const url = articleUrl ?? page?.featuredImage?.image?.url ?? null
+  // Popisek ze STEJNÉ fotky jako URL (alt média z CMS), bez něj null → název článku.
+  const alt = articleUrl
+    ? (articleImage && typeof articleImage === 'object' && articleImage.alternativeText) || null
+    : page?.featuredImage?.image?.alternativeText || null
 
   return {
     url: url ? (url.startsWith('/') ? `${getPayloadURL()}${url}` : url) : null,
+    alt,
     // styleCss (ohnisko/pozice) musí pocházet ze STEJNÉHO obrázku jako `url` —
     // u fallbacku na obrázek stránky tedy z featuredImage stránky, ne z článku.
     styleCss: articleUrl

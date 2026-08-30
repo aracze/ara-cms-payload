@@ -8,6 +8,8 @@ import type { Breadcrumb } from '@/lib/page-hierarchy'
 interface HeroSectionProps {
   title: string
   imageUrl: string | null
+  /** Popisek hero fotky (alt média z CMS); výchozí = název stránky. Prázdný řetězec u dekorativní obálky. */
+  imageAlt?: string
   styleCss?: string
   filterId?: string
   breadcrumbs?: Breadcrumb[]
@@ -30,6 +32,7 @@ interface HeroSectionProps {
 export const HeroSection = ({
   title,
   imageUrl,
+  imageAlt,
   styleCss,
   filterId,
   breadcrumbs,
@@ -42,7 +45,12 @@ export const HeroSection = ({
     <section className="relative w-full h-[315px] bg-[#3b444f]">
       {/* Cover Image Background with its own overflow clipping */}
       <div className="absolute inset-0 overflow-hidden">
-        <StaticHeroImage imageUrl={imageUrl} styleCss={styleCss} blurDataURL={blurDataURL} />
+        <StaticHeroImage
+          imageUrl={imageUrl}
+          alt={imageAlt ?? title}
+          styleCss={styleCss}
+          blurDataURL={blurDataURL}
+        />
       </div>
 
       {/* Title Content - Overlaid like in Grails */}

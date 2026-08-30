@@ -1,16 +1,12 @@
 import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
 import { LeaderboardAd } from '@/components/features/article-ad'
-import {
-  fetchPageByFullSlug,
-  fetchPageLightByFullSlug,
-  fetchArticleBySlug,
-  pageHasArticlesBySlug,
-} from '@/lib/payload'
-import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
+import { fetchPageLightByFullSlug, pageHasArticlesBySlug } from '@/lib/payload'
 import { PageCategory } from '@/types/payload'
-import { isValidArticleParent } from '@/lib/utils'
+import { articlePath, getArticleImageUrl } from '@/lib/utils'
 import { resolveSlugRoute } from '@/lib/resolve-route'
+import { resolvePageSeo } from '@/lib/page-seo'
+import { absoluteUrl, buildPageMetadata, resolveSeoDescription, resolveSeoTitle } from '@/lib/seo'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -30,51 +26,48 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const fullSlug = slug.join('/')
 
-  // 1. Try fetching as a Page
-  const { data: pageData } = await fetchPageByFullSlug(fullSlug)
+  // Stejné rozhodnutí stránka/článek/404 jako layout a render (React cache →
+  // žádné opakované DB dotazy). Metadata skládá src/lib/seo.ts: SEO titulek
+  // a popisek z CMS (fallback: kontextový titulek / začátek textu), absolutní
+  // canonical, Open Graph s hero fotkou.
+  const resolution = await resolveSlugRoute(fullSlug)
 
-  if (pageData?.pages.length > 0) {
-    const page = pageData.pages[0]
-
-    let rootPage = page
-    if (!rootPageCategories.includes(page.category)) {
-      const rootSegment = page.fullSlug.replace(/^\/+/, '').split('/')[0]
-      if (rootSegment) {
-        // Titulek potřebuje jen title/category kořene — lehký fetch (sdílený
-        // s ancestor cache), ne celý detail stránky.
-        const { data: rootPageData } = await fetchPageLightByFullSlug(rootSegment)
-        rootPage = rootPageData?.pages[0] || page
-      }
-    }
-
-    return { title: buildPageTitle(page, rootPage) }
+  if (resolution.kind === 'page') {
+    // Titulek, popisek i fotka sdílené s komponentou Page (src/lib/page-seo.ts),
+    // aby meta description a JSON-LD říkaly totéž.
+    const { title, description, imageUrl } = await resolvePageSeo(resolution.page)
+    return buildPageMetadata({ title, description, path: resolution.page.fullSlug, imageUrl })
   }
 
-  // 2. If not a page, try fetching as an Article (last segment = article slug)
-  if (slug.length > 1) {
-    const articleSlug = slug[slug.length - 1]
-    const parentSlug = slug.slice(0, -1).join('/')
-    const { data: articleData } = await fetchArticleBySlug(articleSlug, parentSlug)
+  if (resolution.kind === 'article') {
+    const { article } = resolution
+    // Kanonická adresa = mainPage + slug (článek může viset i pod vedlejšími
+    // stránkami; ty odkazují sem). Bez mainPage aspoň aktuální cesta.
+    const canonicalPath = article.mainPage?.fullSlug
+      ? articlePath(article.mainPage.fullSlug, article.slug)
+      : `/${fullSlug}`
+    const author = article.createdByPublic
+    const title = resolveSeoTitle(article.meta, article.title)
 
-    const article = articleData?.articles[0]
-    // #21: článek uznáme jen pod platným rodičem (mainPage nebo některá z pages);
-    // pod „duchem" (cizí/starou cestou) propadneme na notFound() níže.
-    if (article && isValidArticleParent(parentSlug, articleData.validParentSlugs)) {
-      const canonicalSlug = article.mainPage?.fullSlug
-        ? `${article.mainPage.fullSlug}/${article.slug}`
-        : null
-
-      return {
-        title: article.title,
-        ...(canonicalSlug
-          ? {
-              alternates: {
-                canonical: canonicalSlug,
-              },
-            }
-          : {}),
-      }
+    // Náhled ke sdílení jako viditelné hero (resolveHeroImage v Article): vlastní
+    // fotka článku, jinak fotka hlavní stránky (lehký fetch, React-cache
+    // sdílená s renderem článku).
+    let imageUrl = getArticleImageUrl(article)
+    if (!imageUrl && article.mainPage?.fullSlug) {
+      const { data } = await fetchPageLightByFullSlug(article.mainPage.fullSlug.replace(/^\//, ''))
+      imageUrl = data?.pages[0]?.featuredImage?.image?.url ?? null
     }
+
+    return buildPageMetadata({
+      title,
+      description: resolveSeoDescription(article.meta, article.text),
+      path: canonicalPath,
+      imageUrl,
+      type: 'article',
+      publishedTime: article.publishedAt ?? article.createdAt ?? null,
+      modifiedTime: article.updatedAt ?? null,
+      authors: author?.username ? [absoluteUrl(`/profil/${author.username}`)] : undefined,
+    })
   }
 
   notFound()

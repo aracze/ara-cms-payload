@@ -51,6 +51,8 @@ import {
   menuOwnerCategories,
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
+import { absoluteUrl, ogImageUrl, toJsonLd, touristDestinationJsonLd } from '@/lib/seo'
+import { resolvePageSeo } from '@/lib/page-seo'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getCurrentUser } from '@/lib/auth'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
@@ -303,8 +305,15 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       })()
     : Promise.resolve([])
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
-  // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
+  // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc). URL, popisek
+  // (alt média z CMS) i pozice ohniska (featureImageStyleCss) musí pocházet ze
+  // STEJNÉ stránky — jinak by zděděná fotka dostala výřez/popisek jiné fotky.
+  const heroOwnerPage = getHeroImage(page, contextPlace)
+    ? heroImageOwner(page, contextPlace)
+    : heroImageOwner(page, safeRootPage)
   const cmsImageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
+  const cmsImageAlt = heroOwnerPage.featuredImage?.image?.alternativeText || null
+  const cmsStyleCss = heroOwnerPage.featuredImage?.featureImageStyleCss || undefined
   // Statická stránka nemá nad sebou žádné místo, ze kterého by fotku podědila,
   // takže bez vyplněného obrázku v CMS zůstal v heru holý tmavý pruh. Spadneme
   // proto na sdílenou výchozí obálku (stejnou, jakou mají profily) — jakmile se
@@ -315,6 +324,9 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const isAboutPage = isStaticPage && page.fullSlug === `/${ABOUT_PAGE_SLUG}`
   const imageUrl = useDefaultCover ? DEFAULT_COVER_URL : cmsImageUrl
   const pageTitle = buildPageTitle(page, contextPlace)
+  // Popis pro strukturovaná data — tentýž, jaký jde do meta description
+  // (sdílený resolver, React-cache s generateMetadata).
+  const seoDescription = (await resolvePageSeo(page)).description ?? null
 
   // Sekundární menu se nezobrazuje na rubrikách ani statických stránkách.
   const showSubnavigation =
@@ -605,14 +617,38 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
 
   return (
     <div className="flex flex-col bg-white transition-all duration-500">
-      {/* Strukturovaná data pro vyhledávače (TouristAttraction + AggregateRating
-          + recenze) — Google pak může u výsledku zobrazit hvězdičky. Jen na
-          detailu cíle s alespoň jednou recenzí. */}
-      {heroRating && reviewsData && (
+      {/* Strukturovaná data pro vyhledávače. Cíl: TouristAttraction (s recenzemi
+          i AggregateRating, když nějaké má — Google pak u výsledku ukáže
+          hvězdičky; bez recenzí jen popis, fotka a poloha). Místo (země, město):
+          TouristDestination s fotkou, souřadnicemi a nadřazeným místem. */}
+      {page.category === PageCategory.Turisticky_cil && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: touristPointJsonLd(page, reviewsData.reviews, heroRating, breadcrumbs),
+            __html: touristPointJsonLd({
+              page,
+              reviews: reviewsData?.reviews ?? [],
+              rating: heroRating,
+              breadcrumbs,
+              description: seoDescription,
+              imageUrl,
+            }),
+          }}
+        />
+      )}
+      {page.category === PageCategory.Misto_k_navstiveni && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: touristDestinationJsonLd({
+              name: page.title,
+              description: seoDescription,
+              path: page.fullSlug,
+              imageUrl,
+              latitude: page.detail?.latitude ? parseFloat(page.detail.latitude) : null,
+              longitude: page.detail?.longitude ? parseFloat(page.detail.longitude) : null,
+              containedIn: breadcrumbs.at(-1)?.title ?? null,
+            }),
           }}
         />
       )}
@@ -634,11 +670,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <HeroSection
           title={pageTitle}
           imageUrl={imageUrl}
-          styleCss={
-            useDefaultCover
-              ? DEFAULT_COVER_POSITION
-              : page.featuredImage?.featureImageStyleCss || undefined
-          }
+          // Popisek fotky z CMS (co je na ní), jinak název stránky; sdílená
+          // výchozí obálka je dekorace → bez popisku.
+          imageAlt={useDefaultCover ? '' : cmsImageAlt || pageTitle}
+          styleCss={useDefaultCover ? DEFAULT_COVER_POSITION : cmsStyleCss}
           blurDataURL={useDefaultCover ? DEFAULT_COVER_BLUR : undefined}
           filterId={`blurFilter-${page.id}`}
           breadcrumbs={breadcrumbs}
@@ -857,12 +892,22 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
  * věž"). Bez země proto LocalBusiness raději vynecháme a zůstane samotný
  * TouristAttraction — nevalidní značka je horší než chybějící hvězdičky.
  */
-function touristPointJsonLd(
-  page: PayloadPage,
-  reviews: ReviewPublic[],
-  rating: { avg: number; count: number },
-  breadcrumbs: Breadcrumb[],
-): string {
+function touristPointJsonLd({
+  page,
+  reviews,
+  rating,
+  breadcrumbs,
+  description,
+  imageUrl,
+}: {
+  page: PayloadPage
+  reviews: ReviewPublic[]
+  rating: { avg: number; count: number } | null
+  breadcrumbs: Breadcrumb[]
+  description: string | null
+  imageUrl: string | null
+}): string {
+  const image = ogImageUrl(imageUrl)
   const lat = page.detail?.latitude ? parseFloat(page.detail.latitude) : null
   const lng = page.detail?.longitude ? parseFloat(page.detail.longitude) : null
 
@@ -884,43 +929,54 @@ function touristPointJsonLd(
     '@context': 'https://schema.org',
     '@type': address ? ['TouristAttraction', 'LocalBusiness'] : 'TouristAttraction',
     name: page.title,
-    url: getSiteURL() + page.fullSlug,
+    url: absoluteUrl(page.fullSlug),
+    ...(description ? { description } : {}),
+    ...(image ? { image: [image] } : {}),
     ...(address ? { address } : {}),
     ...(page.detail?.website ? { sameAs: websiteHref(page.detail.website) } : {}),
     ...(lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)
       ? { geo: { '@type': 'GeoCoordinates', latitude: lat, longitude: lng } }
       : {}),
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: Math.round(rating.avg * 10) / 10,
-      reviewCount: rating.count,
-      bestRating: 5,
-      worstRating: 1,
-    },
-    // Do JSON-LD stačí VZOREK (nejnovějších 10) — vyhledávače víc nepotřebují
-    // a u oblíbeného cíle by kompletní výpis zbytečně nafukoval HTML;
-    // souhrn drží aggregateRating a plný výpis je v těle stránky.
-    review: reviews.slice(0, 10).map((r) => ({
-      '@type': 'Review',
-      author: { '@type': 'Person', name: r.authorName },
-      ...(r.reviewedAt ? { datePublished: r.reviewedAt.slice(0, 10) } : {}),
-      reviewBody: r.body,
-      reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5, worstRating: 1 },
-    })),
+    // Hodnocení jen s aspoň jednou recenzí — prázdný AggregateRating by byl
+    // nevalidní. Bez recenzí zůstane cíl jen s popisem, fotkou a polohou.
+    ...(rating && rating.count > 0
+      ? {
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: Math.round(rating.avg * 10) / 10,
+            reviewCount: rating.count,
+            bestRating: 5,
+            worstRating: 1,
+          },
+          // Do JSON-LD stačí VZOREK (nejnovějších 10) — vyhledávače víc nepotřebují
+          // a u oblíbeného cíle by kompletní výpis zbytečně nafukoval HTML;
+          // souhrn drží aggregateRating a plný výpis je v těle stránky.
+          review: reviews.slice(0, 10).map((r) => ({
+            '@type': 'Review',
+            author: { '@type': 'Person', name: r.authorName },
+            ...(r.reviewedAt ? { datePublished: r.reviewedAt.slice(0, 10) } : {}),
+            reviewBody: r.body,
+            reviewRating: {
+              '@type': 'Rating',
+              ratingValue: r.rating,
+              bestRating: 5,
+              worstRating: 1,
+            },
+          })),
+        }
+      : {}),
   }
-  return JSON.stringify(data).replace(/</g, '\\u003c')
+  return toJsonLd(data)
+}
+
+/** Stránka, jejíž fotka je v heru: kořenové kategorie vlastní, podstránky kontext/kořen. */
+function heroImageOwner(page: PayloadPage, rootPage: PayloadPage): PayloadPage {
+  return rootPageCategories.includes(page.category) ? page : rootPage
 }
 
 function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {
-  let pageForHeroImage = page
-  if (!rootPageCategories.includes(page.category)) {
-    pageForHeroImage = rootPage
-  }
-  return pageForHeroImage.featuredImage?.image?.url
-    ? pageForHeroImage.featuredImage.image.url.startsWith('/')
-      ? new URL(pageForHeroImage.featuredImage.image.url, getPayloadURL()).toString()
-      : pageForHeroImage.featuredImage.image.url
-    : null
+  const url = heroImageOwner(page, rootPage).featuredImage?.image?.url
+  return url ? (url.startsWith('/') ? new URL(url, getPayloadURL()).toString() : url) : null
 }
 
 async function fetchRootPage(page: PayloadPage): Promise<PayloadPage> {

@@ -131,6 +131,7 @@ export function UserProfile({
         <div className="absolute inset-0 overflow-hidden">
           <StaticHeroImage
             imageUrl={DEFAULT_COVER_URL}
+            alt=""
             styleCss={DEFAULT_COVER_POSITION}
             blurDataURL={DEFAULT_COVER_BLUR}
           />

@@ -19,7 +19,27 @@ export type RichTextRenderContext = {
 const CC_ICON_SVG =
   '<svg viewBox="0 0 640 640" aria-hidden="true" focusable="false"><path d="M317.8 278.9L284.6 296.2C275.2 276.6 259.4 276.3 257.1 276.3C235 276.3 223.9 290.9 223.9 320.1C223.9 343.7 233.1 363.9 257.1 363.9C271.6 363.9 281.7 356.8 287.7 342.6L318.3 358.1C312.1 369.6 292.6 397.1 253.2 397.1C230.6 397.1 179.2 386.8 179.2 320.1C179.2 261.4 222.2 243 251.8 243C282.5 243 304.5 254.9 317.8 278.9zM460.8 278.9L428 296.2C418.5 276.4 402.3 276.3 400.1 276.3C378 276.3 366.9 290.9 366.9 320.1C366.9 343.6 376.1 363.9 400.1 363.9C414.5 363.9 424.7 356.8 430.6 342.6L461.6 358.1C459.5 361.9 440.2 397.1 396.5 397.1C373.8 397.1 322.5 387.2 322.5 320.1C322.5 261.4 365.5 243 395.1 243C425.8 243 447.7 254.9 460.7 278.9zM319.6 72C176.7 72 72 187.1 72 320.1C72 458.5 185.6 568.1 319.6 568.1C449.5 568.1 568 467.2 568 320.1C568 182.2 461.4 72 319.6 72zM320.5 522.8C208 522.8 116.8 429.8 116.8 320C116.8 214.6 202.2 116.7 320.5 116.7C433 116.7 523.3 206.2 523.3 320C523.3 441.7 423.6 522.8 320.5 522.8z"/></svg>'
 
-const allowedHeadingTags = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+// h1 z editoru se renderuje jako h2: jediný h1 stránky je název v heru
+// a druhý by vyhledávačům i čtečkám rozbil osnovu dokumentu.
+const allowedHeadingTags = new Set(['h2', 'h3', 'h4', 'h5', 'h6'])
+
+/** Šířka čtecího sloupce — víc než tolik pixelů obrázek v textu nikdy nemá. */
+const CONTENT_IMAGE_MAX_WIDTH = 790
+
+/**
+ * `width`/`height` pro <img> (poměr stran → prohlížeč si vyhradí místo a text
+ * neposkakuje, když fotka doteče), zmenšené na šířku sloupce. Bez známých
+ * rozměrů nic — špatný poměr by fotku zdeformoval.
+ */
+function imageDimensionAttrs(width: number, height: number): string {
+  if (!(width > 0 && height > 0)) return ''
+  const w = Math.min(width, CONTENT_IMAGE_MAX_WIDTH)
+  const h = Math.round((height * w) / width)
+  return ` width="${w}" height="${h}"`
+}
+
+/** Fotky v textu jsou pod hero fotkou (LCP) → stahovat až u viewportu. */
+const LAZY_IMG_ATTRS = ' loading="lazy" decoding="async"'
 
 /** Šířka fotky otevírané v lightboxu (delší strana na šířku 1600 px stačí i na 4k displeje se zoomem). */
 const LIGHTBOX_MAX_WIDTH = 1600
@@ -66,6 +86,7 @@ export function richTextToHtml(value: unknown, context: RichTextRenderContext = 
       'target',
       'rel',
       'loading',
+      'decoding',
       'referrerpolicy',
       'srcset',
       'sizes',
@@ -124,7 +145,7 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
       return `<p>${children}</p>`
     case 'heading': {
       const rawTag = String((node.tag as string | undefined) || 'h2').toLowerCase()
-      const tag = allowedHeadingTags.has(rawTag) ? rawTag : 'h2'
+      const tag = allowedHeadingTags.has(rawTag) ? rawTag : 'h2' // h1 i neznámé → h2
       const id = uniqueHeadingId(headingIdFromHtml(children), context.usedHeadingIds)
       const idAttr = id ? ` id="${id}"` : ''
       return `<${tag}${idAttr}>${children}</${tag}>`
@@ -165,7 +186,11 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
         (linkFields?.newTab as boolean | undefined) ?? (node.newTab as boolean | undefined) ?? false
       const normalizedUrl =
         linkType === 'internal' && rawUrl && !rawUrl.startsWith('/') ? `/${rawUrl}` : rawUrl
-      const url = isSafeUrl(String(normalizedUrl)) ? escapeHtml(String(normalizedUrl)) : '#'
+      // Nebezpečná/prázdná adresa → jen text bez odkazu. Dřív `href="#"`,
+      // což je prázdná kotva (skok nahoru, pro čtečky a crawlery falešný odkaz).
+      const urlText = String(normalizedUrl ?? '').trim()
+      if (!urlText || !isSafeUrl(urlText)) return children
+      const url = escapeHtml(urlText)
       const nofollow = Boolean(linkFields?.nofollow)
       const relTokens: string[] = []
 
@@ -188,8 +213,10 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
           String((node.value as Record<string, unknown>)?.url ?? (node.src as string) ?? ''),
         ),
       )
-      const alt = escapeHtml(String((node.value as Record<string, unknown>)?.alt ?? ''))
-      return src ? `<img src="${src}" alt="${alt}" />` : ''
+      const value = node.value as Record<string, unknown> | undefined
+      const alt = escapeHtml(String(value?.alt ?? ''))
+      const dims = imageDimensionAttrs(Number(value?.width), Number(value?.height))
+      return src ? `<img src="${src}" alt="${alt}"${dims}${LAZY_IMG_ATTRS} />` : ''
     }
     case 'block': {
       const fields = node.fields as Record<string, unknown> | undefined
@@ -230,9 +257,9 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
             const scale = Math.min(1, LIGHTBOX_MAX_WIDTH / width)
             dimensionAttrs = ` data-pswp-width="${Math.round(width * scale)}" data-pswp-height="${Math.round(height * scale)}"`
           }
-          html = `<figure class="image-wrapper"><a href="${fullUrl}" rel="lightbox"${dimensionAttrs}><img alt="${alt}" src="${defaultUrl}" srcset="${smallUrl} 420w, ${defaultUrl} 747w" sizes="(min-width: 480px) calc(100vw - 60px), calc(100vw - 30px)" /></a>`
+          html = `<figure class="image-wrapper"><a href="${fullUrl}" rel="lightbox"${dimensionAttrs}><img alt="${alt}" src="${defaultUrl}" srcset="${smallUrl} 420w, ${defaultUrl} 747w" sizes="(min-width: 480px) calc(100vw - 60px), calc(100vw - 30px)"${imageDimensionAttrs(width, height)}${LAZY_IMG_ATTRS} /></a>`
         } else {
-          html = `<figure class="image-wrapper"><img src="${escapeHtml(toMediaProxy(url))}" alt="${alt}" />`
+          html = `<figure class="image-wrapper"><img src="${escapeHtml(toMediaProxy(url))}" alt="${alt}"${imageDimensionAttrs(Number(image.width), Number(image.height))}${LAZY_IMG_ATTRS} />`
         }
 
         if (caption || attribution) {
@@ -392,7 +419,7 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
           const price = escapeHtml(String(column.price ?? ''))
           const items = Array.isArray(column.items) ? column.items : []
 
-          html += `<div class="pi-budget-container"><div class="pi-budget-container__title pi-budget-container__title--${tier}"><div class="pi-budget-container__range"><h5>${rangeLabel}</h5></div><div class="pi-budget-container__price">${price}</div></div><ul class="pi-budget-container__list">${items
+          html += `<div class="pi-budget-container"><div class="pi-budget-container__title pi-budget-container__title--${tier}"><div class="pi-budget-container__range"><p>${rangeLabel}</p></div><div class="pi-budget-container__price">${price}</div></div><ul class="pi-budget-container__list">${items
             .map(
               (item: any) =>
                 `<li class="pi-budget-container__list__item">${escapeHtml(String(item?.text ?? ''))}</li>`,

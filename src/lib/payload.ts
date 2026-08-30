@@ -34,11 +34,13 @@ import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
 import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
+import { resolveSeoDescription } from '@/lib/seo'
 import {
   getArticleImageUrl,
   isProduction,
   richTextToPlainText,
   stripLeadingContinent,
+  articlePath,
 } from './utils'
 
 /**
@@ -118,7 +120,7 @@ const ANCESTOR_SELECT = {
 } as const
 
 // Detail stránky = 3 paralelní dotazy (stránka ∥ děti ∥ články), každý jen
-// s poli, která web kreslí (bez SEO meta a profilů uživatelů). `breadcrumbs`
+// s poli, která web kreslí (SEO `meta` pro `<title>`/popisek ano, profily uživatelů ne). `breadcrumbs`
 // tu být MUSÍ — drobečky se počítají z hierarchie v CMS, ne z URL.
 const PAGE_SCALAR_SELECT = {
   title: true,
@@ -129,6 +131,8 @@ const PAGE_SCALAR_SELECT = {
   detail: true,
   featuredImage: true,
   breadcrumbs: BREADCRUMBS_SELECT,
+  // SEO titulek a popisek z CMS pro `<title>`/meta description (generateMetadata).
+  meta: true,
   // Deep-linky destinace pro sekci „Příprava do …" (zájezdy/ubytování/auto).
   affiliate: true,
   // Klimatické normály pro sekci „Průměrné měsíční teploty a srážky" na
@@ -331,16 +335,17 @@ async function enrichFeaturedImages<T extends { featuredImage?: { image?: unknow
 
   if (ids.length === 0) return docs
 
-  const urlMap = await fetchMediaUrlsByIds([...new Set(ids)])
+  const mediaMap = await fetchMediaBasicsByIds([...new Set(ids)])
 
   return docs.map((d) => {
     const img = d.featuredImage?.image
-    if (d.featuredImage && typeof img === 'number' && urlMap.has(img)) {
+    if (d.featuredImage && typeof img === 'number' && mediaMap.has(img)) {
+      const media = mediaMap.get(img)!
       return {
         ...d,
         featuredImage: {
           ...d.featuredImage,
-          image: { url: urlMap.get(img)!, alternativeText: null },
+          image: { url: media.url, alternativeText: media.alt },
         },
       }
     }
@@ -635,6 +640,12 @@ const ARTICLE_DETAIL_SELECT = {
   pages: true,
   createdBy: true,
   createdByPublic: true,
+  // SEO titulek/popisek z CMS + časy vydání a poslední úpravy (metadata,
+  // JSON-LD Article, viditelné datum v článku).
+  meta: true,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
 } as const
 
 // Fullslug bez vodicích/koncových lomítek — pro porovnání s cestou z URL, která
@@ -2660,9 +2671,15 @@ export const fetchFooter = cache(async (): Promise<GlobalFooter | null> => {
  * Returns a Map of mediaId → URL string.
  * (Bez cache — lokální dotaz je ~ms a Map není serializovatelná.)
  */
-export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, string>> {
+export type MediaBasics = { url: string; alt: string | null }
+
+/**
+ * URL + alt text médií podle id jedním dotazem. Alt jde do `alternativeText`
+ * populovaných obrázků (hero fotka ho čte pro `alt`), URL do karet a náhledů.
+ */
+export async function fetchMediaBasicsByIds(ids: number[]): Promise<Map<number, MediaBasics>> {
   if (ids.length === 0) return new Map()
-  const map = new Map<number, string>()
+  const map = new Map<number, MediaBasics>()
   try {
     const payload = await getDb()
     const res = await payload.find({
@@ -2671,15 +2688,22 @@ export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, st
       where: { id: { in: ids } },
       limit: ids.length,
       depth: 0,
+      // Bez `select`: `url` uploadu Payload skládá až v afterRead z ostatních
+      // polí — s výběrem sloupců by se ztratilo (ověřeno: zmizely hero fotky).
     })
     for (const doc of res.docs || []) {
-      const d = doc as unknown as { id: number; url?: string | null }
-      if (d.url) map.set(d.id, d.url)
+      const d = doc as unknown as { id: number; url?: string | null; alt?: string | null }
+      if (d.url) map.set(d.id, { url: d.url, alt: d.alt?.trim() || null })
     }
   } catch {
     // bez URL — karty zobrazí placeholder
   }
   return map
+}
+
+export async function fetchMediaUrlsByIds(ids: number[]): Promise<Map<number, string>> {
+  const basics = await fetchMediaBasicsByIds(ids)
+  return new Map([...basics].map(([id, b]) => [id, b.url]))
 }
 
 /**
@@ -2787,14 +2811,113 @@ const fetchSitemapEntriesCached = cached(fetchSitemapEntriesUncached, 'sitemap',
   'articles',
 ])
 
+// Chybu ZÁMĚRNĚ nepolykáme (stejně jako #22/#23 u detailů): prázdný seznam by
+// vypadal jako platná sitemapa „jen s homepage" a Google by ji vzal vážně.
+// Propadnutí chyby dá 500 → Google sitemapu zkusí později znovu.
 export const fetchSitemapEntries = async () => {
   try {
     return await fetchSitemapEntriesCached()
   } catch (err) {
     console.error('[sitemap] load failed:', err)
-    return { pages: [], articles: [] }
+    throw err
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RSS kanál nových článků (/feed.xml)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FEED_LIMIT = 30
+
+export type FeedArticle = {
+  title: string
+  /** Kanonická cesta článku (`mainPage.fullSlug/slug`). */
+  path: string
+  /** SEO popisek z CMS, jinak začátek textu — spočtený tady, aby cache nenesla
+   *  celý rich text (30 článků ≈ 0,8 MB; limit záznamu unstable_cache je 2 MB). */
+  description: string | null
+  publishedAt: string | null
+  /** Poslední úprava — pro `lastBuildDate` kanálu (změna textu bez nového článku). */
+  updatedAt: string | null
+  authorName: string | null
+}
+
+async function fetchFeedArticlesUncached(): Promise<FeedArticle[]> {
+  const payload = await getDb()
+  const res = await payload.find({
+    overrideAccess: false,
+    collection: 'articles',
+    where: { and: [{ mainPage: { exists: true } }, { publishedAt: { exists: true } }] },
+    sort: '-publishedAt',
+    limit: FEED_LIMIT,
+    depth: 0,
+    joins: false,
+    select: {
+      title: true,
+      slug: true,
+      mainPage: true,
+      text: true,
+      meta: true,
+      publishedAt: true,
+      updatedAt: true,
+      createdBy: true,
+      createdByPublic: true,
+    },
+  })
+  type Raw = {
+    title: string
+    slug: string
+    mainPage?: unknown
+    text?: unknown
+    meta?: { title?: string | null; description?: string | null } | null
+    publishedAt?: string | null
+    updatedAt?: string | null
+    createdByPublic?: { name?: string | null; username?: string | null } | null
+  }
+  const docs = res.docs as unknown as Raw[]
+  const parentIds = [
+    ...new Set(
+      docs.map((d) => relationId(d.mainPage)).filter((id): id is number | string => id != null),
+    ),
+  ]
+  const parents =
+    parentIds.length > 0
+      ? ((
+          await payload.find({
+            overrideAccess: false,
+            collection: 'pages',
+            where: { id: { in: parentIds } },
+            limit: parentIds.length,
+            depth: 0,
+            select: { fullSlug: true },
+            joins: false,
+          })
+        ).docs as unknown as { id: number | string; fullSlug?: string | null }[])
+      : []
+  const slugById = new Map(parents.map((p) => [p.id, p.fullSlug]))
+
+  return docs.flatMap((d) => {
+    const parentId = relationId(d.mainPage)
+    const parentSlug = parentId != null ? slugById.get(parentId) : null
+    if (!parentSlug || !d.slug) return []
+    return [
+      {
+        title: d.title,
+        path: articlePath(parentSlug, d.slug),
+        description: resolveSeoDescription(d.meta, d.text) ?? null,
+        publishedAt: d.publishedAt ?? null,
+        updatedAt: d.updatedAt ?? null,
+        authorName: d.createdByPublic?.name || d.createdByPublic?.username || null,
+      },
+    ]
+  })
+}
+
+/** Nejnovější články pro RSS. Chyba DB propadá ven (route vrátí 500). */
+export const fetchFeedArticles = cached(fetchFeedArticlesUncached, 'feed', () => [
+  'articles',
+  'pages',
+])
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Homepage: sekce „Co je nového" — nová místa + recenze + komentáře v jednom

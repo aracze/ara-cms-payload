@@ -2,6 +2,12 @@ import Image from 'next/image'
 
 interface StaticHeroImageProps {
   imageUrl: string | null
+  /**
+   * Popis fotky pro čtečky a Google Obrázky. Hero je největší obrázek stránky
+   * a ilustruje její h1 → stránky předávají název místa/článku. Prázdný řetězec
+   * jen u čistě dekorativních obálek (profil, přihlášení).
+   */
+  alt: string
   styleCss?: string
   /** Rozmazaný náhled (data URI) — zobrazí se, dokud se nenačte fotka. */
   blurDataURL?: string
@@ -23,14 +29,14 @@ function parseObjectPosition(styleCss?: string): string {
   return pos
 }
 
-export const StaticHeroImage = ({ imageUrl, styleCss, blurDataURL }: StaticHeroImageProps) => {
+export const StaticHeroImage = ({ imageUrl, alt, styleCss, blurDataURL }: StaticHeroImageProps) => {
   // Bez obrázku necháme prosvítat tmavé pozadí sekce (bg-[#3b444f]).
   if (!imageUrl) return null
 
   return (
     <Image
       src={imageUrl}
-      alt=""
+      alt={alt}
       fill
       priority
       // Hero je přes celou šířku → prohlížeč si podle šířky okna a DPR vybere

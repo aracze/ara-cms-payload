@@ -1,4 +1,6 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
+import { generateSeoDescription, generateSeoTitle, type SeoAdminDoc } from '@/lib/seo-admin'
+import { getSiteURL } from '@/lib/utils'
 import {
   FixedToolbarFeature,
   InlineToolbarFeature,
@@ -177,17 +179,21 @@ export default buildConfig({
       breadcrumbsFieldSlug: 'breadcrumbs',
     }),
     seoPlugin({
-      generateTitle: ({ doc }) => `${(doc as any).title || ''} | Ara.cz`,
-      generateDescription: ({ doc }) => {
-        const title = (doc as any).title || ''
-        return `Informace o destinaci ${title} na Ara.cz – inspirace a rady na cesty.`
-      },
+      // Tlačítka „Vygenerovat" u SEO polí: návrh podle kategorie stránky ve
+      // znění starého webu (src/lib/seo-templates.ts) — stejné šablony, jaké web
+      // použije, když pole zůstane prázdné. Web příponu „| Ara.cz" odřízne
+      // a přidá jednotně, takže je jedno, jestli ji editor nechá.
+      generateTitle: async ({ doc, collectionSlug, req }) =>
+        generateSeoTitle(doc as SeoAdminDoc, collectionSlug, req),
+      generateDescription: async ({ doc, collectionSlug, req }) =>
+        generateSeoDescription(doc as SeoAdminDoc, collectionSlug, req),
       generateURL: async ({ doc, collectionSlug, req }) => {
         const slug = (doc as any).slug || ''
+        const site = getSiteURL()
 
         if (collectionSlug === 'pages') {
           const fullSlug = (doc as any).fullSlug || ''
-          return `https://www.ara.cz${fullSlug}`
+          return `${site}${fullSlug}`
         }
 
         if (collectionSlug === 'articles') {
@@ -205,16 +211,16 @@ export default buildConfig({
                 req,
               })
               if (mainPage?.fullSlug) {
-                return `https://www.ara.cz${mainPage.fullSlug}/${slug}`
+                return `${site}${mainPage.fullSlug}/${slug}`
               }
             } catch (e) {
               console.error('Error generating Article URL:', e)
             }
           }
-          return `https://www.ara.cz/${slug}` // Fallback bez hlavní stránky
+          return `${site}/${slug}` // Fallback bez hlavní stránky
         }
 
-        return `https://www.ara.cz/${slug}`
+        return `${site}/${slug}`
       },
       generateImage: ({ doc }) => (doc as any).featuredImage?.image,
     }),
