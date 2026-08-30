@@ -1,17 +1,20 @@
 import React from 'react'
 import type { TopAffiliateDeal } from '@/lib/payload'
-import { Badge, dayCount, nightCount, priceCzk } from '../page/deals-section'
+import { belowUsualPercent } from '@/lib/kiwi-deals'
+import { Badge, UsualPriceBadge, dayCount, nightCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
 /**
- * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z Prahy
- * (dlaždice — finální „ukázka 1" z výběru 14. 8. 2026) a 4 zájezdy
- * z kurátorovaného Invia feedu řazené podle slevy (globál Homepage →
- * `dealsOfDay`, výběr 28. 8. 2026; bez feedu spadnou na nejlevnější zájezdy
- * destinací — viz fetchTopAffiliateDeals). Data plní denní sync
- * /api/sync-affiliate-deals; bez dat se sekce nezobrazí. Letenky nesou fotku
- * destinace, zájezdy fotku hotelu; ceny letenek jsou ZPÁTEČNÍ včetně délky
- * pobytu (viz fetchKiwiDeal).
+ * Homepage sekce „Dnešní akční nabídky": 4 nejlevnější letenky z ČR napříč
+ * destinacemi webu (dlaždice — finální „ukázka 1" z výběru 14. 8. 2026;
+ * „varianta A" z 30. 8. 2026 = stejné dlaždice, letenky z hromadného dotazu
+ * z celé ČR) a 4 zájezdy z kurátorovaného Invia feedu řazené podle slevy
+ * (globál Homepage → `dealsOfDay`, výběr 28. 8. 2026; bez feedu spadnou na
+ * nejlevnější zájezdy destinací — viz fetchTopAffiliateDeals). Data plní denní
+ * sync /api/sync-affiliate-deals; bez dat se sekce nezobrazí. Letenky nesou
+ * fotku destinace, zájezdy fotku hotelu; ceny letenek jsou ZPÁTEČNÍ včetně
+ * délky pobytu (viz kiwiSearchParams v syncu). Letenka výrazně pod svou
+ * obvyklou cenou dostane štítek „−25 % než obvykle" (UsualPriceBadge).
  */
 
 /** „2026-11-12" → „12. 11." (rok se na kompaktní dlaždici vynechává). */
@@ -69,10 +72,12 @@ function flightMeta(deal: TopAffiliateDeal): string {
   // Dlaždice je úzká, tak jen to nejdůležitější: že je cena zpáteční a jak
   // dlouhý pobyt. Datum odletu se vejde až na detailu místa.
   // (shortDate umí vrátit null — bez kontroly by se vykreslilo „odlet null".)
-  const departure = deal.departureDate ? shortDate(deal.departureDate) : null
+  const departureDate = deal.departureDate ? shortDate(deal.departureDate) : null
   return [
+    // Odlet mimo Prahu jde první ze stejného důvodu jako u zájezdů (tourMeta).
+    departureFrom(deal),
     'zpáteční',
-    deal.nights ? nightCount(deal.nights) : departure ? `odlet ${departure}` : null,
+    deal.nights ? nightCount(deal.nights) : departureDate ? `odlet ${departureDate}` : null,
     'Kiwi.com',
   ]
     .filter(Boolean)
@@ -96,7 +101,7 @@ function tileTitle(deal: TopAffiliateDeal): string {
   return full.length <= TITLE_MAX_CHARS ? full : deal.title
 }
 
-/** „z Brna" — 2. pád českých letišť z Invia feedu; neznámé jméno jen s předložkou. */
+/** „z Brna" — 2. pád českých letišť (Invia feed i Kiwi); neznámé jméno jen s předložkou. */
 const DEPARTURE_FROM: Record<string, string> = {
   Praha: 'z Prahy',
   Brno: 'z Brna',
@@ -105,15 +110,24 @@ const DEPARTURE_FROM: Record<string, string> = {
   'Karlovy Vary': 'z Karlových Varů',
 }
 
+/**
+ * „odlet z Brna" — jen mimo Prahu: ta je samozřejmost, a dlaždice je úzká;
+ * odlet odjinud je naopak informace, bez které by cena mátla. Volající ho
+ * dává PRVNÍ: řádek se ořezává zprava a dlouhý název hotelu by ho schoval.
+ */
+function departureFrom(deal: TopAffiliateDeal): string | null {
+  return deal.departure && deal.departure !== 'Praha'
+    ? `odlet ${DEPARTURE_FROM[deal.departure] ?? `z ${deal.departure}`}`
+    : null
+}
+
 function tourMeta(deal: TopAffiliateDeal): string {
-  // Odlet se zmiňuje jen mimo Prahu — ta je u zájezdů samozřejmost, a dlaždice
-  // je úzká; „odlet z Brna" je naopak informace, bez které by cena mátla.
-  // Proto jde PRVNÍ: řádek se ořezává zprava a dlouhý název hotelu by ho schoval.
-  const departure =
-    deal.departure && deal.departure !== 'Praha'
-      ? `odlet ${DEPARTURE_FROM[deal.departure] ?? `z ${deal.departure}`}`
-      : null
-  return [departure, deal.hotel, deal.days && deal.days > 0 ? dayCount(deal.days) : null, 'Invia']
+  return [
+    departureFrom(deal),
+    deal.hotel,
+    deal.days && deal.days > 0 ? dayCount(deal.days) : null,
+    'Invia',
+  ]
     .filter(Boolean)
     .join(' · ')
 }
@@ -127,6 +141,7 @@ function DealTile({
   badge: 'flight' | 'tour'
   metaLine: string
 }) {
+  const belowUsual = badge === 'flight' ? belowUsualPercent(deal.price, deal.usualPrice) : null
   return (
     <a
       href={deal.deepLink}
@@ -151,6 +166,13 @@ function DealTile({
         {typeof deal.discount === 'number' && deal.discount > 0 && (
           <span className="absolute top-2 right-2 z-10 rounded-full bg-[#d45145] px-2.5 py-0.5 text-[11.5px] font-bold text-white">
             −{deal.discount}&nbsp;%
+          </span>
+        )}
+        {/* Letenka pod obvyklou cenou — stejné místo jako sleva zájezdu, ale
+            modře a se slovem „než obvykle": není to sleva, jen dnes levněji. */}
+        {belowUsual != null && (
+          <span className="absolute top-2 right-2 z-10">
+            <UsualPriceBadge percent={belowUsual} />
           </span>
         )}
       </div>

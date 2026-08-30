@@ -84,6 +84,25 @@ export interface AffiliateDealKiwi {
   departureDate: string
   /** Počet nocí v destinaci; null = Kiwi hodnotu nevrátil. */
   nights: number | null
+  /**
+   * Odletové město v ČR („Praha", „Brno"…) — hledá se z celé republiky;
+   * null = starší záznam z doby hledání jen z Prahy.
+   */
+  departure: string | null
+  /**
+   * Obvyklá cena = medián denních nejlevnějších cen za posledních 90 dní
+   * (`kiwiPriceHistory`); karta z ní počítá štítek „levnější než obvykle".
+   * null = zatím málo dní historie (viz src/lib/kiwi-deals.ts).
+   */
+  usualPrice: number | null
+}
+
+/** Jeden den historie nejlevnější letenky destinace (základ obvyklé ceny). */
+export interface KiwiPricePoint {
+  /** Den syncu v pražském čase, YYYY-MM-DD. */
+  date: string
+  /** Nejlevnější zpáteční cena toho dne v CZK. */
+  price: number
 }
 
 export interface AffiliateDealInvia {
@@ -104,6 +123,11 @@ export interface AffiliateDealInvia {
 export interface AffiliateDeals {
   kiwi?: AffiliateDealKiwi | null
   invia?: AffiliateDealInvia | null
+  /**
+   * Denní ceny letenky za posledních 90 dní (seřazené podle data, jeden bod
+   * na den) — přežívá i den, kdy Kiwi selže, ať se historie nerozbije.
+   */
+  kiwiPriceHistory?: KiwiPricePoint[]
   /** ISO timestamp posledního úspěšného syncu. */
   updatedAt?: string
 }

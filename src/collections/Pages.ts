@@ -223,7 +223,7 @@ export const Pages: CollectionConfig = {
               type: 'text',
               admin: {
                 description:
-                  'Kam hledat nejlevnější letenku z Prahy (sekce „Akční nabídky"). Bere IATA kód letiště/města (LON, PAR) i kód země (HR, GR) — viz Tequila Search API.',
+                  'Kam hledat nejlevnější letenku z ČR (sekce „Akční nabídky"). Bere IATA kód letiště/města (LON, PAR) i kód země (HR, GR) — viz Tequila Search API.',
               },
             },
             {
