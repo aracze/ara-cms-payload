@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { revalidatePageAfterChange, revalidatePageAfterDelete } from '../hooks/revalidation'
 import { isAllowedInviaFeedUrl } from '../endpoints/syncAffiliateDeals'
+import { isValidKiwiCode } from '../lib/kiwi-deals'
 import { imageFields } from '../fields/image'
 import { currencyCodeField, timezoneField } from '../fields/place-detail'
 import { slugField } from '../fields/slug'
@@ -221,6 +222,13 @@ export const Pages: CollectionConfig = {
               name: 'kiwiIataCode',
               label: 'Kiwi Fly To (IATA kód letiště)',
               type: 'text',
+              // Jen holý IATA kód: hromadný dotaz syncu skládá všechny kódy do
+              // jednoho `fly_to` a páruje odpověď podle délky kódu (2 = země,
+              // 3 = město/letiště) — jiný tvar by ho rozbil nebo se nikdy nespároval.
+              validate: (value: string | null | undefined) =>
+                !value ||
+                isValidKiwiCode(value) ||
+                'Zadej IATA kód: 2 písmena země (HR, GR) nebo 3 písmena města/letiště (LON, PAR).',
               admin: {
                 description:
                   'Kam hledat nejlevnější letenku z ČR (sekce „Akční nabídky"). Bere IATA kód letiště/města (LON, PAR) i kód země (HR, GR) — viz Tequila Search API.',

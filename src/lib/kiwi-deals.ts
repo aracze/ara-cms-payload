@@ -1,7 +1,7 @@
 /**
  * Čistá logika nad letenkami z Kiwi Tequila Search API — sdílí ji denní sync
- * (src/endpoints/syncAffiliateDeals.ts) a karty na webu; bez závislostí na
- * Payloadu, aby šla testovat (tests/int/kiwi-deals.int.spec.ts).
+ * (src/endpoints/syncAffiliateDeals.ts), admin validace a karty na webu; bez
+ * závislostí na Payloadu, aby šla testovat (tests/int/kiwi-deals.int.spec.ts).
  *
  * Od 30. 8. 2026 se letenky hledají JEDNÍM dotazem pro všechny destinace
  * najednou („z celé ČR do seznamu cílů, jedna nejlevnější za město",
@@ -28,30 +28,63 @@ export interface KiwiFlight {
   countryTo?: { code?: string } | null
 }
 
-/**
- * Česká letiště s pravidelnými linkami → jméno města pro kartu („Praha ⇄ Řím",
- * „odlet z Brna"). Kiwi vrací jména měst anglicky (Prague), proto se mapuje
- * podle kódu letiště; neznámé letiště padá na anglické jméno z odpovědi.
- */
-export const CZECH_AIRPORT_CITIES: Record<string, string> = {
-  PRG: 'Praha',
-  BRQ: 'Brno',
-  OSR: 'Ostrava',
-  PED: 'Pardubice',
-  KLV: 'Karlovy Vary',
-}
+/** Let s cenou a https odkazem — jediný, který se dá poctivě vykreslit. */
+export type UsableKiwiFlight = KiwiFlight & { price: number; deep_link: string }
 
+/** Letenka bez obvyklé ceny — tu doplní historie až v syncu. */
+export type KiwiFlightDeal = Omit<AffiliateDealKiwi, 'usualPrice'>
+
+// ————————————————————————————————————————————————————————————————
+// Česká letiště
+// ————————————————————————————————————————————————————————————————
+
+/**
+ * Česká letiště s pravidelnými linkami — JEDINÁ tabulka pro všechny tři
+ * potřeby: překlad kódu z Kiwi na město (Kiwi vrací jména anglicky, „Prague"),
+ * filtr odletů v Invia feedu (ten píše česká jména) a 2. pád pro popisek
+ * dlaždice („odlet z Brna"). Dřív žily tři kopie ve třech souborech a musely
+ * se shodovat písmeno po písmenu.
+ */
+export const CZECH_AIRPORTS = [
+  { iata: 'PRG', name: 'Praha', from: 'z Prahy' },
+  { iata: 'BRQ', name: 'Brno', from: 'z Brna' },
+  { iata: 'OSR', name: 'Ostrava', from: 'z Ostravy' },
+  { iata: 'PED', name: 'Pardubice', from: 'z Pardubic' },
+  { iata: 'KLV', name: 'Karlovy Vary', from: 'z Karlových Varů' },
+] as const
+
+/** Jména českých letišť tak, jak je píše Invia feed. */
+export const CZECH_AIRPORT_NAMES: readonly string[] = CZECH_AIRPORTS.map((a) => a.name)
+
+/** Odletové město letu; neznámé letiště padá na (anglické) jméno z odpovědi. */
 export function departureCity(flight: KiwiFlight): string | null {
   const code = flight.flyFrom?.trim().toUpperCase()
-  if (code && CZECH_AIRPORT_CITIES[code]) return CZECH_AIRPORT_CITIES[code]
+  const known = CZECH_AIRPORTS.find((a) => a.iata === code)
+  if (known) return known.name
   const city = flight.cityFrom?.trim()
   return city || null
 }
 
-/** Let se dá poctivě vykreslit: kladná cena a https odkaz s provizí. */
-export function isUsableFlight(
-  flight: KiwiFlight,
-): flight is KiwiFlight & { price: number; deep_link: string } {
+/** „z Brna" — 2. pád pro popisek dlaždice; neznámé jméno jen s předložkou. */
+export function departureFromLabel(name: string): string {
+  return CZECH_AIRPORTS.find((a) => a.name === name)?.from ?? `z ${name}`
+}
+
+// ————————————————————————————————————————————————————————————————
+// Kódy destinací a párování letů
+// ————————————————————————————————————————————————————————————————
+
+/**
+ * Pole „Kiwi Fly To" smí být jen IATA kód: 2 písmena země (HR) nebo 3 písmena
+ * města/letiště (LON, LHR). Jiné tvary, které Tequila také bere (`country:IT`,
+ * slugy), by hromadný dotaz buď rozbily celý, nebo by se nikdy nespárovaly
+ * s odpovědí (viz flightMatchesCode) — hlídá to validace v adminu i sync.
+ */
+export function isValidKiwiCode(code: string): boolean {
+  return /^[A-Za-z]{2,3}$/.test(code.trim())
+}
+
+export function isUsableFlight(flight: KiwiFlight): flight is UsableKiwiFlight {
   return (
     typeof flight.price === 'number' &&
     flight.price > 0 &&
@@ -73,9 +106,7 @@ export function flightMatchesCode(flight: KiwiFlight, code: string): boolean {
 }
 
 /** Let z odpovědi → tvar nabídky na kartě (bez obvyklé ceny, tu doplní historie). */
-export function mapKiwiFlight(
-  flight: KiwiFlight & { price: number; deep_link: string },
-): Omit<AffiliateDealKiwi, 'usualPrice'> {
+export function mapKiwiFlight(flight: UsableKiwiFlight): KiwiFlightDeal {
   return {
     price: Math.round(flight.price),
     deepLink: flight.deep_link,
@@ -90,19 +121,18 @@ export function mapKiwiFlight(
 }
 
 /**
- * Z hromadné odpovědi (jedna nejlevnější letenka za město) vybere pro každý
- * kód destinace nejlevnější sedící let. Kód bez shody v mapě chybí — sync
- * pro něj pošle samostatný dotaz (Kiwi třeba kód nezná, nebo město vypadlo
- * za `limit`).
+ * Z odpovědi vybere pro každý kód destinace nejlevnější sedící let. Kód bez
+ * shody v mapě chybí — sync pro něj pošle samostatný dotaz (Kiwi třeba kód
+ * nezná, nebo město vypadlo za `limit`). Slouží hromadné i samostatné odpovědi.
  */
 export function pickCheapestPerCode(
   flights: KiwiFlight[],
   codes: string[],
-): Map<string, Omit<AffiliateDealKiwi, 'usualPrice'>> {
+): Map<string, KiwiFlightDeal> {
   const usable = flights.filter(isUsableFlight)
-  const result = new Map<string, Omit<AffiliateDealKiwi, 'usualPrice'>>()
+  const result = new Map<string, KiwiFlightDeal>()
   for (const code of codes) {
-    let best: (KiwiFlight & { price: number; deep_link: string }) | null = null
+    let best: UsableKiwiFlight | null = null
     for (const flight of usable) {
       if (!flightMatchesCode(flight, code)) continue
       if (!best || flight.price < best.price) best = flight
@@ -123,9 +153,16 @@ export const PRICE_HISTORY_MIN_DAYS = 14
 /** Štítek se kreslí až od tohoto rozdílu v procentech; Kiwi ceny mezi dny kolísají o ±10 %. */
 export const BELOW_USUAL_MIN_PERCENT = 15
 
-/** Dnešek v pražském čase jako YYYY-MM-DD (klíč záznamu historie). */
+/** Dnešek v pražském čase jako YYYY-MM-DD (klíč záznamu historie i začátek hledání). */
 export function pragueToday(now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague' }).format(now)
+}
+
+/** Platné kalendářní datum ve tvaru YYYY-MM-DD („2026-02-31" regexem projde, Date ho posune). */
+export function isIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
 }
 
 /** ISO datum posunuté o `days` dní (záporné = do minulosti); pracuje jen s YYYY-MM-DD. */
@@ -142,11 +179,7 @@ export function sanitizePriceHistory(raw: unknown): KiwiPricePoint[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const { date, price } = item as { date?: unknown; price?: unknown }
-    // Tvar i kalendář: „2026-02-31" regexem projde, ale Date ho posune na
-    // březen — takový bod by seděl v mediánu pod cizím datem.
-    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
-    const parsed = new Date(`${date}T00:00:00Z`)
-    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) continue
+    if (!isIsoDate(date)) continue
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) continue
     out.push({ date, price })
   }
@@ -186,17 +219,18 @@ export function usualPrice(
 
 /**
  * O kolik procent je dnešní cena pod obvyklou; null = rozdíl pod prahem nebo
- * obvyklá cena není. Slovník karet: „levnější než obvykle", NIKDY „sleva" —
- * nikdo nic nezlevnil, jen je dnes levněji než v posledních týdnech.
+ * obvyklá cena není. Práh se porovnává PŘED zaokrouhlením (14,5 % není 15 %).
+ * Slovník karet: „levnější než obvykle", NIKDY „sleva" — nikdo nic nezlevnil,
+ * jen je dnes levněji než v posledních týdnech.
  */
 export function belowUsualPercent(
   price: number,
   usual: number | null | undefined,
   minPercent = BELOW_USUAL_MIN_PERCENT,
 ): number | null {
-  if (!usual || usual <= 0 || price <= 0) return null
-  const percent = Math.round((1 - price / usual) * 100)
-  return percent >= minPercent ? percent : null
+  if (!usual || price <= 0) return null
+  const percent = (1 - price / usual) * 100
+  return percent >= minPercent ? Math.round(percent) : null
 }
 
 // ————————————————————————————————————————————————————————————————
@@ -210,7 +244,8 @@ export const SUSPICIOUS_PRICE_FACTOR = 1.6
 
 /**
  * Referenční cena pro kontrolu hromadného výsledku: medián historie (od 7 dní),
- * jinak včerejší cena; null = první běh, není s čím srovnat.
+ * jinak včerejší cena; null = první běh pro destinaci, není s čím srovnat
+ * (sync pak cenu ověří samostatným dotazem, ať historie nezačne na výkyvu).
  */
 export function referencePrice(
   history: KiwiPricePoint[],
@@ -224,12 +259,13 @@ export function referencePrice(
 /**
  * Hromadné hledání občas vrátí za zemi jen dražší město (Kiwi prohledá vzorek
  * kombinací — Itálie „Florencie 3 046" místo „Řím 1 042"). Takovou cenu sync
- * ověří samostatným dotazem; bez reference (první běh) se věří dávce.
+ * ověří samostatným dotazem. Bez reference vrací false — první běh řeší sync
+ * zvlášť (ověřuje vždy).
  */
 export function isSuspiciousPrice(
   price: number,
   reference: number | null,
   factor = SUSPICIOUS_PRICE_FACTOR,
 ): boolean {
-  return reference !== null && reference > 0 && price > reference * factor
+  return reference !== null && price > reference * factor
 }

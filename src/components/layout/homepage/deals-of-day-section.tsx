@@ -1,6 +1,6 @@
 import React from 'react'
 import type { TopAffiliateDeal } from '@/lib/payload'
-import { belowUsualPercent } from '@/lib/kiwi-deals'
+import { belowUsualPercent, departureFromLabel } from '@/lib/kiwi-deals'
 import { Badge, UsualPriceBadge, dayCount, nightCount, priceCzk } from '../page/deals-section'
 import { DealCardImage } from '../page/deal-card-image'
 
@@ -101,23 +101,15 @@ function tileTitle(deal: TopAffiliateDeal): string {
   return full.length <= TITLE_MAX_CHARS ? full : deal.title
 }
 
-/** „z Brna" — 2. pád českých letišť (Invia feed i Kiwi); neznámé jméno jen s předložkou. */
-const DEPARTURE_FROM: Record<string, string> = {
-  Praha: 'z Prahy',
-  Brno: 'z Brna',
-  Ostrava: 'z Ostravy',
-  Pardubice: 'z Pardubic',
-  'Karlovy Vary': 'z Karlových Varů',
-}
-
 /**
  * „odlet z Brna" — jen mimo Prahu: ta je samozřejmost, a dlaždice je úzká;
  * odlet odjinud je naopak informace, bez které by cena mátla. Volající ho
  * dává PRVNÍ: řádek se ořezává zprava a dlouhý název hotelu by ho schoval.
+ * Skloňování drží tabulka českých letišť v src/lib/kiwi-deals.ts.
  */
 function departureFrom(deal: TopAffiliateDeal): string | null {
   return deal.departure && deal.departure !== 'Praha'
-    ? `odlet ${DEPARTURE_FROM[deal.departure] ?? `z ${deal.departure}`}`
+    ? `odlet ${departureFromLabel(deal.departure)}`
     : null
 }
 
