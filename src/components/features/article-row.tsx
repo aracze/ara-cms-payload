@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { isCloudinary } from '@/lib/cloudinary-loader'
+import { NoPreview } from './photo-tile'
 
 /**
  * Lehký view-model položky výpisu článků. Server (seznam) předpočítá
@@ -72,11 +73,7 @@ export function ArticleRowCard({
             unoptimized={!isCloudinary(imageUrl)}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1a3f6c]/5 to-[#1a3f6c]/10">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#1a3f6c]/20">
-              Bez náhledu
-            </span>
-          </div>
+          <NoPreview />
         )}
       </div>
     </Link>

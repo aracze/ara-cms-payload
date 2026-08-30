@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { PlaceCardImage } from '@/components/layout/page/place-card-image'
+import { PHOTO_TILE_FRAME, PhotoTile, PinIcon } from '@/components/features/photo-tile'
 import { StarRating } from '@/components/features/reviews/star-rating'
 import { formatReviewDate } from '@/lib/relative-time'
 import type {
@@ -12,27 +13,17 @@ import type {
 /**
  * Karty profilu — JEDEN vizuální jazyk pro místa, cíle, recenze i komentáře.
  *
- * Základ je karta ze stránek míst (`SuperordinateGrid` v places-to-visit.tsx):
- * výška 280 px, jemný stín, kruhový odznak v levém horním rohu a u fotky
- * ztmavení zdola s bílým názvem. Karty bez fotky (a karty recenzí/komentářů)
- * jsou bílé s modrým názvem — odznak je pak plný modrý kruh s bílou ikonou,
- * aby byl na bílé vidět.
+ * Fotokarty jsou sdílená fotodlaždice webu (`PhotoTile`, velikost L 280) —
+ * jediné místo, kde má odznak v rohu smysl, protože tu rozlišuje místa,
+ * články a recenze. Karty bez fotky (a karty recenzí/komentářů) jsou bílé
+ * s modrým názvem — odznak je pak plný modrý kruh s bílou ikonou, aby byl na
+ * bílé vidět; rám kopíruje rohy a stín fotodlaždice.
  *
  * Vše jsou SERVER komponenty; interaktivní je jen mřížka (ProfileCardGrid).
  */
 
 /** Sdílený rám karty: stejná výška, rádius, stín a chování při přejezdu. */
-const CARD =
-  'group relative flex h-[280px] flex-col overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-500 hover:shadow-xl'
-
-/** Odznak na fotce — světlý, aby byl čitelný na tmavém snímku (jako u míst). */
-function PhotoBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 shadow-sm">
-      {children}
-    </div>
-  )
-}
+const CARD = `group relative flex h-[280px] flex-col overflow-hidden ${PHOTO_TILE_FRAME}`
 
 /** Odznak na bílé kartě — plný modrý kruh s bílou ikonou. */
 function SolidBadge({ children }: { children: React.ReactNode }) {
@@ -42,12 +33,6 @@ function SolidBadge({ children }: { children: React.ReactNode }) {
     </div>
   )
 }
-
-const PinIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-  </svg>
-)
 
 const StarBadgeIcon = ({ className }: { className: string }) => (
   <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -128,42 +113,34 @@ function PhotoCard({
   imageUrl: string | null
   icon: (props: { className: string }) => React.ReactElement
 }) {
+  if (imageUrl) {
+    return (
+      <PhotoTile
+        href={href}
+        title={title}
+        sub={subtitle}
+        size="lg"
+        titleLines={3}
+        badge={<Icon className="h-4 w-4 text-[#1a3f6c]" />}
+        // Na profilu jsou karty v jednom sloupci i na mobilu a sousedí s bílými
+        // kartami recenzí (280 px) — drž 280 všude, ne 240 jako v mřížce míst.
+        className="h-[280px]"
+      >
+        <PlaceCardImage src={imageUrl} alt="" hasMap={false} className="object-cover" />
+      </PhotoTile>
+    )
+  }
   return (
     <Link href={href} className={CARD}>
-      {imageUrl ? (
-        <>
-          <PlaceCardImage
-            src={imageUrl}
-            alt={title}
-            hasMap={false}
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110 motion-reduce:transition-none"
-          />
-          <PhotoBadge>
-            <Icon className="h-4 w-4 text-[#1a3f6c]" />
-          </PhotoBadge>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-4">
-            <h3 className="line-clamp-3 text-lg font-bold leading-tight text-white drop-shadow-md">
-              {title}
-            </h3>
-            {subtitle && (
-              <p className="mt-1 line-clamp-1 text-[13px] font-medium text-white/85 drop-shadow">
-                {subtitle}
-              </p>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="flex h-full flex-col p-5">
-          <SolidBadge>
-            <Icon className="h-[18px] w-[18px]" />
-          </SolidBadge>
-          <h3 className="line-clamp-4 text-lg font-bold leading-tight text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
-            {title}
-          </h3>
-          {subtitle && <p className="mt-1 text-[13px] text-[#8a939b]">{subtitle}</p>}
-        </div>
-      )}
+      <div className="flex h-full flex-col p-5">
+        <SolidBadge>
+          <Icon className="h-[18px] w-[18px]" />
+        </SolidBadge>
+        <h3 className="line-clamp-4 text-lg font-bold leading-tight text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
+          {title}
+        </h3>
+        {subtitle && <p className="mt-1 text-[13px] text-[#8a939b]">{subtitle}</p>}
+      </div>
     </Link>
   )
 }

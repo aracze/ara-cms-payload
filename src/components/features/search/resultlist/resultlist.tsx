@@ -1,5 +1,4 @@
-import Image from 'next/image'
-import Link from 'next/link'
+import { ThumbRow, thumbTitleClass } from '@/components/features/thumb-row'
 import type { FuseResult } from 'fuse.js'
 import type { SearchItem } from '@/types/search'
 import { MapPin } from 'lucide-react'
@@ -23,61 +22,46 @@ export function ResultList({
 }) {
   if (results.length === 0) return null
 
+  // Animace „vjetí" jen pro uživatele bez omezeného pohybu (prefers-reduced-motion).
   return (
-    <div className="flex flex-col animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
+    <div className="flex flex-col divide-y divide-gray-100 pt-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300">
       {results.slice(0, limit).map((result: FuseResult<SearchItem>, index: number) => {
         const item = result.item
         const showCategory = item.category && !PLACE_CATEGORIES.has(item.category)
         return (
-          <Link
+          <ThumbRow
             // fullSlug mají jen stránky; ostatní položky (služby) padnou na
             // homepage místo neplatného odkazu.
             href={item.fullSlug || item.slug || '/'}
             key={item.documentId || `result-${index}`}
             onClick={handleLinkClicked ? () => handleLinkClicked() : undefined}
-            className="group flex items-center gap-3 py-2 px-2 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            {item.image ? (
-              <Image
-                src={item.image}
-                alt=""
-                width={48}
-                height={48}
-                className="w-12 h-12 rounded-lg object-cover shrink-0"
+            src={item.image}
+            hoverBg
+            fallback={
+              <MapPin
+                className="w-5 h-5 text-[#1a3f6c]"
+                fill="#1a3f6c"
+                fillOpacity={0.1}
+                strokeWidth={2.5}
               />
-            ) : (
-              <div
-                aria-hidden="true"
-                className="w-12 h-12 rounded-lg bg-[#1a3f6c]/5 flex items-center justify-center shrink-0"
-              >
-                <MapPin
-                  className="w-5 h-5 text-[#1a3f6c]"
-                  fill="#1a3f6c"
-                  fillOpacity={0.1}
-                  strokeWidth={2.5}
-                />
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-gray-900 group-hover:text-[#215491] transition-colors text-base truncate">
-                  {item.title}
+            }
+          >
+            <div className="flex items-center gap-2">
+              <span className={`${thumbTitleClass()} truncate`}>{item.title}</span>
+              {showCategory && (
+                <span className="hidden md:inline-block shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#215491]/10 text-[#215491]">
+                  {item.category}
                 </span>
-                {showCategory && (
-                  <span className="hidden md:inline-block shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#215491]/10 text-[#215491]">
-                    {item.category}
-                  </span>
-                )}
-              </div>
-              {(item.path || item.text) && (
-                <p className="text-sm text-gray-400 truncate mt-0.5">
-                  {item.path && <span className="text-gray-500 font-medium">{item.path}</span>}
-                  {item.path && item.text && <span className="hidden md:inline"> — </span>}
-                  {item.text && <span className="hidden md:inline">{item.text}</span>}
-                </p>
               )}
             </div>
-          </Link>
+            {(item.path || item.text) && (
+              <p className="text-[13.5px] text-gray-400 truncate mt-0.5">
+                {item.path && <span className="text-gray-500 font-medium">{item.path}</span>}
+                {item.path && item.text && <span className="hidden md:inline"> — </span>}
+                {item.text && <span className="hidden md:inline">{item.text}</span>}
+              </p>
+            )}
+          </ThumbRow>
         )
       })}
     </div>
