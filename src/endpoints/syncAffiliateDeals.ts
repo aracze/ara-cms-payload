@@ -4,8 +4,21 @@ import { sql } from '@payloadcms/db-postgres'
 import { XMLParser } from 'fast-xml-parser'
 import { timingSafeEqual } from 'node:crypto'
 import { safeRevalidate } from '@/hooks/revalidation'
+import {
+  CZECH_AIRPORT_NAMES,
+  addMonthsClamped,
+  appendPricePoint,
+  isSuspiciousPrice,
+  isValidKiwiCode,
+  pickCheapestPerCode,
+  pragueToday,
+  referencePrice,
+  sanitizePriceHistory,
+  usualPrice,
+  type KiwiFlight,
+  type KiwiFlightDeal,
+} from '@/lib/kiwi-deals'
 import type {
-  AffiliateDealKiwi,
   AffiliateDealInvia,
   AffiliateDeals,
   HomepageTourDeal,
@@ -14,9 +27,11 @@ import type {
 
 /**
  * Denní sync sekce „Akční nabídky": pro místa s vyplněným `affiliate.kiwiIataCode`
- * nebo `affiliate.inviaFeedUrl` stáhne nejlevnější letenku (Kiwi Tequila Search
- * API, ceny v CZK) a nejlevnější zájezd s odletem z Prahy (Invia XML feed)
- * a uloží je do JSON pole `affiliate.deals`. Navíc plní dlaždice zájezdů sekce
+ * nebo `affiliate.inviaFeedUrl` stáhne nejlevnější letenku z ČR (Kiwi Tequila
+ * Search API, ceny v CZK — jedním hromadným dotazem pro všechny destinace, viz
+ * fetchKiwiDealsBatch) a nejlevnější zájezd s odletem z Prahy (Invia XML feed)
+ * a uloží je do JSON pole `affiliate.deals` spolu s historií denních cen
+ * letenky (štítek „levnější než obvykle"). Navíc plní dlaždice zájezdů sekce
  * „Dnešní akční nabídky" na homepage z kurátorovaného feedu (globál Homepage →
  * `dealsOfDay`, viz fetchHomepageTourDeals) — zapisuje se stejným přímým SQL
  * ve stejné transakci jako stránky (updateGlobal by přes hook globálů shazoval
@@ -33,7 +48,9 @@ import type {
  * staženou nabídku (chování starého webu) a chyba se jen vrátí v odpovědi.
  *
  * Kiwi kvóty: 30 dotazů/min + look-to-book ratio (1 rezervace / 5000 dotazů,
- * jinak hrozí vypnutí účtu) → mezi dotazy se čeká a sync se pouští 1× denně.
+ * jinak hrozí vypnutí účtu) → letenky se berou 2 hromadnými dotazy (Evropa
+ * a dálkové destinace) místo dotazu na každou stránku, mezi dotazy se čeká
+ * a sync se pouští 1× denně.
  */
 
 /** Porovnání secretu časově konstantní — obyčejné `!==` by šlo uhodnout po znacích z doby odezvy. */
@@ -50,11 +67,20 @@ const KIWI_DELAY_MS = 2100 // 30 dotazů/min → bezpečně pod kvótou
 const INVIA_DELAY_MS = 500
 const FETCH_TIMEOUT_MS = 30_000
 
-/** Datum pro Kiwi API (dd/mm/yyyy). */
-function kiwiDate(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${dd}/${mm}/${d.getFullYear()}`
+/** YYYY-MM-DD → datum pro Kiwi API (dd/mm/yyyy). */
+function kiwiDate(iso: string): string {
+  const [year, month, day] = iso.split('-')
+  return `${day}/${month}/${year}`
+}
+
+/**
+ * Okno hledání: dnes až +6 měsíců podle PRAŽSKÉHO dne (stejný klíč jako
+ * historie cen) — server běží v UTC a ruční běh před půlnocí UTC by jinak
+ * poslal `date_from` včerejška.
+ */
+function kiwiDateWindow(): { from: string; to: string } {
+  const today = pragueToday()
+  return { from: kiwiDate(today), to: kiwiDate(addMonthsClamped(today, 6)) }
 }
 
 /**
@@ -73,24 +99,21 @@ function isLongHaul(page: DealPage): boolean {
 }
 
 /**
- * Nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace v okně dnes až +6 měsíců,
- * v CZK. Zpáteční (ne jednosměrná) záměrně: cena je to, co člověk opravdu
- * zaplatí, sedí k ceně zájezdu na vedlejší kartě a provize se počítá
- * z rezervace — jednosměrná cena láká na klik, ale po zjištění celkové ceny
- * odrazuje (rozhodnutí uživatele 15. 8. 2026).
+ * Společné parametry Search API: ZPÁTEČNÍ letenka z celé ČR do cíle v okně
+ * dnes až +6 měsíců, v CZK, nejlevnější první. Zpáteční (ne jednosměrná)
+ * záměrně: cena je to, co člověk opravdu zaplatí, sedí k ceně zájezdu na
+ * vedlejší kartě a provize se počítá z rezervace — jednosměrná cena láká na
+ * klik, ale po zjištění celkové ceny odrazuje (rozhodnutí uživatele
+ * 15. 8. 2026). Odlet z kteréhokoli českého letiště (rozhodnutí 30. 8. 2026,
+ * stejně jako u zájezdů) — které to bylo, si karta přečte z letu.
  */
-async function fetchKiwiDeal(iataCode: string, longHaul: boolean): Promise<AffiliateDealKiwi> {
-  const apiKey = process.env.KIWI_TEQUILA_API_KEY
-  if (!apiKey) throw new Error('KIWI_TEQUILA_API_KEY není nastaveno')
-
-  const now = new Date()
-  const to = new Date(now)
-  to.setMonth(to.getMonth() + 6)
-  const params = new URLSearchParams({
-    fly_from: 'PRG',
-    fly_to: iataCode,
-    date_from: kiwiDate(now),
-    date_to: kiwiDate(to),
+function kiwiSearchParams(flyTo: string, longHaul: boolean, limit: string): URLSearchParams {
+  const window = kiwiDateWindow()
+  return new URLSearchParams({
+    fly_from: 'CZ',
+    fly_to: flyTo,
+    date_from: window.from,
+    date_to: window.to,
     // Délka pobytu = zároveň přepínač na zpáteční hledání (bez ní vrací
     // Kiwi jednosměrné lety). Okno je široké schválně — čím víc kombinací,
     // tím nižší nalezená cena; užší okno cenu zvedá bez užitku.
@@ -98,37 +121,61 @@ async function fetchKiwiDeal(iataCode: string, longHaul: boolean): Promise<Affil
     nights_in_dst_to: longHaul ? '21' : '14',
     curr: 'CZK',
     sort: 'price',
-    limit: '3',
+    limit,
   })
+}
+
+async function kiwiSearch(params: URLSearchParams): Promise<KiwiFlight[]> {
+  const apiKey = process.env.KIWI_TEQUILA_API_KEY
+  if (!apiKey) throw new Error('KIWI_TEQUILA_API_KEY není nastaveno')
   const res = await fetch(`https://api.tequila.kiwi.com/v2/search?${params}`, {
     headers: { accept: 'application/json', apikey: apiKey },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
   if (!res.ok) throw new Error(`Kiwi API ${res.status}`)
-  const json = (await res.json()) as {
-    data?: {
-      price?: number
-      deep_link?: string
-      local_departure?: string
-      nightsInDest?: number | null
-    }[]
-  }
-  const flights = (json.data ?? []).filter(
-    (f) => typeof f.price === 'number' && f.price > 0 && typeof f.deep_link === 'string',
-  )
-  if (flights.length === 0) throw new Error('Kiwi nevrátilo žádný let')
-  // sort=price → první je nejlevnější; min je jen pojistka.
-  const cheapest = flights.reduce((a, b) => (b.price! < a.price! ? b : a))
-  return {
-    price: Math.round(cheapest.price!),
-    deepLink: cheapest.deep_link!,
-    departureDate: (cheapest.local_departure ?? '').slice(0, 10),
-    // Celé noci: zlomek by se vykreslil jako „3.5 nocí".
-    nights:
-      Number.isInteger(cheapest.nightsInDest) && (cheapest.nightsInDest as number) > 0
-        ? (cheapest.nightsInDest as number)
-        : null,
-  }
+  const json = (await res.json()) as { data?: KiwiFlight[] }
+  return json.data ?? []
+}
+
+/**
+ * Strop výsledků hromadného dotazu. Kiwi vrací jednu letenku za MĚSTO, ne za
+ * zemi (Itálie = ~30 měst, Čína ~90), a řadí podle ceny — s nízkým stropem by
+ * dražší destinace (Tunisko) vypadly celé. 25 evropských kódů dalo ~330 měst
+ * a 2 MB odpovědi (ověřeno 30. 8. 2026).
+ */
+const KIWI_BATCH_LIMIT = '1000'
+
+/**
+ * HROMADNÝ dotaz: všechny kódy destinací v jednom `fly_to`, `one_for_city`
+ * = jedna nejlevnější letenka za cílové město; nejlevnější sedící let pro
+ * každý kód vybírá pickCheapestPerCode. Kód bez shody v mapě chybí —
+ * volající pro něj pošle záložní dotaz.
+ */
+async function fetchKiwiDealsBatch(
+  codes: string[],
+  longHaul: boolean,
+): Promise<Map<string, KiwiFlightDeal>> {
+  const params = kiwiSearchParams(codes.join(','), longHaul, KIWI_BATCH_LIMIT)
+  params.set('one_for_city', '1')
+  // Přestupy omezené SCHVÁLNĚ a jen tady: bez stropu Kiwi u hromadného dotazu
+  // prohledá jen vzorek kombinací a za Itálii vrátí Florencii za 3 046 Kč,
+  // i když Řím letí za 1 042 (ověřeno 30. 8. 2026); s omezeným prostorem
+  // najde skutečné minimum. Do Evropy max. 1 přestup, dálkově 2 (jinak
+  // vypadnou levné asijské kombinace s přestupem v obou směrech).
+  params.set('max_stopovers', longHaul ? '2' : '1')
+  return pickCheapestPerCode(await kiwiSearch(params), codes)
+}
+
+/**
+ * Samostatný dotaz na jedinou destinaci — přesně jako před hromadným
+ * hledáním, tedy BEZ stropu přestupů: je to poslední instance i pro ostrovy
+ * dosažitelné jen s víc přestupy, které by hromadný dotaz nikdy nevrátil.
+ */
+async function fetchKiwiDeal(iataCode: string, longHaul: boolean): Promise<KiwiFlightDeal> {
+  const flights = await kiwiSearch(kiwiSearchParams(iataCode, longHaul, '3'))
+  const deal = pickCheapestPerCode(flights, [iataCode]).get(iataCode)
+  if (!deal) throw new Error('Kiwi nevrátilo žádný let')
+  return deal
 }
 
 /** Tvar nabídky z Invia XML feedu (fast-xml-parser, viz isArray níže). */
@@ -188,18 +235,17 @@ async function fetchInviaOffers(feedUrl: string): Promise<InviaOffer[]> {
 const isFromPrague = (o: InviaOffer) => (o.airports?.airport ?? []).some((a) => text(a) === 'Praha')
 
 /**
- * Česká letiště tak, jak je pojmenovává Invia feed. Homepage dlaždice berou
- * odlet z kteréhokoli z nich (rozhodnutí uživatele 28. 8. 2026 — Brno/Ostrava
- * jsou pro české návštěvníky stejně dobré jako Praha); feed obsahuje i Krakov,
- * Katovice, Vídeň, Bratislavu, které se vyřazují.
+ * Odletové letiště v ČR pro dlaždici: Praha má přednost, jinak první české
+ * (CZECH_AIRPORT_NAMES — jména tak, jak je píše Invia feed); null = žádné.
+ * Homepage dlaždice berou odlet z kteréhokoli českého letiště (rozhodnutí
+ * uživatele 28. 8. 2026 — Brno/Ostrava jsou pro české návštěvníky stejně
+ * dobré jako Praha); feed obsahuje i Krakov, Katovice, Vídeň, Bratislavu,
+ * které se vyřazují.
  */
-const CZECH_AIRPORTS = ['Praha', 'Brno', 'Ostrava', 'Pardubice', 'Karlovy Vary']
-
-/** Odletové letiště v ČR pro dlaždici: Praha má přednost, jinak první české; null = žádné. */
 function czechDeparture(o: InviaOffer): string | null {
   const airports = (o.airports?.airport ?? []).map(text)
   if (airports.includes('Praha')) return 'Praha'
-  return airports.find((a) => CZECH_AIRPORTS.includes(a)) ?? null
+  return airports.find((a) => CZECH_AIRPORT_NAMES.includes(a)) ?? null
 }
 
 /**
@@ -427,8 +473,17 @@ export const syncAffiliateDealsEndpoint: Endpoint = {
     if (dryRun) {
       // Ladicí režim zůstává synchronní — volá se ručně a chce vidět výsledky.
       try {
-        const { results, errors, homepageTours } = await collectDeals(pages, homepageFeedUrl)
-        return Response.json({ ok: true, dryRun: true, pages: results, homepageTours, errors })
+        const { results, errors, homepageTours, kiwiRequests, kiwiFallbackCodes } =
+          await collectDeals(pages, homepageFeedUrl)
+        return Response.json({
+          ok: true,
+          dryRun: true,
+          kiwiRequests,
+          kiwiFallbackCodes,
+          pages: results,
+          homepageTours,
+          errors,
+        })
       } finally {
         syncStartedAt = null
       }
@@ -463,6 +518,10 @@ async function collectDeals(
   errors: string[]
   /** null = feed není nastavený nebo stažení selhalo (minulá data zůstávají). */
   homepageTours: HomepageTourDeal[] | null
+  /** Počet dotazů na Kiwi (hromadné + samostatné) — kontrola proti look-to-book kvótě. */
+  kiwiRequests: number
+  /** Kódy, které potřebovaly samostatný dotaz (chyběly, podezřelá cena, první běh). */
+  kiwiFallbackCodes: string[]
 }> {
   const errors: string[] = []
   const results: { id: number; fullSlug: string | null; deals: AffiliateDeals }[] = []
@@ -478,22 +537,113 @@ async function collectDeals(
     await sleep(INVIA_DELAY_MS)
   }
 
-  // Sekvenčně s rozestupy — kvóta Kiwi (30/min) a slušnost k Invii. Jeden
-  // Invia feed se může sdílet mezi stránkami (země + město) → cache po URL.
+  // Letenky se řeší PO KÓDECH, ne po stránkách: Anglie a Londýn (oba LON)
+  // musí dostat tutéž letenku a stejné rozhodnutí o ověření, jinak by
+  // homepage ukázala dvě ceny jedné destinace. Klíč nese i dálkovost (jiná
+  // délka pobytu), aby se stejný kód z obou skupin nepomíchal.
+  const kiwiKey = (code: string, longHaul: boolean) => `${longHaul ? 'far' : 'eu'}:${code}`
+  const byKey = new Map<string, { code: string; longHaul: boolean; pages: DealPage[] }>()
+  const pageKey = new Map<DealPage, string>()
+  for (const page of pages) {
+    const raw = page.affiliate?.kiwiIataCode?.trim()
+    if (!raw) continue
+    if (!isValidKiwiCode(raw)) {
+      // Pole má validaci v adminu; starší nebo ručně zapsaný záznam jiného
+      // tvaru by hromadný dotaz shodil celý (Kiwi ho odmítne) → vynechat a hlásit.
+      errors.push(`${page.fullSlug} kiwi: neplatný kód „${raw}" (čekám 2–3 písmena IATA)`)
+      continue
+    }
+    const code = raw.toUpperCase()
+    const longHaul = isLongHaul(page)
+    const key = kiwiKey(code, longHaul)
+    const entry = byKey.get(key) ?? { code, longHaul, pages: [] }
+    entry.pages.push(page)
+    byKey.set(key, entry)
+    pageKey.set(page, key)
+  }
+
+  // 1) Hromadně: jeden dotaz pro evropské destinace a jeden pro dálkové.
+  const batchByKey = new Map<string, KiwiFlightDeal>()
+  let kiwiRequests = 0
+  const kiwiFallbackCodes: string[] = []
+  for (const longHaul of [false, true]) {
+    const codes = [...byKey.values()].filter((e) => e.longHaul === longHaul).map((e) => e.code)
+    if (codes.length === 0) continue
+    kiwiRequests++
+    try {
+      for (const [code, deal] of await fetchKiwiDealsBatch(codes, longHaul)) {
+        batchByKey.set(kiwiKey(code, longHaul), deal)
+      }
+    } catch (err) {
+      // Kódy si letenku dohledají samostatnými dotazy níže — nic se neztrácí.
+      errors.push(
+        `kiwi hromadně (${longHaul ? 'dálkové' : 'Evropa'}): ${err instanceof Error ? err.message : err}`,
+      )
+    }
+    await sleep(KIWI_DELAY_MS)
+  }
+
+  // 2) Za každý kód konečná letenka (null = dnes nic, stránky drží minulou).
+  // Samostatný dotaz jde, když: (a) kód v hromadné odpovědi chybí (Kiwi ho
+  // nezná, město vypadlo za strop, hromadný dotaz selhal), (b) hromadná cena
+  // je PODEZŘELE vysoká proti historii/včerejšku — Kiwi občas z širokého
+  // hledání vrátí jen vzorek a za zemi nabídne dražší město (viz
+  // fetchKiwiDealsBatch), nebo (c) není s čím srovnat (první běh pro kód):
+  // neověřená první cena by založila historii, proti které by se pak
+  // špatný vzorek sám „potvrzoval". Vyhrává levnější z obou dotazů.
+  const resolved = new Map<string, KiwiFlightDeal | null>()
+  for (const [key, { code, longHaul, pages: keyPages }] of byKey) {
+    const batch = batchByKey.get(key) ?? null
+    // Reference = nejpřísnější z historií stránek klíče (liší se jen stářím).
+    const references = keyPages
+      .map((p) => {
+        const prev = (p.affiliate?.deals ?? {}) as AffiliateDeals
+        return referencePrice(sanitizePriceHistory(prev.kiwiPriceHistory), prev.kiwi?.price)
+      })
+      .filter((r): r is number => r !== null)
+    const reference = references.length > 0 ? Math.min(...references) : null
+    const suspicious = batch !== null && isSuspiciousPrice(batch.price, reference)
+    if (batch && !suspicious && reference !== null) {
+      resolved.set(key, batch)
+      continue
+    }
+    kiwiRequests++
+    kiwiFallbackCodes.push(code)
+    try {
+      const single = await fetchKiwiDeal(code, longHaul)
+      resolved.set(key, batch && batch.price < single.price ? batch : single)
+    } catch (err) {
+      // Podezřelou hromadnou cenu bez ověření neukládat — raději včerejší
+      // nabídka i historie beze změny než výkyv zapsaný do mediánu. Neověřená
+      // PRVNÍ cena se při výpadku Kiwi bere (lepší než prázdná karta).
+      resolved.set(key, suspicious ? null : batch)
+      errors.push(`kiwi(${code}): ${err instanceof Error ? err.message : err}`)
+    }
+    await sleep(KIWI_DELAY_MS)
+  }
+  const today = pragueToday()
+
+  // Sekvenčně s rozestupy — slušnost k Invii. Jeden Invia feed se může
+  // sdílet mezi stránkami (země + město) → cache po URL.
   const inviaCache = new Map<string, AffiliateDealInvia | null | Error>()
   for (const page of pages) {
     const previous = (page.affiliate?.deals ?? {}) as AffiliateDeals
     const deals: AffiliateDeals = { updatedAt: new Date().toISOString() }
 
-    const iata = page.affiliate?.kiwiIataCode?.trim()
-    if (iata) {
-      try {
-        deals.kiwi = await fetchKiwiDeal(iata, isLongHaul(page))
-      } catch (err) {
-        deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
-        errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)
-      }
-      await sleep(KIWI_DELAY_MS)
+    // Historie denních cen žije vedle nabídky: dnešní cena se přidá (stejný
+    // den se přepíše), starší než 90 dní vypadnou a z mediánu vznikne
+    // „obvyklá cena" pro štítek „levnější než obvykle". Když Kiwi selže,
+    // historie i minulá nabídka zůstávají beze změny; historie přežije
+    // i dočasně smazaný nebo neplatný kód (karta letenky se jen skryje).
+    const history = sanitizePriceHistory(previous.kiwiPriceHistory)
+    const key = pageKey.get(page)
+    const flight = key ? (resolved.get(key) ?? null) : null
+    if (flight) {
+      deals.kiwiPriceHistory = appendPricePoint(history, { date: today, price: flight.price })
+      deals.kiwi = { ...flight, usualPrice: usualPrice(deals.kiwiPriceHistory) }
+    } else {
+      if (key) deals.kiwi = previous.kiwi ?? null // selhání nemaže minulou nabídku
+      if (history.length > 0) deals.kiwiPriceHistory = history
     }
 
     const feedUrl = page.affiliate?.inviaFeedUrl?.trim()
@@ -517,7 +667,7 @@ async function collectDeals(
 
     results.push({ id: page.id, fullSlug: page.fullSlug ?? null, deals })
   }
-  return { results, errors, homepageTours }
+  return { results, errors, homepageTours, kiwiRequests, kiwiFallbackCodes }
 }
 
 /** Ostrý běh: stažení + zápis + invalidace cache; souhrn jde do server logu. */
@@ -526,7 +676,10 @@ async function runSync(
   pages: DealPage[],
   homepageFeedUrl: string | null,
 ) {
-  const { results, errors, homepageTours } = await collectDeals(pages, homepageFeedUrl)
+  const { results, errors, homepageTours, kiwiRequests, kiwiFallbackCodes } = await collectDeals(
+    pages,
+    homepageFeedUrl,
+  )
 
   // Přímý SQL zápis mimo hooky (viz hlavička souboru) — v jedné transakci
   // s try-advisory lockem. Souběh řeší primárně rezervace v paměti procesu
@@ -540,8 +693,13 @@ async function runSync(
       throw new Error('Sync už běží (souběžný požadavek) — tenhle běh se přeskakuje')
     }
     for (const r of results) {
+      const json = JSON.stringify(r.deals)
+      await tx.execute(sql`UPDATE pages SET affiliate_deals = ${json}::jsonb WHERE id = ${r.id}`)
+      // I do POSLEDNÍ VERZE dokumentu: uložení stránky v adminu skládá data
+      // z ní (pole `deals` není ve formuláři), takže bez tohoto zápisu by
+      // publikace vrátila starou nabídku a smazala celou historii cen.
       await tx.execute(
-        sql`UPDATE pages SET affiliate_deals = ${JSON.stringify(r.deals)}::jsonb WHERE id = ${r.id}`,
+        sql`UPDATE _pages_v SET version_affiliate_deals = ${json}::jsonb WHERE parent_id = ${r.id} AND latest = true`,
       )
     }
     // Homepage dlaždice ve stejné transakci; při selhání feedu (null) minulá
@@ -564,6 +722,8 @@ async function runSync(
 
   return {
     pages: results.length,
+    kiwiRequests,
+    kiwiFallbackCodes,
     withKiwi: results.filter((r) => r.deals.kiwi).length,
     withInvia: results.filter((r) => r.deals.invia).length,
     homepageTours: homepageTours?.length ?? null,

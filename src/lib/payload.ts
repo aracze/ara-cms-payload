@@ -1404,8 +1404,10 @@ export type TopAffiliateDeal = {
   /** Zájezd z homepage feedu: země a lokalita zvlášť — titulek skládá až komponenta. */
   country?: string | null
   locality?: string | null
-  /** Zájezd z homepage feedu: odletové letiště v ČR (dlaždice ho zmíní, když není Praha). */
+  /** Odletové město v ČR (zájezd z homepage feedu i letenka); dlaždice ho zmíní, když není Praha. */
   departure?: string | null
+  /** Letenka: obvyklá cena (medián 90 dní) pro štítek „levnější než obvykle"; null = bez historie. */
+  usualPrice?: number | null
   /** Fotka dlaždice (letenka = místo, zájezd = hotel z feedu). */
   imageUrl: string | null
 }
@@ -1581,6 +1583,8 @@ async function fetchTopAffiliateDealsUncached(
         deepLink: string
         departureDate?: string
         nights?: number | null
+        departure?: string | null
+        usualPrice?: number | null
       } | null
       invia?: {
         price: number
@@ -1603,6 +1607,9 @@ async function fetchTopAffiliateDealsUncached(
           departureDate: kiwi.departureDate ?? null,
           nights:
             Number.isInteger(kiwi.nights) && (kiwi.nights as number) > 0 ? kiwi.nights! : null,
+          departure: typeof kiwi.departure === 'string' && kiwi.departure ? kiwi.departure : null,
+          usualPrice:
+            typeof kiwi.usualPrice === 'number' && kiwi.usualPrice > 0 ? kiwi.usualPrice : null,
           imageUrl: placeImageOf(page),
           specificity,
         })

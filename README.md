@@ -317,11 +317,47 @@ protože ji nic nevolalo a mířila na vypnuté One Call 2.5.
 ### `POST /api/sync-affiliate-deals`
 
 Denní obnova sekce **„Akční nabídky"** na stránkách míst: pro stránky
-s vyplněným polem Affiliate stáhne **nejlevnější ZPÁTEČNÍ letenku Praha ⇄ destinace**
-(Kiwi Tequila Search API, ceny v CZK) a **nejlevnější zájezd s odletem
-z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
+s vyplněným polem Affiliate stáhne **nejlevnější ZPÁTEČNÍ letenku z ČR do
+destinace** (Kiwi Tequila Search API, ceny v CZK) a **nejlevnější zájezd
+s odletem z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
 (viz `src/endpoints/syncAffiliateDeals.ts`).
 
+- **Letenky jedním hromadným dotazem** (od 30. 8. 2026): všechny kódy destinací
+  jdou do Kiwi v jednom `fly_to` s `one_for_city=1` (jedna nejlevnější letenka
+  za cílové město) a `fly_from=CZ` (odlet z kteréhokoli českého letiště; karta
+  ukáže „Brno ⇄ Řím" / „odlet z Brna", Praha se nezmiňuje). Evropa a dálkové
+  destinace zvlášť (jiná délka pobytu) → **2 dotazy denně místo 36**.
+  Letenky se řeší **po kódech, ne po stránkách** — Anglie a Londýn (oba LON)
+  dostanou tutéž letenku. Nejlevnější let pro kód vybírá
+  `pickCheapestPerCode` v `src/lib/kiwi-deals.ts` (2 písmena = země podle
+  `countryTo.code`, 3 písmena = město nebo letiště); pole `Kiwi Fly To` proto
+  v adminu pustí jen 2–3 písmena (`isValidKiwiCode`), jiný tvar sync vynechá
+  a nahlásí. Počet dotazů běhu i kódy, které potřebovaly samostatný dotaz,
+  jsou v souhrnu (`kiwiRequests`, `kiwiFallbackCodes`). Důvod: look-to-book
+  poměr Kiwi níže — 36 dotazů denně by bez rezervace přetekl už za půl roku.
+  **Past hromadného hledání:** bez `max_stopovers` Kiwi u širokého dotazu
+  prohledá jen vzorek a za zemi vrátí dražší město (Itálie = Florencie
+  3 046 Kč, zatímco Řím letí za 1 042; ověřeno 30. 8. 2026) — proto
+  hromadný dotaz má `max_stopovers=1` do Evropy a `2` dálkově, a navíc se
+  **samostatným dotazem** (bez stropu přestupů, přesně jako dřív) ověří kód,
+  který (a) v hromadné odpovědi chybí, (b) má cenu o > 60 % nad referencí
+  (medián historie, jinak včerejší cena — `isSuspiciousPrice`), nebo (c)
+  zatím žádnou referenci nemá (první běh pro kód — historie nesmí začít na
+  výkyvu). Bere se levnější z obou. V nejhorším případě (celá dávka špatná)
+  je to tolik dotazů jako dřív, ne víc; první běh po nasazení má referenci ze
+  starých cen, takže stojí jen pár dotazů navíc.
+- **„Levnější než obvykle"**: sync ke každé destinaci ukládá historii denních
+  cen letenky (`affiliate.deals.kiwiPriceHistory`, 90 dní, jeden bod na den,
+  přežívá i den selhání Kiwi) a z jejího **mediánu** počítá `kiwi.usualPrice`
+  (až od 14 dní historie — po nasazení se štítky rozsvítí zhruba po dvou
+  týdnech). Karta kreslí modrý štítek „−25 % než obvykle" jen při rozdílu
+  ≥ 15 % (`belowUsualPercent`); slovník **nikdy „sleva"** — nikdo nic
+  nezlevnil, Kiwi žádnou původní cenu neposílá. Žádná změna schématu DB —
+  všechno leží v existujícím JSON sloupci. Sync zapisuje i do **poslední
+  verze** stránky (`_pages_v.version_affiliate_deals`, `latest = true`):
+  uložení stránky v adminu skládá data z ní a bez toho by publikace vrátila
+  starou nabídku a smazala celou historii. Historie přežije i dočasně
+  smazaný kód letiště (karta se jen skryje).
 - Zdroje na stránce (tab **Affiliate** v adminu): `Kiwi Fly To` — IATA kód
   města (LON, PAR) nebo země (HR, GR); `Invia XML feed (URL)` — odkaz
   „Vygenerovat XML" z [affil.invia.cz](https://affil.invia.cz) (feedy
@@ -372,8 +408,10 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   seznamu kódů, protože pole přijímá i kódy měst). Karta délku ukazuje
   („zpáteční · odlet 12. 11. 2026 · 7 nocí · Kiwi.com").
 - Kiwi kvóty: 30 dotazů/min a **look-to-book ratio 1 rezervace / 5000
-  dotazů** (jinak hrozí vypnutí účtu) — proto rozestupy mezi dotazy a jen
-  jeden běh denně.
+  dotazů** (jinak hrozí vypnutí účtu) — proto hromadné dotazy, rozestupy
+  mezi nimi a jen jeden běh denně. Ceny Kiwi mezi dotazy mírně kolísají
+  (prohledává vzorek nabídek), proto homepage i stránky míst čtou z jedněch
+  nasyncovaných dat.
 - Zájezd bez odletu z Prahy se **nezobrazuje** (feed vrací i odlety
   z Krakova/Vídně; inzerovat je Čechům by bylo zavádějící) — proto může mít
   destinace jen kartu letenky (např. Malta).
@@ -399,9 +437,10 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
   schématu), `PAYLOAD_RUN_MIGRATIONS` se na prod nepouští. Pak backfill,
   force-recreate cms a ruční spuštění workflow.
 
-- **Drafty:** JSON `deals` je součást verzovaného dokumentu — publikování
-  starší verze stránky může vrátit starší nabídky; nejbližší noční sync je
-  přepíše (vědomě přijaté zjednodušení).
+- **Drafty:** JSON `deals` je součást verzovaného dokumentu — sync proto
+  přepisuje i poslední verzi v `_pages_v`; publikování ještě STARŠÍ verze
+  stránky může vrátit starší nabídky a nejbližší noční sync je přepíše
+  (vědomě přijaté zjednodušení).
 
 ```bash
 # Hlavička jde do curlu STDINEM (`-H @-`), ne argumentem: argumenty procesu

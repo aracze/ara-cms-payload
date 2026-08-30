@@ -1,11 +1,13 @@
 import React from 'react'
 import type { AffiliateDeals, AffiliateDealKiwi, AffiliateDealInvia } from '@/types/payload'
+import { belowUsualPercent } from '@/lib/kiwi-deals'
 import { DealCardImage } from './deal-card-image'
 
 /**
  * Sekce „Akční nabídky {genitive}" (nástupce legacy `_highlights.gsp`):
- * nejlevnější ZPÁTEČNÍ letenka Praha ⇄ destinace (Kiwi) a nejlevnější zájezd
- * s odletem z Prahy (Invia) jako kompaktní řádkové karty s miniaturou (finální
+ * nejlevnější ZPÁTEČNÍ letenka z ČR do destinace (Kiwi; trasa nese odletové
+ * město, typicky „Praha ⇄ …") a nejlevnější zájezd s odletem z Prahy (Invia)
+ * jako kompaktní řádkové karty s miniaturou (finální
  * „varianta B" z výběru 14. 8. 2026). Zobrazuje se jen na místech k navštívení
  * NAD sekcí „Co vidět" a jen když má stránka data (`affiliate.deals`, plní
  * denní sync /api/sync-affiliate-deals; místo bez vlastních dat dědí od
@@ -63,6 +65,11 @@ export function parseAffiliateDeals(raw: unknown): AffiliateDeals | null {
           deepLink: value.kiwi!.deepLink,
           departureDate: str(value.kiwi!.departureDate) ?? '',
           nights: value.kiwi!.nights!,
+          departure: str(value.kiwi!.departure),
+          usualPrice:
+            typeof value.kiwi!.usualPrice === 'number' && value.kiwi!.usualPrice > 0
+              ? value.kiwi!.usualPrice
+              : null,
         }
       : null,
     invia: inviaValid
@@ -151,6 +158,8 @@ export function DealsSection({ genitive, placeTitle, placeImageUrl, deals }: Dea
               imageUrl={placeImageUrl}
               badge="flight"
               placeTitle={placeTitle}
+              departure={kiwi.departure}
+              belowUsual={belowUsualPercent(kiwi.price, kiwi.usualPrice)}
               priceLine={priceCzk(kiwi.price)}
               metaLine={kiwiMeta(kiwi)}
             />
@@ -194,13 +203,41 @@ export function Badge({ kind, onPhoto = false }: { kind: 'flight' | 'tour'; onPh
   )
 }
 
-/** Trasa Praha ⇄ destinace — letenka i zájezd jsou tam a zpět. */
-function Route({ placeTitle, className }: { placeTitle: string; className?: string }) {
+/**
+ * Štítek „−25 % než obvykle" u letenky: dnešní cena proti mediánu posledních
+ * 90 dní (viz belowUsualPercent). Slovník schválně NE „sleva" — nikdo nic
+ * nezlevnil, jen je dnes levněji než obvykle; proto i jiná barva než červený
+ * štítek skutečné slevy zájezdu. Sdílí karty destinací i homepage dlaždice.
+ */
+export function UsualPriceBadge({ percent }: { percent: number }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-[#1a3f6c] px-2.5 py-0.5 text-[10.5px] font-bold tracking-[0.02em] text-white"
+      title={`O ${percent} % levnější než obvyklá cena za posledních 90 dní`}
+    >
+      −{percent}&nbsp;% než&nbsp;obvykle
+    </span>
+  )
+}
+
+/**
+ * Trasa odletové město ⇄ destinace — letenka i zájezd jsou tam a zpět.
+ * Letenka nese město z Kiwi (z celé ČR), zájezd a starší záznamy Prahu.
+ */
+function Route({
+  placeTitle,
+  departure,
+  className,
+}: {
+  placeTitle: string
+  departure?: string | null
+  className?: string
+}) {
   return (
     <span
       className={`flex items-center gap-1.5 leading-snug font-bold text-[#252a31] ${className ?? ''}`}
     >
-      Praha
+      {departure || 'Praha'}
       <SwapIcon className="h-4 w-4" />
       <span className="truncate">{placeTitle}</span>
     </span>
@@ -213,6 +250,8 @@ function DealRowCard({
   imageUrl,
   badge,
   placeTitle,
+  departure,
+  belowUsual,
   priceLine,
   metaLine,
 }: {
@@ -220,6 +259,10 @@ function DealRowCard({
   imageUrl: string | null
   badge: 'flight' | 'tour'
   placeTitle: string
+  /** Odletové město v ČR; chybí = Praha. */
+  departure?: string | null
+  /** Procenta pod obvyklou cenou (jen letenka); null = bez štítku. */
+  belowUsual?: number | null
   priceLine: string
   metaLine: string
 }) {
@@ -234,10 +277,11 @@ function DealRowCard({
         {imageUrl && <DealCardImage src={imageUrl} alt={placeTitle} aspect="3:2" sizes="152px" />}
       </div>
       <div className="flex min-w-0 flex-col justify-center gap-0.5">
-        <span>
+        <span className="flex flex-wrap items-center gap-1.5">
           <Badge kind={badge} />
+          {belowUsual != null && <UsualPriceBadge percent={belowUsual} />}
         </span>
-        <Route placeTitle={placeTitle} className="text-[15px]" />
+        <Route placeTitle={placeTitle} departure={departure} className="text-[15px]" />
         <p className="text-[17px] leading-snug font-semibold text-[#1a3f6c] transition-colors group-hover:text-[#2a5a9c]">
           {priceLine}
         </p>
