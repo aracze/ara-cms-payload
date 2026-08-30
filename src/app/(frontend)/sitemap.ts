@@ -19,8 +19,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const toUrl = (path: string) => `${site}${path.startsWith('/') ? path : `/${path}`}`
 
+  // Homepage skládá nejnovější obsah, takže „změněno" = nejnovější změna kdekoliv.
+  const newest = [...pages, ...articles]
+    .map((e) => e.lastModified)
+    .filter(Boolean)
+    .sort()
+    .at(-1)
+
   const entries: MetadataRoute.Sitemap = [
-    { url: site, changeFrequency: 'daily', priority: 1 },
+    {
+      url: site,
+      ...(newest ? { lastModified: newest } : {}),
+      changeFrequency: 'daily',
+      priority: 1,
+    },
     ...pages.map((p) => ({
       url: toUrl(p.path),
       lastModified: p.lastModified,

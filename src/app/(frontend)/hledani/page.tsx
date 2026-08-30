@@ -43,7 +43,8 @@ export async function generateMetadata({
   return {
     title: query ? `Hledání: ${query}` : 'Hledání',
     // Výsledky hledání do indexu vyhledávačů nepatří (duplicitní/nekonečný
-    // obsah) — viz i Disallow: /hledani v robots.ts.
+    // obsah). V robots.txt stránka schválně zakázaná NENÍ — noindex Google
+    // uplatní jen u URL, kterou smí stáhnout (viz src/app/robots.ts).
     robots: { index: false, follow: true },
   }
 }

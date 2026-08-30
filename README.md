@@ -510,6 +510,37 @@ v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
   `cached()` dotazu (tag `sitemap`, invalidace při publikaci), nikdy při buildu obrazu (kde
   CMS neběží — dřív se tak zapekla verze „jen homepage" a po každém nasazení ji dostal první
   dotaz). Při výpadku CMS vrací 500, ne sitemapu s jedinou adresou.
+- **Šablony titulků a popisků podle kategorie** (`src/lib/seo-templates.ts`): starý web měl
+  SEO pole vyplněná ručně, ale podle ustálených vzorů („Vstupní podmínky a víza do Peru",
+  „Čím platit ve Slovinsku - aktuální měna a ceny", „Inspirace a doporučení pro cestování do
+  Norska…"). Vzory jsou přepsané do kódu a používají se dvakrát: jako fallback webu, když SEO
+  pole chybí, a v adminu pod tlačítky „Vygenerovat" u SEO polí (`src/lib/seo-admin.ts` přes
+  `seoPlugin.generateTitle/Description`; nadřazené místo pro skloňování dohledá po řetězci
+  `parent`). Skloňování z `detail.genitive` („do Norska") a `detail.locative` („v Norsku"),
+  bez nich název s předložkou. Šablony mění jen `<title>`/popisek — viditelný h1 dál skládá
+  `buildPageTitle`. Stránky a články, které po migraci SEO pole neměly, doplnil jednorázově
+  `scripts/seo-fill-missing-meta.sql` (idempotentní; na produkci spustit stejně jako ostatní
+  SQL doběhy + force-recreate `cms`).
+- **Strukturovaná data navíc**: homepage `WebSite` + `SearchAction` (`/hledani?q=…`) a
+  `Organization` (logo `/icon-512.png`) v jednom `@graph`; stránky „Místo k navštívení"
+  `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
+  `TouristAttraction` vždy (popis, fotka, poloha), `AggregateRating` + recenze jen když nějaké
+  mají (prázdné hodnocení by bylo nevalidní).
+- **robots.txt** (`src/app/robots.ts`) zakazuje `/go/`, `/admin`, `/api/` a stránky účtu;
+  `/hledani` schválně NE — má `noindex`, a ten Google uplatní jen u URL, kterou smí stáhnout.
+- **RSS** nejnovějších článků: `/feed.xml` (`src/app/(frontend)/feed.xml/route.ts`, data
+  `fetchFeedArticles` s tagy `articles`/`pages`); odkaz `<link rel="alternate">` nese každá
+  stránka (`RSS_ALTERNATE` v `buildPageMetadata` i layoutu — `alternates` se mezi layoutem
+  a stránkou neslučuje).
+- **Ikony a manifest**: `src/app/icon.png` (512 px) + `public/icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png` (papoušek z loga v CMS, vykreslený ze SVG přes sharp),
+  `src/app/manifest.ts` a `themeColor` (`viewport` v layoutu) v modré hlavičky `#215491`.
+- **Obrázky**: hero fotka má `alt` = název stránky/článku (dekorativní obálky profilu a
+  přihlášení `alt=""`); fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
+  `loading="lazy"` a `decoding="async"`. Rich text renderuje `h1` z editoru jako `h2` (jediný
+  h1 je název v heru) a nebezpečný odkaz vypíše jen jako text (dřív `href="#"`).
+- **Písma**: načítají se jen používané řezy — Open Sans 300–700, Poppins 400/600/700/800
+  (každý řez × subset je samostatný preload soupeřící s hero fotkou).
 
 ### Fotky v obsahu — lightbox (PhotoSwipe)
 

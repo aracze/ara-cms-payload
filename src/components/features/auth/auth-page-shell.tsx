@@ -38,7 +38,7 @@ export function AuthPageShell({
           dost vysoké na to, aby se titulek nelepil na menu webu. */}
       <section className="relative h-[260px] w-full bg-[#3b444f]">
         <div className="absolute inset-0 overflow-hidden">
-          <StaticHeroImage imageUrl={AUTH_COVER_URL} styleCss="object-position: 50% 42%" />
+          <StaticHeroImage imageUrl={AUTH_COVER_URL} alt="" styleCss="object-position: 50% 42%" />
         </div>
         <div
           className="absolute inset-0 z-[100]"

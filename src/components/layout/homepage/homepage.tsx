@@ -42,6 +42,7 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
         <div className="absolute inset-0 overflow-hidden">
           <StaticHeroImage
             imageUrl={heroPlace?.imageUrl ?? HOMEPAGE_HERO_IMAGE_FALLBACK}
+            alt={heroPlace?.title ?? ''}
             styleCss={heroPlace?.styleCss ?? undefined}
           />
 

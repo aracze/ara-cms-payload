@@ -25,6 +25,15 @@ export const DESCRIPTION_MAX = 160
  *  `cloudinaryLoader` (šířka 1200 je ve whitelistu media proxy). */
 export const OG_IMAGE_TRANSFORM = 'f_auto,q_auto,c_limit,w_1200'
 
+/** RSS kanál nových článků (src/app/(frontend)/feed.xml/route.ts). */
+export const RSS_PATH = '/feed.xml'
+export const RSS_TITLE = 'Ara.cz – nové články'
+/** `<link rel="alternate" type="application/rss+xml">` — do `alternates.types`. */
+export const RSS_ALTERNATE = { 'application/rss+xml': [{ url: RSS_PATH, title: RSS_TITLE }] }
+
+/** Logo pro strukturovaná data (Organization/publisher) — čtvercové PNG 512 px. */
+export const SITE_LOGO_PATH = '/icon-512.png'
+
 /** SEO záložka z CMS (plugin-seo) — stránky i články mají stejný tvar. */
 export type SeoMeta = { title?: string | null; description?: string | null } | null | undefined
 
@@ -71,12 +80,18 @@ export function truncateDescription(text: string, max = DESCRIPTION_MAX): string
 
 /**
  * Popisek: vyplněný z CMS beze změny (autorský text; delší Google zkrátí sám),
- * jinak začátek textu stránky/článku. Prázdný text → `undefined`, aby se
+ * jinak šablona podle kategorie (`templateFallback`, viz seo-templates.ts),
+ * jinak začátek textu stránky/článku. Nic z toho → `undefined`, aby se
  * uplatnil výchozí popisek z layoutu.
  */
-export function resolveSeoDescription(meta: SeoMeta, text: unknown): string | undefined {
+export function resolveSeoDescription(
+  meta: SeoMeta,
+  text: unknown,
+  templateFallback?: string | null,
+): string | undefined {
   const custom = meta?.description?.trim()
   if (custom) return custom
+  if (templateFallback?.trim()) return templateFallback.trim()
   const plain = richTextToPlainText(text)
   return plain ? truncateDescription(plain) : undefined
 }
@@ -127,7 +142,9 @@ export function buildPageMetadata(input: PageMetadataInput): Metadata {
   return {
     title: input.title,
     ...(input.description ? { description: input.description } : {}),
-    alternates: { canonical: url },
+    // `alternates` je vnořené pole → stránka jím přepíše layout celý, proto tu
+    // je i odkaz na RSS.
+    alternates: { canonical: url, types: RSS_ALTERNATE },
     openGraph: {
       type,
       url,
@@ -183,15 +200,99 @@ export function articleJsonLd(input: ArticleJsonLdInput): string {
           ...(input.author.profilePath ? { url: absoluteUrl(input.author.profilePath) } : {}),
         }
       : { '@type': 'Organization', name: SITE_NAME, url: site },
-    publisher: {
-      '@type': 'Organization',
-      name: SITE_NAME,
-      url: site,
-      logo: { '@type': 'ImageObject', url: `${site}/apple-icon.png` },
-    },
+    publisher: organizationNode(),
     mainEntityOfPage: url,
     url,
     inLanguage: 'cs',
   }
+  return toJsonLd(data)
+}
+
+/** Serializace JSON-LD s escapováním `<` (text nemůže utéct ze script tagu). */
+function toJsonLd(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c')
+}
+
+/** Vydavatel webu — sdílený uzel pro Article.publisher, WebSite.publisher a Organization. */
+function organizationNode() {
+  const site = getSiteURL()
+  return {
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: site,
+    logo: { '@type': 'ImageObject', url: `${site}${SITE_LOGO_PATH}`, width: 512, height: 512 },
+  }
+}
+
+/**
+ * Homepage: `WebSite` se `SearchAction` (Google pak umí u výsledku webu
+ * nabídnout vyhledávací pole vedoucí rovnou na /hledani) + `Organization`
+ * (název, logo) jako dva grafy v jednom skriptu.
+ */
+export function homepageJsonLd(): string {
+  const site = getSiteURL()
+  return toJsonLd({
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': `${site}/#website`,
+        name: SITE_NAME,
+        alternateName: 'Ara.cz – Cestovní průvodce',
+        url: site,
+        description: DEFAULT_DESCRIPTION,
+        inLanguage: 'cs',
+        publisher: { '@id': `${site}/#organization` },
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: {
+            '@type': 'EntryPoint',
+            urlTemplate: `${site}/hledani?q={search_term_string}`,
+          },
+          'query-input': 'required name=search_term_string',
+        },
+      },
+      { ...organizationNode(), '@id': `${site}/#organization` },
+    ],
+  })
+}
+
+export type TouristDestinationJsonLdInput = {
+  name: string
+  description?: string | null
+  path: string
+  imageUrl?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  /** Nadřazené místo (země u města, kontinent u země…) — z drobečků. */
+  containedIn?: string | null
+}
+
+/**
+ * Stránky „Místo k navštívení" (země, region, město): schema.org
+ * `TouristDestination` — název, popis, fotka, souřadnice a kde místo leží.
+ */
+export function touristDestinationJsonLd(input: TouristDestinationJsonLdInput): string {
+  const image = ogImageUrl(input.imageUrl)
+  const hasGeo =
+    input.latitude != null &&
+    input.longitude != null &&
+    Number.isFinite(input.latitude) &&
+    Number.isFinite(input.longitude)
+  return toJsonLd({
+    '@context': 'https://schema.org',
+    '@type': 'TouristDestination',
+    name: input.name,
+    ...(input.description ? { description: input.description } : {}),
+    url: absoluteUrl(input.path),
+    ...(image ? { image: [image] } : {}),
+    ...(hasGeo
+      ? { geo: { '@type': 'GeoCoordinates', latitude: input.latitude, longitude: input.longitude } }
+      : {}),
+    ...(input.containedIn
+      ? { containedInPlace: { '@type': 'Place', name: input.containedIn } }
+      : {}),
+    touristType: 'čeští cestovatelé',
+    inLanguage: 'cs',
+  })
 }

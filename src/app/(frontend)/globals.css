@@ -896,9 +896,12 @@
     border-color: #ba9a3b;
   }
 
-  .prose .pi-budget-container__range h5 {
+  /* Štítek rozpětí („nízký rozpočet") — vizuálně drobný popisek, ne nadpis
+     (dřív h5, což přeskakovalo úroveň za h3 a plnilo obsah nadpisů). */
+  .prose .pi-budget-container__range p {
     color: #99a9b3;
     font-size: 11px;
+    line-height: 1.3;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;

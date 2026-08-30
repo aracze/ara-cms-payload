@@ -33,9 +33,24 @@ export default function robots(): MetadataRoute.Robots {
         // Affiliate redirecty (/go/pojisteni…) — nejsou to obsah,
         // nemají se procházet ani indexovat. Platí pro všechny boty (na rozdíl od
         // starého robots.txt, kde prázdné skupiny Googlebot/Seznambot blokaci obcházely).
-        // Výsledky hledání jsou z pohledu vyhledávačů nekonečný duplicitní obsah —
-        // stránka má i meta robots noindex, tohle šetří samotné procházení.
-        disallow: ['/go/', '/hledani'],
+        // Admin, REST API Payloadu (surové JSONy kolekcí) a stránky účtu
+        // (přihlášení, registrace, nastavení, hesla) nemají ve výsledcích co dělat.
+        //
+        // /hledani tu SCHVÁLNĚ není: stránka má meta robots noindex, a ten Google
+        // uvidí jen když ji smí stáhnout. Zakázaná URL by v indexu zůstala jako
+        // „bez popisu". Výsledky hledání se nikam neodkazují (jen formulář), takže
+        // procházení nic nestojí.
+        disallow: [
+          '/go/',
+          '/admin',
+          '/api/',
+          '/nastaveni',
+          '/prihlaseni',
+          '/registrace',
+          '/nove-heslo',
+          '/zapomenute-heslo',
+          '/ucet-smazan',
+        ],
       },
       {
         // Bot si z robots.txt vybírá nejkonkrétnější skupinu — kdo je tady,

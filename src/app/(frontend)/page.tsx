@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { fetchRootPages } from '@/lib/payload'
 import { Homepage } from '@/components/layout/homepage/homepage'
-import { buildPageMetadata, DEFAULT_DESCRIPTION } from '@/lib/seo'
+import { buildPageMetadata, DEFAULT_DESCRIPTION, homepageJsonLd } from '@/lib/seo'
 
 // Homepage má vlastní titulek s klíčovými slovy (výchozí „Ara.cz - Cestovní
 // průvodce" z layoutu byl jen název), popisek, canonical a Open Graph.
@@ -23,5 +23,11 @@ export const dynamic = 'force-dynamic'
 export default async function Home() {
   const { data } = await fetchRootPages()
 
-  return <Homepage homepage={data?.homepage} />
+  return (
+    <>
+      {/* WebSite (+ vyhledávací pole ve výsledcích Googlu) a Organization. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: homepageJsonLd() }} />
+      <Homepage homepage={data?.homepage} />
+    </>
+  )
 }

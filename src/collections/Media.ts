@@ -412,7 +412,12 @@ export const Media: CollectionConfig = {
   fields: [
     {
       name: 'alt',
+      label: 'Alternativní text (alt)',
       type: 'text',
+      admin: {
+        description:
+          'Co je na fotce, jednou větou (např. „Přístav v Dubrovníku při západu slunce"). Čtou ho čtečky obrazovky a Google Obrázky; bez něj fotka ve vyhledávání obrázků nefiguruje.',
+      },
     },
     {
       name: 'isCreativeCommons',

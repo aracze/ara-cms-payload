@@ -2801,6 +2801,97 @@ export const fetchSitemapEntries = async () => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RSS kanál nových článků (/feed.xml)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FEED_LIMIT = 30
+
+export type FeedArticle = {
+  title: string
+  /** Kanonická cesta článku (`mainPage.fullSlug/slug`). */
+  path: string
+  text: unknown
+  meta?: { title?: string | null; description?: string | null } | null
+  publishedAt: string | null
+  authorName: string | null
+}
+
+async function fetchFeedArticlesUncached(): Promise<FeedArticle[]> {
+  const payload = await getDb()
+  const res = await payload.find({
+    overrideAccess: false,
+    collection: 'articles',
+    where: { and: [{ mainPage: { exists: true } }, { publishedAt: { exists: true } }] },
+    sort: '-publishedAt',
+    limit: FEED_LIMIT,
+    depth: 0,
+    joins: false,
+    select: {
+      title: true,
+      slug: true,
+      mainPage: true,
+      text: true,
+      meta: true,
+      publishedAt: true,
+      createdBy: true,
+      createdByPublic: true,
+    },
+  })
+  type Raw = {
+    title: string
+    slug: string
+    mainPage?: unknown
+    text?: unknown
+    meta?: FeedArticle['meta']
+    publishedAt?: string | null
+    createdByPublic?: { name?: string | null; username?: string | null } | null
+  }
+  const docs = res.docs as unknown as Raw[]
+  const parentIds = [
+    ...new Set(
+      docs.map((d) => relationId(d.mainPage)).filter((id): id is number | string => id != null),
+    ),
+  ]
+  const parents =
+    parentIds.length > 0
+      ? ((
+          await payload.find({
+            overrideAccess: false,
+            collection: 'pages',
+            where: { id: { in: parentIds } },
+            limit: parentIds.length,
+            depth: 0,
+            select: { fullSlug: true },
+            joins: false,
+          })
+        ).docs as unknown as { id: number | string; fullSlug?: string | null }[])
+      : []
+  const slugById = new Map(parents.map((p) => [p.id, p.fullSlug]))
+
+  return docs.flatMap((d) => {
+    const parentId = relationId(d.mainPage)
+    const parentSlug = parentId != null ? slugById.get(parentId) : null
+    if (!parentSlug || !d.slug) return []
+    return [
+      {
+        title: d.title,
+        path: `${parentSlug.replace(/\/$/, '')}/${d.slug}`,
+        text: d.text ?? null,
+        meta: d.meta ?? null,
+        publishedAt: d.publishedAt ?? null,
+        authorName: d.createdByPublic?.name || d.createdByPublic?.username || null,
+      },
+    ]
+  })
+}
+
+/** Nejnovější články pro RSS. Chyba DB propadá ven (route vrátí 500). */
+export const fetchFeedArticles = cached(fetchFeedArticlesUncached, 'feed', () => [
+  'articles',
+  'pages',
+])
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Homepage: sekce „Co je nového" — nová místa + recenze + komentáře v jednom
 // proudu (nahrazuje záložky starého webu). Klient filtruje/stránkuje lokálně,
 // proto se tahá víc položek na druh, než se hned zobrazí.

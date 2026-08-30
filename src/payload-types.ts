@@ -223,6 +223,9 @@ export interface Avatar {
  */
 export interface Media {
   id: number;
+  /**
+   * Co je na fotce, jednou větou (např. „Přístav v Dubrovníku při západu slunce"). Čtou ho čtečky obrazovky a Google Obrázky; bez něj fotka ve vyhledávání obrázků nefiguruje.
+   */
   alt?: string | null;
   isCreativeCommons?: boolean | null;
   author?: string | null;

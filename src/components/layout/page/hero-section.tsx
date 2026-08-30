@@ -42,7 +42,12 @@ export const HeroSection = ({
     <section className="relative w-full h-[315px] bg-[#3b444f]">
       {/* Cover Image Background with its own overflow clipping */}
       <div className="absolute inset-0 overflow-hidden">
-        <StaticHeroImage imageUrl={imageUrl} styleCss={styleCss} blurDataURL={blurDataURL} />
+        <StaticHeroImage
+          imageUrl={imageUrl}
+          alt={title}
+          styleCss={styleCss}
+          blurDataURL={blurDataURL}
+        />
       </div>
 
       {/* Title Content - Overlaid like in Grails */}

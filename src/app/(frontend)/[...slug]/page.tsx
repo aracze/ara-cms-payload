@@ -2,11 +2,13 @@ import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
 import { LeaderboardAd } from '@/components/features/article-ad'
 import { fetchPageLightByFullSlug, pageHasArticlesBySlug } from '@/lib/payload'
+import { fetchAncestorChain } from '@/lib/page-ancestors'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
-import { PageCategory } from '@/types/payload'
-import { getArticleImageUrl } from '@/lib/utils'
+import { PageCategory, type Page as PayloadPage } from '@/types/payload'
+import { getArticleImageUrl, richTextToPlainText } from '@/lib/utils'
 import { resolveSlugRoute } from '@/lib/resolve-route'
 import { absoluteUrl, buildPageMetadata, resolveSeoDescription, resolveSeoTitle } from '@/lib/seo'
+import { leadSentence, seoDescriptionTemplate, seoTitleTemplate } from '@/lib/seo-templates'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -46,16 +48,48 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       }
     }
 
-    // Náhled pro sdílení = hero fotka stránky (u podstránek fotka kořenového
-    // místa — stejné pravidlo jako getHeroImage v komponentě Page).
-    const heroOwner = rootPageCategories.includes(page.category) ? page : rootPage
-    const { title } = resolveSeoTitle(page.meta, buildPageTitle(page, rootPage))
+    // Místo, ke kterému stránka patří (samo místo, nebo nejbližší nadřazené —
+    // u cíle město, u „Počasí" země): skloňování v šablonách titulku/popisku
+    // a náhled pro sdílení. Řetězec předků je React-cache sdílená s renderem.
+    const ancestors = await fetchAncestorChain(page.fullSlug)
+    const nearestPlace = [...ancestors]
+      .reverse()
+      .find(
+        (a): a is PayloadPage =>
+          !('isPlaceholder' in a) && a.category === PageCategory.Misto_k_navstiveni,
+      )
+    const isPlace = page.category === PageCategory.Misto_k_navstiveni
+    const place = isPlace ? page : (nearestPlace ?? rootPage)
+
+    // Titulek/popisek: SEO pole z CMS → šablona podle kategorie (znění starého
+    // webu) → kontextový titulek, resp. začátek textu.
+    const { title } = resolveSeoTitle(
+      page.meta,
+      seoTitleTemplate(page, place) ?? buildPageTitle(page, rootPage),
+    )
+    const lead = leadSentence(richTextToPlainText(page.text))
+
+    // Náhled pro sdílení = hero fotka: vlastní jen u kořenových kategorií
+    // (místo, cíl, rubrika…), podstránky dědí fotku místa/země — stejné
+    // pravidlo jako getHeroImage v komponentě Page.
+    const ownImage = rootPageCategories.includes(page.category)
+      ? page.featuredImage?.image?.url
+      : null
+    const imageUrl =
+      ownImage ?? place.featuredImage?.image?.url ?? rootPage.featuredImage?.image?.url ?? null
 
     return buildPageMetadata({
       title,
-      description: resolveSeoDescription(page.meta, page.text),
+      description: resolveSeoDescription(
+        page.meta,
+        page.text,
+        // Město/ostrov v zemi dostane šablonu „Město", země a kontinent „Stát".
+        seoDescriptionTemplate(page, place, lead, {
+          placeHasParentPlace: isPlace && !!nearestPlace,
+        }),
+      ),
       path: page.fullSlug,
-      imageUrl: heroOwner.featuredImage?.image?.url ?? null,
+      imageUrl,
     })
   }
 
