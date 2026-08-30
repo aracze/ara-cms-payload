@@ -345,7 +345,9 @@ z Prahy** (Invia XML feed) a uloží je do JSON pole `affiliate.deals`
 - Stejný běh plní i dlaždice zájezdů homepage sekce **„Dnešní akční
   nabídky"**: z Inviou kurátorovaného feedu (globál **Homepage → Dnešní
   akční nabídky**, feed s „Defaultním cílením Invia") vybere letecké zájezdy
-  s odletem z Prahy, seřadí podle výše slevy (štítek „−65 %" na dlaždici),
+  s odletem z českého letiště (Praha, Brno, Ostrava, Pardubice, Karlovy Vary;
+  dlaždice zmíní odlet, když není z Prahy), seřadí podle výše slevy (štítek
+  „−65 %" na dlaždici),
   odstraní duplicitní hotely a kandidáty uloží do `dealsOfDay.deals` globálu
   (přímým SQL ve stejné transakci jako stránky). Web při čtení odfiltruje
   propadlé termíny, poskládá pestrý výběr přes destinace a kreslí první 4;
