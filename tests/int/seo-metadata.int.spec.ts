@@ -11,6 +11,7 @@ import {
   resolveSeoDescription,
   resolveSeoTitle,
   SITE_NAME,
+  SITE_TITLE_SUFFIX,
   stripSiteSuffix,
   truncateDescription,
 } from '@/lib/seo'
@@ -35,26 +36,36 @@ describe('stripSiteSuffix — přípona webu z legacy/plugin titulků', () => {
     expect(stripSiteSuffix('Norsko - Ara.cz ')).toBe('Norsko')
   })
 
+  it('zvládne i legacy varianty s frází a překlep „•vAra.cz"', () => {
+    expect(stripSiteSuffix('Salzburská ZOO - cestovní průvodce Ara.cz')).toBe('Salzburská ZOO')
+    expect(stripSiteSuffix('Podmořské jeskyně Nereo: Cestovní průvodce Ara.cz')).toBe(
+      'Podmořské jeskyně Nereo',
+    )
+    expect(stripSiteSuffix('Top ze světa - Cestovní inspirace Ara.cz')).toBe('Top ze světa')
+    expect(stripSiteSuffix('Victoria: Cestovní průvodce Gozo •vAra.cz')).toBe(
+      'Victoria: Cestovní průvodce Gozo',
+    )
+    expect(stripSiteSuffix('Reklama a spolupráce na Ara.cz')).toBe('Reklama a spolupráce na Ara.cz')
+  })
+
   it('titulek bez přípony nechá být (včetně „Ara.cz" uprostřed)', () => {
     expect(stripSiteSuffix('O webu Ara.cz a jeho autorech')).toBe('O webu Ara.cz a jeho autorech')
   })
 })
 
 describe('resolveSeoTitle — SEO titulek z CMS má přednost', () => {
-  it('vyplněný meta.title → absolutní titulek s krátkou příponou', () => {
-    const r = resolveSeoTitle(
-      { title: 'Vstupní podmínky a víza do Srbska • Ara.cz' },
-      'Vstupní podmínky a víza do Srbska',
-    )
-    expect(r.title).toEqual({ absolute: `Vstupní podmínky a víza do Srbska | ${SITE_NAME}` })
-    expect(r.text).toBe(`Vstupní podmínky a víza do Srbska | ${SITE_NAME}`)
+  it('vyplněný meta.title → bez přípony (tu přidá layout šablona `%s | Ara.cz`)', () => {
+    expect(
+      resolveSeoTitle({ title: 'Vstupní podmínky a víza do Srbska • Ara.cz' }, 'fallback'),
+    ).toBe('Vstupní podmínky a víza do Srbska')
+    expect(SITE_TITLE_SUFFIX).toBe(SITE_NAME)
   })
 
-  it('prázdný/chybějící meta.title → fallback (šablonu doplní layout)', () => {
-    expect(resolveSeoTitle(null, 'Norsko').title).toBe('Norsko')
-    expect(resolveSeoTitle({ title: '   ' }, 'Norsko').title).toBe('Norsko')
+  it('prázdný/chybějící meta.title → fallback', () => {
+    expect(resolveSeoTitle(null, 'Norsko')).toBe('Norsko')
+    expect(resolveSeoTitle({ title: '   ' }, 'Norsko')).toBe('Norsko')
     // Jen přípona bez obsahu = jako prázdný.
-    expect(resolveSeoTitle({ title: '• Ara.cz' }, 'Norsko').title).toBe('Norsko')
+    expect(resolveSeoTitle({ title: '• Ara.cz' }, 'Norsko')).toBe('Norsko')
   })
 })
 
@@ -100,7 +111,7 @@ describe('resolveSeoDescription — CMS popisek, jinak začátek textu', () => {
 })
 
 describe('buildPageMetadata — canonical + Open Graph', () => {
-  it('stránka: absolutní canonical, OG website se siteName/locale, bez fotky karta summary', () => {
+  it('stránka: absolutní canonical, OG website se siteName/locale, bez fotky výchozí obrázek', () => {
     const m = buildPageMetadata({ title: 'Norsko', description: 'Popis', path: '/norsko' })
     expect(m.alternates?.canonical).toBe(`${getSiteURL()}/norsko`)
     expect(m.openGraph).toMatchObject({
@@ -108,9 +119,9 @@ describe('buildPageMetadata — canonical + Open Graph', () => {
       url: `${getSiteURL()}/norsko`,
       siteName: SITE_NAME,
       locale: 'cs_CZ',
+      images: [{ url: `${getSiteURL()}/og-default.png` }],
     })
-    expect(m.openGraph && 'images' in m.openGraph).toBe(false)
-    expect(m.twitter).toEqual({ card: 'summary' })
+    expect(m.twitter).toEqual({ card: 'summary_large_image' })
   })
 
   it('článek: OG article s časy a autorem, Cloudinary fotka dostane zmenšení', () => {

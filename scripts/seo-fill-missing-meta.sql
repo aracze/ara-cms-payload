@@ -1,7 +1,7 @@
 -- Doplnění SEO titulku a popisku u stránek a článků, které je po migraci
 -- z Grails neměly (10 stránek + 2 články, stav 30. 8. 2026). Texty psané ručně
 -- ve znění ostatních popisků (viz src/lib/seo-templates.ts); web příponu
--- „| Ara.cz" přidává sám, proto tu není.
+-- „| Ara.cz" přidává sám, proto titulky značkou nekončí (jinak by byla dvakrát).
 --
 -- Idempotentní: přepisuje JEN prázdné hodnoty, takže opakované spuštění ani
 -- pozdější ruční úprava v adminu nic nerozbije. Verze (_pages_v) dostanou
@@ -27,7 +27,7 @@ WITH fill (full_slug, meta_title, meta_description) AS (
      'Jídlo a pití v Norsku – co ochutnat a vyzkoušet',
      'Tradiční norská kuchyně: losos, sledě, treska, sobí maso, sýry a tmavé pečivo. Co ochutnat, kde se najíst levně a kolik stojí jídlo a pití v Norsku.'),
     ('/o-nas',
-     'O nás – kdo píše cestovní průvodce Ara.cz',
+     'O nás – kdo stojí za webem a jak vznikají průvodce',
      'Ara.cz je český cestovatelský portál, který vzlétl v roce 2013. Kdo za webem stojí, jak vznikají průvodce po zemích a městech a jak se můžeš zapojit.'),
     ('/podminky-uzivani-webu',
      'Podmínky užívání webu a ochrana osobních údajů',
@@ -39,7 +39,7 @@ WITH fill (full_slug, meta_title, meta_description) AS (
      'Rady na cestu – cestovní inspirace a tipy',
      'Štěstí při cestování přeje připraveným. Praktické rady, jak plánovat cestu, balit, šetřit a zvládnout cestování bez stresu – zkušenosti cestovatelů z Ara.cz.'),
     ('/reklama',
-     'Reklama a spolupráce na Ara.cz',
+     'Reklama a spolupráce – inzerce na cestovatelském webu',
      'Možnosti inzerce a propagace na cestovatelském portálu Ara.cz: bannery, články, partnerství. Pro produkty a služby se vztahem k cestování.'),
     ('/slovensko/zilina/marianske-namesti',
      'Mariánské náměstí v Žilině – historické centrum s podloubím',
@@ -57,9 +57,11 @@ updated AS (
     AND (COALESCE(p.meta_title, '') = '' OR COALESCE(p.meta_description, '') = '')
   RETURNING p.id, p.meta_title, p.meta_description
 )
+-- Stejná ochrana i u verze: rozepsaný koncept (draft) s vlastním SEO textem
+-- se nepřepíše.
 UPDATE _pages_v v
-SET version_meta_title = u.meta_title,
-    version_meta_description = u.meta_description
+SET version_meta_title = COALESCE(NULLIF(v.version_meta_title, ''), u.meta_title),
+    version_meta_description = COALESCE(NULLIF(v.version_meta_description, ''), u.meta_description)
 FROM updated u
 WHERE v.parent_id = u.id
   AND v.latest = true;
@@ -73,7 +75,7 @@ FROM (
      'Top aplikace na cestování – překladače, mapy a plánování',
      'Nejlepší mobilní aplikace na cesty: Google Translate, offline mapy, plánování tras, ubytování a doprava. Které si stáhnout před odjezdem a proč.'),
     ('spoluprace',
-     'Spolupráce – staň se cestovním průvodcem na Ara.cz',
+     'Spolupráce – staň se cestovním průvodcem místa',
      'Baví tě cestování a psaní? Přidávej recenze, nová místa a informace o svých oblíbených destinacích na Ara.cz a staň se oficiálním průvodcem místa.')
 ) AS v (slug, meta_title, meta_description)
 WHERE a.slug = v.slug

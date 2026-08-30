@@ -46,12 +46,17 @@ async function resolvePlaceForAdmin(
       depth: 0,
       select: { title: true, category: true, detail: true, parent: true },
       req,
+      // Práva přihlášeného editora, ne admin obejití (pravidlo Local API).
+      overrideAccess: false,
     })) as unknown as SeoAdminDoc | null
     if (!parent) break
     firstParent ??= parent
     if (parent.category === PageCategory.Misto_k_navstiveni) {
+      // Kontinent je taky „Místo k navštívení", ale bez rodiče a v URL skrytý —
+      // země pod ním je „Stát", ne „Město" (stejně to vidí web z URL předků).
+      const parentIsContinent = relationIdOf(parent.parent) == null
       return isPlace
-        ? { place: doc, placeHasParentPlace: true }
+        ? { place: doc, placeHasParentPlace: !parentIsContinent }
         : { place: parent, placeHasParentPlace: false }
     }
     parentId = relationIdOf(parent.parent)

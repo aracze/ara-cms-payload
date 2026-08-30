@@ -8,8 +8,14 @@
 import type { Metadata, Viewport } from 'next'
 import { Open_Sans, Poppins } from 'next/font/google'
 import './globals.css'
-import { getSiteURL, isProduction } from '@/lib/utils'
-import { DEFAULT_DESCRIPTION, RSS_ALTERNATE, SITE_NAME, SITE_TITLE_SUFFIX } from '@/lib/seo'
+import { isProduction } from '@/lib/utils'
+import {
+  DEFAULT_DESCRIPTION,
+  getSiteURLObject,
+  RSS_ALTERNATE,
+  SITE_NAME,
+  SITE_TITLE_SUFFIX,
+} from '@/lib/seo'
 import { Header } from '@/components/layout/header/header'
 import { sanitizeHeaderLogoSvg } from '@/lib/rich-text-html'
 import { Footer } from '@/components/layout/footer/footer'
@@ -53,10 +59,10 @@ const poppins = Poppins({
 // neslučuje, proto je tady jen fallback pro routy bez vlastních metadat).
 // `metadataBase` dělá z relativních adres (canonical, og:image) absolutní.
 export const metadata: Metadata = {
-  metadataBase: new URL(getSiteURL()),
+  metadataBase: getSiteURLObject(),
   title: {
     template: `%s | ${SITE_TITLE_SUFFIX}`,
-    default: SITE_TITLE_SUFFIX,
+    default: `${SITE_TITLE_SUFFIX} – Cestovní průvodce`,
   },
   description: DEFAULT_DESCRIPTION,
   alternates: { types: RSS_ALTERNATE },

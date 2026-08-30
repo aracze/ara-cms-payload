@@ -51,7 +51,8 @@ import {
   menuOwnerCategories,
   type Breadcrumb,
 } from '@/lib/page-hierarchy'
-import { ogImageUrl, resolveSeoDescription, touristDestinationJsonLd } from '@/lib/seo'
+import { absoluteUrl, ogImageUrl, toJsonLd, touristDestinationJsonLd } from '@/lib/seo'
+import { resolvePageSeo } from '@/lib/page-seo'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getCurrentUser } from '@/lib/auth'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
@@ -316,8 +317,9 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
   const isAboutPage = isStaticPage && page.fullSlug === `/${ABOUT_PAGE_SLUG}`
   const imageUrl = useDefaultCover ? DEFAULT_COVER_URL : cmsImageUrl
   const pageTitle = buildPageTitle(page, contextPlace)
-  // Popis pro strukturovaná data — SEO popisek z CMS, jinak začátek textu.
-  const seoDescription = resolveSeoDescription(page.meta, page.text) ?? null
+  // Popis pro strukturovaná data — tentýž, jaký jde do meta description
+  // (sdílený resolver, React-cache s generateMetadata).
+  const seoDescription = (await resolvePageSeo(page)).description ?? null
 
   // Sekundární menu se nezobrazuje na rubrikách ani statických stránkách.
   const showSubnavigation =
@@ -616,14 +618,14 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: touristPointJsonLd(
+            __html: touristPointJsonLd({
               page,
-              reviewsData?.reviews ?? [],
-              heroRating,
+              reviews: reviewsData?.reviews ?? [],
+              rating: heroRating,
               breadcrumbs,
-              seoDescription,
+              description: seoDescription,
               imageUrl,
-            ),
+            }),
           }}
         />
       )}
@@ -661,6 +663,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
         <HeroSection
           title={pageTitle}
           imageUrl={imageUrl}
+          // Sdílená výchozí obálka je dekorace, ne fotka místa → bez popisku.
+          imageAlt={useDefaultCover ? '' : pageTitle}
           styleCss={
             useDefaultCover
               ? DEFAULT_COVER_POSITION
@@ -884,14 +888,21 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
  * věž"). Bez země proto LocalBusiness raději vynecháme a zůstane samotný
  * TouristAttraction — nevalidní značka je horší než chybějící hvězdičky.
  */
-function touristPointJsonLd(
-  page: PayloadPage,
-  reviews: ReviewPublic[],
-  rating: { avg: number; count: number } | null,
-  breadcrumbs: Breadcrumb[],
-  description: string | null,
-  imageUrl: string | null,
-): string {
+function touristPointJsonLd({
+  page,
+  reviews,
+  rating,
+  breadcrumbs,
+  description,
+  imageUrl,
+}: {
+  page: PayloadPage
+  reviews: ReviewPublic[]
+  rating: { avg: number; count: number } | null
+  breadcrumbs: Breadcrumb[]
+  description: string | null
+  imageUrl: string | null
+}): string {
   const image = ogImageUrl(imageUrl)
   const lat = page.detail?.latitude ? parseFloat(page.detail.latitude) : null
   const lng = page.detail?.longitude ? parseFloat(page.detail.longitude) : null
@@ -914,7 +925,7 @@ function touristPointJsonLd(
     '@context': 'https://schema.org',
     '@type': address ? ['TouristAttraction', 'LocalBusiness'] : 'TouristAttraction',
     name: page.title,
-    url: getSiteURL() + page.fullSlug,
+    url: absoluteUrl(page.fullSlug),
     ...(description ? { description } : {}),
     ...(image ? { image: [image] } : {}),
     ...(address ? { address } : {}),
@@ -951,7 +962,7 @@ function touristPointJsonLd(
         }
       : {}),
   }
-  return JSON.stringify(data).replace(/</g, '\\u003c')
+  return toJsonLd(data)
 }
 
 function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {

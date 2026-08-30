@@ -23,6 +23,14 @@ const publishDateFmt = new Intl.DateTimeFormat('cs-CZ', {
   year: 'numeric',
   timeZone: 'Europe/Prague',
 })
+// ISO den (YYYY-MM-DD) ve STEJNÉ zóně jako text — `toISOString()` by kolem
+// půlnoci dal jiný den než to, co čtenář vidí.
+const publishDayIsoFmt = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: 'Europe/Prague',
+})
 
 /** Datum vydání pro článek: text pro čtenáře + ISO den pro `<time dateTime>`. */
 export function formatPublishDate(
@@ -31,7 +39,7 @@ export function formatPublishDate(
   if (!iso) return null
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return null
-  return { text: publishDateFmt.format(date), dateTime: date.toISOString().slice(0, 10) }
+  return { text: publishDateFmt.format(date), dateTime: publishDayIsoFmt.format(date) }
 }
 
 export function formatCommentDate(

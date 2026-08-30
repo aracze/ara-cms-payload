@@ -58,6 +58,8 @@ export default async function HledaniPage({ searchParams }: { searchParams: Sear
       <HeroSection
         title="Hledání"
         imageUrl={DEFAULT_COVER_URL}
+        imageAlt=""
+
         styleCss={DEFAULT_COVER_POSITION}
         blurDataURL={DEFAULT_COVER_BLUR}
         filterId="blurHledani"

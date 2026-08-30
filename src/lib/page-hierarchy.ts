@@ -1,4 +1,5 @@
 import { PageCategory, type Page } from '@/types/payload'
+import { toJsonLd } from '@/lib/seo'
 
 /**
  * Kategorie, které mohou „vlastnit" sekundární menu. Turistický cíl tu ZÁMĚRNĚ
@@ -99,9 +100,9 @@ export function breadcrumbListJsonLd(
     item: `${siteUrl}${item.href}`,
   }))
 
-  return JSON.stringify({
+  return toJsonLd({
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: items,
-  }).replace(/</g, '\\u003c')
+  })
 }

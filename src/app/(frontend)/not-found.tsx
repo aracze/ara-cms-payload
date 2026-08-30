@@ -3,11 +3,10 @@ import Search from '@/components/features/search/search'
 import { ErrorHero } from '@/components/layout/error-hero'
 import { KamDal } from '@/components/features/kam-dal'
 
-// Vlastní titulek chybové stránky (jinak by nesla jen výchozí název webu);
-// do indexu nepatří, odkazy „Kam dál" ať crawler sleduje.
+// Vlastní titulek chybové stránky (jinak by nesla jen výchozí název webu).
+// `robots: noindex` Next u not-found přidává sám — vlastní by byl duplicitní.
 export const metadata: Metadata = {
   title: 'Stránka nenalezena',
-  robots: { index: false, follow: true },
 }
 
 /**

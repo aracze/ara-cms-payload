@@ -8,6 +8,8 @@ import type { Breadcrumb } from '@/lib/page-hierarchy'
 interface HeroSectionProps {
   title: string
   imageUrl: string | null
+  /** Popisek hero fotky; výchozí = název. Prázdný řetězec u dekorativní obálky. */
+  imageAlt?: string
   styleCss?: string
   filterId?: string
   breadcrumbs?: Breadcrumb[]
@@ -30,6 +32,7 @@ interface HeroSectionProps {
 export const HeroSection = ({
   title,
   imageUrl,
+  imageAlt,
   styleCss,
   filterId,
   breadcrumbs,
@@ -44,7 +47,7 @@ export const HeroSection = ({
       <div className="absolute inset-0 overflow-hidden">
         <StaticHeroImage
           imageUrl={imageUrl}
-          alt={title}
+          alt={imageAlt ?? title}
           styleCss={styleCss}
           blurDataURL={blurDataURL}
         />

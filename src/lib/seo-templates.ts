@@ -24,6 +24,7 @@
  * neměnit jedno podle druhého.
  */
 import { PageCategory } from '@/types/payload'
+import { truncateDescription } from '@/lib/seo'
 
 /** Minimum, co šablony o stránce potřebují (detail stránky i surový doc z adminu). */
 export type SeoPageLike = {
@@ -66,11 +67,7 @@ export function leadSentence(plain: string, max = 120): string {
   const compact = plain.replace(/\s+/g, ' ').trim()
   if (!compact) return ''
   const m = compact.match(/^.*?[.!?](?=\s|$)/)
-  const sentence = m ? m[0] : compact
-  if (sentence.length <= max) return sentence
-  const cut = sentence.slice(0, max - 1)
-  const lastSpace = cut.lastIndexOf(' ')
-  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:–—-]+$/, '')}…`
+  return truncateDescription(m ? m[0] : compact, max)
 }
 
 /**
@@ -87,7 +84,8 @@ export function seoTitleTemplate(page: SeoPageLike, place: SeoPlaceLike): string
       // „cestovní průvodce" doplní přípona layoutu.
       return place.title && place.title !== page.title ? `${page.title} ${loc}` : null
     case PageCategory.Misto_k_navstiveni:
-      return null // název místa; „Cestovní průvodce" doplní přípona
+      // Legacy „{{title}}: Cestovní průvodce {{title}}" (7. pád doplňoval editor).
+      return `${page.title} – cestovní průvodce`
     case PageCategory.Prakticke_informace:
       return `Praktické informace při cestě ${gen}`
     case PageCategory.Vstupni_podminky:

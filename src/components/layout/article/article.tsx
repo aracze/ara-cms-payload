@@ -1,6 +1,6 @@
 import React from 'react'
 import { Article as ArticleType, type Page as PayloadPage } from '@/types/payload'
-import { getPayloadURL, getSiteURL } from '@/lib/utils'
+import { articlePath, getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { articleJsonLd, resolveSeoDescription } from '@/lib/seo'
 import { formatPublishDate } from '@/lib/relative-time'
@@ -76,9 +76,9 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
   // Kanonická adresa článku (mainPage + slug) — tu samou dává i generateMetadata,
   // takže strukturovaná data ukazují na stejnou URL jako `rel=canonical`.
   const canonicalHref = article.mainPage?.fullSlug
-    ? `${article.mainPage.fullSlug}/${article.slug}`
+    ? articlePath(article.mainPage.fullSlug, article.slug)
     : placePage
-      ? `${placePage.fullSlug}/${article.slug}`
+      ? articlePath(placePage.fullSlug, article.slug)
       : null
 
   // Datum vydání — viditelně u autora a ve strukturovaných datech (Google

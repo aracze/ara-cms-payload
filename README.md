@@ -488,16 +488,22 @@ Metadata stránek skládá `src/lib/seo.ts` (`buildPageMetadata`), volá ho `gen
 v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
 
 - **Titulek a popisek** berou SEO záložku z CMS (`meta.title`, `meta.description` — u stránek
-  a článků migrovaných z Grails vyplněná). Vyplněný SEO titulek jde ven jako absolutní
-  `„… | Ara.cz"` (legacy přípona `• Ara.cz` se odřízne); bez něj se použije kontextový titulek
-  z `buildPageTitle` a šablona layoutu `%s | Ara.cz - Cestovní průvodce`. Popisek bez `meta`
-  = začátek textu zkrácený na hranici slova (`DESCRIPTION_MAX` 160), úplně bez textu výchozí
-  popisek layoutu (`DEFAULT_DESCRIPTION`).
+  a článků migrovaných z Grails vyplněná). Jediná přípona na celém webu je layout šablona
+  `%s | Ara.cz` (krátká schválně — Google ukazuje ~60 znaků, klíčová slova nesou titulky
+  samy; homepage má vlastní absolutní titulek). Legacy přípony (`• Ara.cz`, `- cestovní
+průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřezává
+  `stripSiteSuffix`. Bez SEO titulku se použije šablona kategorie, resp. kontextový titulek
+  z `buildPageTitle`. Popisek bez `meta` = šablona kategorie, jinak začátek textu zkrácený na
+  hranici slova (`DESCRIPTION_MAX` 160), úplně bez textu výchozí popisek layoutu
+  (`DEFAULT_DESCRIPTION`). Pro stránky (Page) to celé počítá `src/lib/page-seo.ts`
+  (`resolvePageSeo`, React-cache) — sdílí ho `generateMetadata` i JSON-LD v komponentě Page,
+  aby meta description a strukturovaná data říkaly totéž.
 - **Canonical** je vždy absolutní (`metadataBase` v layoutu + `getSiteURL()`); u článků míří na
   `mainPage.fullSlug/slug`, i když je článek zobrazený pod vedlejší stránkou.
 - **Open Graph / Twitter**: `og:type` (website/article), `siteName`, `locale cs_CZ`, náhled
   z hero fotky přes Cloudinary transformaci `f_auto,q_auto,c_limit,w_1200` (šířka 1200 je ve
-  whitelistu media proxy). Next vnořená pole `openGraph` mezi layoutem a stránkou NESLUČUJE —
+  whitelistu media proxy); bez fotky (homepage, statické stránky) výchozí `public/og-default.png`
+  (1200×630, logo na modré, generované ze SVG loga v CMS). Next vnořená pole `openGraph` mezi layoutem a stránkou NESLUČUJE —
   proto každá stránka skládá celý objekt přes helper, ne po částech.
 - **JSON-LD**: články vydávají `Article` (autor `Person` s odkazem na profil, `datePublished`
   z `publishedAt`, `dateModified` z `updatedAt`, fotka, vydavatel) — `articleJsonLd` v
@@ -526,8 +532,9 @@ v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
   `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
   `TouristAttraction` vždy (popis, fotka, poloha), `AggregateRating` + recenze jen když nějaké
   mají (prázdné hodnocení by bylo nevalidní).
-- **robots.txt** (`src/app/robots.ts`) zakazuje `/go/`, `/admin`, `/api/` a stránky účtu;
-  `/hledani` schválně NE — má `noindex`, a ten Google uplatní jen u URL, kterou smí stáhnout.
+- **robots.txt** (`src/app/robots.ts`) zakazuje jen ne-HTML cíle: `/go/`, `/admin`, `/api/`.
+  Stránky účtu ani `/hledani` schválně NE — mají `noindex`, a ten Google uplatní jen u URL,
+  kterou smí stáhnout (zakázaná adresa by v indexu zůstala „bez popisu").
 - **RSS** nejnovějších článků: `/feed.xml` (`src/app/(frontend)/feed.xml/route.ts`, data
   `fetchFeedArticles` s tagy `articles`/`pages`); odkaz `<link rel="alternate">` nese každá
   stránka (`RSS_ALTERNATE` v `buildPageMetadata` i layoutu — `alternates` se mezi layoutem
@@ -535,8 +542,8 @@ v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
 - **Ikony a manifest**: `src/app/icon.png` (512 px) + `public/icon-192.png`, `icon-512.png`,
   `icon-maskable-512.png` (papoušek z loga v CMS, vykreslený ze SVG přes sharp),
   `src/app/manifest.ts` a `themeColor` (`viewport` v layoutu) v modré hlavičky `#215491`.
-- **Obrázky**: hero fotka má `alt` = název stránky/článku (dekorativní obálky profilu a
-  přihlášení `alt=""`); fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
+- **Obrázky**: hero fotka má `alt` = název stránky/článku (sdílená výchozí obálka — profil,
+  přihlášení, hledání, statické stránky bez fotky — `alt=""`, je to dekorace); fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
   `loading="lazy"` a `decoding="async"`. Rich text renderuje `h1` z editoru jako `h2` (jediný
   h1 je název v heru) a nebezpečný odkaz vypíše jen jako text (dřív `href="#"`).
 - **Písma**: načítají se jen používané řezy — Open Sans 300–700, Poppins 400/600/700/800

@@ -119,21 +119,35 @@ export function getArticleExcerpt(article: Article): string {
 }
 
 /**
+ * Absolutní adresa média: relativní Payload upload (`/api/media/file/…`) dostane
+ * base URL CMS, Cloudinary/proxy adresy zůstávají. Jedno místo pro og:image,
+ * JSON-LD i náhledy článků.
+ */
+export function absoluteMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  return url.startsWith('/') ? `${getPayloadURL()}${url}` : url
+}
+
+/**
  * URL náhledového obrázku článku. `featuredImage.image` je populovaný media objekt
  * (po enrichArticleImages), před tím číselné id → v tom případě vrátíme null.
  */
 export function getArticleImageUrl(article: Article): string | null {
   const media = article.featuredImage?.image
-  const rawUrl = media && typeof media === 'object' ? media.url : null
-  if (!rawUrl) return null
-  return rawUrl.startsWith('/') ? `${getPayloadURL()}${rawUrl}` : rawUrl
+  return absoluteMediaUrl(media && typeof media === 'object' ? media.url : null)
+}
+
+/**
+ * Cesta článku pod rodičovskou stránkou (`/norsko/dva-tydny-v-norsku`) — jedno
+ * pravidlo pro canonical, sitemapu, RSS i odkazy.
+ */
+export function articlePath(parentFullSlug: string, slug: string): string {
+  return `${parentFullSlug.replace(/\/$/, '')}/${slug}`
 }
 
 /** Odkaz na detail článku (pod rodičovskou stránkou, fallback /blog/<slug>). */
 export function getArticleHref(article: Article, parentFullSlug?: string): string {
-  return parentFullSlug
-    ? `${parentFullSlug.replace(/\/$/, '')}/${article.slug}`
-    : `/blog/${article.slug}`
+  return parentFullSlug ? articlePath(parentFullSlug, article.slug) : `/blog/${article.slug}`
 }
 
 /**

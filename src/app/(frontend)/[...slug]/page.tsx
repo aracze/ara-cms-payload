@@ -2,13 +2,11 @@ import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
 import { LeaderboardAd } from '@/components/features/article-ad'
 import { fetchPageLightByFullSlug, pageHasArticlesBySlug } from '@/lib/payload'
-import { fetchAncestorChain } from '@/lib/page-ancestors'
-import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
-import { PageCategory, type Page as PayloadPage } from '@/types/payload'
-import { getArticleImageUrl, richTextToPlainText } from '@/lib/utils'
+import { PageCategory } from '@/types/payload'
+import { articlePath, getArticleImageUrl } from '@/lib/utils'
 import { resolveSlugRoute } from '@/lib/resolve-route'
+import { resolvePageSeo } from '@/lib/page-seo'
 import { absoluteUrl, buildPageMetadata, resolveSeoDescription, resolveSeoTitle } from '@/lib/seo'
-import { leadSentence, seoDescriptionTemplate, seoTitleTemplate } from '@/lib/seo-templates'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -35,62 +33,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolution = await resolveSlugRoute(fullSlug)
 
   if (resolution.kind === 'page') {
-    const page = resolution.page
-
-    let rootPage = page
-    if (!rootPageCategories.includes(page.category)) {
-      const rootSegment = page.fullSlug.replace(/^\/+/, '').split('/')[0]
-      if (rootSegment) {
-        // Titulek potřebuje jen title/category kořene — lehký fetch (sdílený
-        // s ancestor cache), ne celý detail stránky.
-        const { data: rootPageData } = await fetchPageLightByFullSlug(rootSegment)
-        rootPage = rootPageData?.pages[0] || page
-      }
-    }
-
-    // Místo, ke kterému stránka patří (samo místo, nebo nejbližší nadřazené —
-    // u cíle město, u „Počasí" země): skloňování v šablonách titulku/popisku
-    // a náhled pro sdílení. Řetězec předků je React-cache sdílená s renderem.
-    const ancestors = await fetchAncestorChain(page.fullSlug)
-    const nearestPlace = [...ancestors]
-      .reverse()
-      .find(
-        (a): a is PayloadPage =>
-          !('isPlaceholder' in a) && a.category === PageCategory.Misto_k_navstiveni,
-      )
-    const isPlace = page.category === PageCategory.Misto_k_navstiveni
-    const place = isPlace ? page : (nearestPlace ?? rootPage)
-
-    // Titulek/popisek: SEO pole z CMS → šablona podle kategorie (znění starého
-    // webu) → kontextový titulek, resp. začátek textu.
-    const { title } = resolveSeoTitle(
-      page.meta,
-      seoTitleTemplate(page, place) ?? buildPageTitle(page, rootPage),
-    )
-    const lead = leadSentence(richTextToPlainText(page.text))
-
-    // Náhled pro sdílení = hero fotka: vlastní jen u kořenových kategorií
-    // (místo, cíl, rubrika…), podstránky dědí fotku místa/země — stejné
-    // pravidlo jako getHeroImage v komponentě Page.
-    const ownImage = rootPageCategories.includes(page.category)
-      ? page.featuredImage?.image?.url
-      : null
-    const imageUrl =
-      ownImage ?? place.featuredImage?.image?.url ?? rootPage.featuredImage?.image?.url ?? null
-
-    return buildPageMetadata({
-      title,
-      description: resolveSeoDescription(
-        page.meta,
-        page.text,
-        // Město/ostrov v zemi dostane šablonu „Město", země a kontinent „Stát".
-        seoDescriptionTemplate(page, place, lead, {
-          placeHasParentPlace: isPlace && !!nearestPlace,
-        }),
-      ),
-      path: page.fullSlug,
-      imageUrl,
-    })
+    // Titulek, popisek i fotka sdílené s komponentou Page (src/lib/page-seo.ts),
+    // aby meta description a JSON-LD říkaly totéž.
+    const { title, description, imageUrl } = await resolvePageSeo(resolution.page)
+    return buildPageMetadata({ title, description, path: resolution.page.fullSlug, imageUrl })
   }
 
   if (resolution.kind === 'article') {
@@ -98,16 +44,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Kanonická adresa = mainPage + slug (článek může viset i pod vedlejšími
     // stránkami; ty odkazují sem). Bez mainPage aspoň aktuální cesta.
     const canonicalPath = article.mainPage?.fullSlug
-      ? `${article.mainPage.fullSlug}/${article.slug}`
+      ? articlePath(article.mainPage.fullSlug, article.slug)
       : `/${fullSlug}`
     const author = article.createdByPublic
-    const { title } = resolveSeoTitle(article.meta, article.title)
+    const title = resolveSeoTitle(article.meta, article.title)
+
+    // Náhled ke sdílení jako viditelné hero (resolveHeroImage v Article): vlastní
+    // fotka článku, jinak fotka hlavní stránky (lehký fetch, React-cache
+    // sdílená s renderem článku).
+    let imageUrl = getArticleImageUrl(article)
+    if (!imageUrl && article.mainPage?.fullSlug) {
+      const { data } = await fetchPageLightByFullSlug(article.mainPage.fullSlug.replace(/^\//, ''))
+      imageUrl = data?.pages[0]?.featuredImage?.image?.url ?? null
+    }
 
     return buildPageMetadata({
       title,
       description: resolveSeoDescription(article.meta, article.text),
       path: canonicalPath,
-      imageUrl: getArticleImageUrl(article),
+      imageUrl,
       type: 'article',
       publishedTime: article.publishedAt ?? article.createdAt ?? null,
       modifiedTime: article.updatedAt ?? null,

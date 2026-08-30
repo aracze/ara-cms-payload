@@ -1,12 +1,6 @@
 import { fetchFeedArticles } from '@/lib/payload'
-import {
-  absoluteUrl,
-  DEFAULT_DESCRIPTION,
-  resolveSeoDescription,
-  RSS_PATH,
-  RSS_TITLE,
-} from '@/lib/seo'
-import { getSiteURL } from '@/lib/utils'
+import { absoluteUrl, DEFAULT_DESCRIPTION, RSS_PATH, RSS_TITLE } from '@/lib/seo'
+import { getSiteURL, isProduction } from '@/lib/utils'
 
 /**
  * RSS 2.0 kanál nejnovějších článků (/feed.xml). Odkazuje na něj
@@ -42,7 +36,7 @@ export async function GET() {
   const items = articles
     .map((a) => {
       const url = absoluteUrl(a.path)
-      const description = resolveSeoDescription(a.meta, a.text)
+      const description = a.description
       const pubDate = rfc822(a.publishedAt)
       return [
         '<item>',
@@ -59,7 +53,13 @@ export async function GET() {
     })
     .join('\n')
 
-  const lastBuild = rfc822(articles[0]?.publishedAt ?? null) ?? new Date().toUTCString()
+  // Poslední změna kanálu = nejnovější vydání NEBO úprava kteréhokoli článku
+  // (oprava textu bez nového článku musí čtečkám taky změnit razítko).
+  const newest = articles.reduce<string>((max, a) => {
+    for (const d of [a.publishedAt, a.updatedAt]) if (d && d > max) max = d
+    return max
+  }, '')
+  const lastBuild = rfc822(newest || null) ?? new Date().toUTCString()
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -78,9 +78,10 @@ ${items}
   return new Response(xml, {
     headers: {
       'Content-Type': 'application/rss+xml; charset=utf-8',
-      // Čtečky se ptají často; čtvrt hodiny na CDN/klientu stačí, data se
-      // invalidují při publikaci článku.
-      'Cache-Control': 'public, max-age=900',
+      // Čtečky se ptají často; čtvrt hodiny na CDN/klientu stačí (o tolik se
+      // nový článek ve čtečce nejpozději opozdí). V dev bez cache (pravidlo:
+      // obsah z adminu se musí projevit okamžitě).
+      'Cache-Control': isProduction() ? 'public, max-age=900' : 'no-store',
     },
   })
 }

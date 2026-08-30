@@ -188,8 +188,9 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
         linkType === 'internal' && rawUrl && !rawUrl.startsWith('/') ? `/${rawUrl}` : rawUrl
       // Nebezpečná/prázdná adresa → jen text bez odkazu. Dřív `href="#"`,
       // což je prázdná kotva (skok nahoru, pro čtečky a crawlery falešný odkaz).
-      if (!isSafeUrl(String(normalizedUrl))) return children
-      const url = escapeHtml(String(normalizedUrl))
+      const urlText = String(normalizedUrl ?? '').trim()
+      if (!urlText || !isSafeUrl(urlText)) return children
+      const url = escapeHtml(urlText)
       const nofollow = Boolean(linkFields?.nofollow)
       const relTokens: string[] = []
 

@@ -34,11 +34,13 @@ import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
 import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
 import { getDb } from './db'
+import { resolveSeoDescription } from '@/lib/seo'
 import {
   getArticleImageUrl,
   isProduction,
   richTextToPlainText,
   stripLeadingContinent,
+  articlePath,
 } from './utils'
 
 /**
@@ -118,7 +120,7 @@ const ANCESTOR_SELECT = {
 } as const
 
 // Detail stránky = 3 paralelní dotazy (stránka ∥ děti ∥ články), každý jen
-// s poli, která web kreslí (bez SEO meta a profilů uživatelů). `breadcrumbs`
+// s poli, která web kreslí (SEO `meta` pro `<title>`/popisek ano, profily uživatelů ne). `breadcrumbs`
 // tu být MUSÍ — drobečky se počítají z hierarchie v CMS, ne z URL.
 const PAGE_SCALAR_SELECT = {
   title: true,
@@ -2810,9 +2812,12 @@ export type FeedArticle = {
   title: string
   /** Kanonická cesta článku (`mainPage.fullSlug/slug`). */
   path: string
-  text: unknown
-  meta?: { title?: string | null; description?: string | null } | null
+  /** SEO popisek z CMS, jinak začátek textu — spočtený tady, aby cache nenesla
+   *  celý rich text (30 článků ≈ 0,8 MB; limit záznamu unstable_cache je 2 MB). */
+  description: string | null
   publishedAt: string | null
+  /** Poslední úprava — pro `lastBuildDate` kanálu (změna textu bez nového článku). */
+  updatedAt: string | null
   authorName: string | null
 }
 
@@ -2833,6 +2838,7 @@ async function fetchFeedArticlesUncached(): Promise<FeedArticle[]> {
       text: true,
       meta: true,
       publishedAt: true,
+      updatedAt: true,
       createdBy: true,
       createdByPublic: true,
     },
@@ -2842,8 +2848,9 @@ async function fetchFeedArticlesUncached(): Promise<FeedArticle[]> {
     slug: string
     mainPage?: unknown
     text?: unknown
-    meta?: FeedArticle['meta']
+    meta?: { title?: string | null; description?: string | null } | null
     publishedAt?: string | null
+    updatedAt?: string | null
     createdByPublic?: { name?: string | null; username?: string | null } | null
   }
   const docs = res.docs as unknown as Raw[]
@@ -2875,10 +2882,10 @@ async function fetchFeedArticlesUncached(): Promise<FeedArticle[]> {
     return [
       {
         title: d.title,
-        path: `${parentSlug.replace(/\/$/, '')}/${d.slug}`,
-        text: d.text ?? null,
-        meta: d.meta ?? null,
+        path: articlePath(parentSlug, d.slug),
+        description: resolveSeoDescription(d.meta, d.text) ?? null,
         publishedAt: d.publishedAt ?? null,
+        updatedAt: d.updatedAt ?? null,
         authorName: d.createdByPublic?.name || d.createdByPublic?.username || null,
       },
     ]

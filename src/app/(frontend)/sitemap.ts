@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { fetchSitemapEntries } from '@/lib/payload'
 import { getSiteURL } from '@/lib/utils'
+import { absoluteUrl } from '@/lib/seo'
 
 // Sitemap se skládá až ZA BĚHU, nikdy při buildu. Dřív se prerendrovala při
 // sestavení obrazu (kde CMS neběží) jako „jen homepage" a po každém nasazení
@@ -17,14 +18,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // stránek nemá.
   const { pages, articles } = await fetchSitemapEntries()
 
-  const toUrl = (path: string) => `${site}${path.startsWith('/') ? path : `/${path}`}`
-
   // Homepage skládá nejnovější obsah, takže „změněno" = nejnovější změna kdekoliv.
-  const newest = [...pages, ...articles]
-    .map((e) => e.lastModified)
-    .filter(Boolean)
-    .sort()
-    .at(-1)
+  const newest = [...pages, ...articles].reduce(
+    (max, e) => (e.lastModified > max ? e.lastModified : max),
+    '',
+  )
 
   const entries: MetadataRoute.Sitemap = [
     {
@@ -34,13 +32,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1,
     },
     ...pages.map((p) => ({
-      url: toUrl(p.path),
+      url: absoluteUrl(p.path),
       lastModified: p.lastModified,
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     })),
     ...articles.map((a) => ({
-      url: toUrl(a.path),
+      url: absoluteUrl(a.path),
       lastModified: a.lastModified,
       changeFrequency: 'monthly' as const,
       priority: 0.6,

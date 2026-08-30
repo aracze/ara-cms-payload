@@ -59,7 +59,7 @@ describe('seoTitleTemplate — titulek bez přípony webu', () => {
     ).toBe('Praktické informace při cestě do Francie')
   })
 
-  it('cíl nese i místo, kde stojí (6. pád); místo samo a statická stránka šablonu nemají', () => {
+  it('cíl nese i místo (6. pád); místo „– cestovní průvodce"; statická stránka šablonu nemá', () => {
     expect(
       seoTitleTemplate(
         { title: 'Skulpturenpark', category: PageCategory.Turisticky_cil },
@@ -75,7 +75,7 @@ describe('seoTitleTemplate — titulek bez přípony webu', () => {
     ).toBeNull()
     expect(
       seoTitleTemplate({ title: 'Norsko', category: PageCategory.Misto_k_navstiveni }, norsko),
-    ).toBeNull()
+    ).toBe('Norsko – cestovní průvodce')
     expect(
       seoTitleTemplate({ title: 'O nás', category: PageCategory.Staticka_stranka }, norsko),
     ).toBeNull()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { PageContributor, type Contributor } from './page-contributor'
 
@@ -17,6 +17,9 @@ import { PageContributor, type Contributor } from './page-contributor'
 function countParagraphs(html: string): number {
   return (html.match(/<p\b/gi) ?? []).length
 }
+
+/** Výška sbaleného boxu (Tailwind `max-h-[250px]` níže musí sedět). */
+const COLLAPSED_MAX_HEIGHT = 250
 
 export function CollapsiblePageTextWithContributor({
   textHtml,
@@ -38,11 +41,22 @@ export function CollapsiblePageTextWithContributor({
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const canCollapse = useMemo(() => countParagraphs(textHtml) > 2, [textHtml])
-  const shouldCollapse = collapsible && canCollapse
+  // Na serveru rozhoduje počet odstavců (víc než dva = pravděpodobně přetéká).
+  // Po připojení změříme skutečnou výšku: tři krátké odstavce se do boxu
+  // vejdou celé a přechod do bílé + „zobrazit více" by neměly co odkrýt.
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [fitsCollapsed, setFitsCollapsed] = useState(false)
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el || !collapsible || !canCollapse) return
+    setFitsCollapsed(el.scrollHeight <= COLLAPSED_MAX_HEIGHT)
+  }, [textHtml, collapsible, canCollapse])
+  const shouldCollapse = collapsible && canCollapse && !fitsCollapsed
 
   return (
     <>
       <div
+        ref={boxRef}
         className={cn('relative', !isExpanded && shouldCollapse && 'max-h-[250px] overflow-hidden')}
       >
         {/* prose třídy jsou přímo na boxu s textem, aby odstavce byly PŘÍMÝMI

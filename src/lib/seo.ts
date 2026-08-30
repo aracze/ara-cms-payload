@@ -9,11 +9,15 @@
  */
 import type { Metadata } from 'next'
 import { cloudinaryVariant } from '@/lib/cloudinary-loader'
-import { getPayloadURL, getSiteURL, richTextToPlainText } from '@/lib/utils'
+import { absoluteMediaUrl, getSiteURL, richTextToPlainText } from '@/lib/utils'
 
 export const SITE_NAME = 'Ara.cz'
-/** Přípona titulků z layout šablony (`%s | Ara.cz - Cestovní průvodce`). */
-export const SITE_TITLE_SUFFIX = 'Ara.cz - Cestovní průvodce'
+/**
+ * Jediná přípona titulků na celém webu (layout šablona `%s | Ara.cz`). Krátká
+ * schválně: Google ukazuje ~60 znaků a klíčová slova („cestovní průvodce")
+ * nesou samy titulky stránek — homepage má vlastní absolutní titulek.
+ */
+export const SITE_TITLE_SUFFIX = SITE_NAME
 /** Výchozí popisek (homepage + stránky bez vlastního textu). */
 export const DEFAULT_DESCRIPTION =
   'Cestovní průvodce po světě: tipy, kam jet a co vidět, praktické informace o vízech, měně, počasí a dopravě, cestopisy a rady na cestu od lidí, kteří tam byli.'
@@ -33,37 +37,42 @@ export const RSS_ALTERNATE = { 'application/rss+xml': [{ url: RSS_PATH, title: R
 
 /** Logo pro strukturovaná data (Organization/publisher) — čtvercové PNG 512 px. */
 export const SITE_LOGO_PATH = '/icon-512.png'
+/** Výchozí náhled ke sdílení (1200×630, logo na modré) pro stránky bez fotky. */
+export const OG_FALLBACK_IMAGE_PATH = '/og-default.png'
 
 /** SEO záložka z CMS (plugin-seo) — stránky i články mají stejný tvar. */
 export type SeoMeta = { title?: string | null; description?: string | null } | null | undefined
 
 /**
- * Titulky ze starého webu končí „ • Ara.cz", generátor plugin-seo dává
- * „ | Ara.cz". Příponu odřízneme, aby ji web přidal jednotně (a ne dvakrát).
+ * Titulky ze starého webu končí značkou v několika podobách: „ • Ara.cz"
+ * (2 881 stránek), „ - cestovní průvodce Ara.cz" / „: Cestovní průvodce Ara.cz"
+ * (170), „ - Cestovní inspirace Ara.cz" (rubriky) i překlep „ •vAra.cz";
+ * generátor plugin-seo dává „ | Ara.cz". Příponu odřízneme, aby ji layout
+ * šablona přidala jednotně (a ne dvakrát). „Ara.cz" uprostřed věty („Reklama
+ * a spolupráce na Ara.cz") zůstává — chybí oddělovač i fráze.
  */
 export function stripSiteSuffix(title: string): string {
-  return title.replace(/\s*[•|–—-]\s*Ara\.cz\s*$/i, '').trim()
+  return title
+    .replace(
+      /(?:\s*[•|–—-]\s*(?:cestovní\s+(?:průvodce|inspirace)\s+)?|\s+cestovní\s+(?:průvodce|inspirace)\s+|\s*•\s*v)Ara\.cz\s*$/i,
+      '',
+    )
+    .replace(/[\s:•|–—-]+$/, '')
+    .trim()
 }
 
 /**
- * Titulek stránky: vyplněný SEO titulek z CMS má přednost (jako ABSOLUTNÍ
- * titulek s krátkou příponou „| Ara.cz" — legacy titulky už slovo „průvodce"
- * typicky obsahují, s dlouhou šablonou by se opakovalo). Bez SEO titulku se
- * použije fallback, na který layout aplikuje šablonu.
+ * Titulek stránky BEZ přípony webu (tu přidá layout šablona `%s | Ara.cz`):
+ * vyplněný SEO titulek z CMS má přednost, jinak `fallback` (šablona kategorie
+ * nebo kontextový titulek).
  */
-export function resolveSeoTitle(
-  meta: SeoMeta,
-  fallback: string,
-): { title: NonNullable<Metadata['title']>; text: string } {
+export function resolveSeoTitle(meta: SeoMeta, fallback: string): string {
   const custom = meta?.title?.trim()
   if (custom) {
     const bare = stripSiteSuffix(custom)
-    if (bare) {
-      const text = `${bare} | ${SITE_NAME}`
-      return { title: { absolute: text }, text }
-    }
+    if (bare) return bare
   }
-  return { title: fallback, text: `${fallback} | ${SITE_TITLE_SUFFIX}` }
+  return fallback
 }
 
 /** Zkrátí text na mez pro popisek — na hranici slova, s výpustkou. */
@@ -96,15 +105,22 @@ export function resolveSeoDescription(
   return plain ? truncateDescription(plain) : undefined
 }
 
+/**
+ * Základna webu jako URL pro `metadataBase`. Vyhodnocuje se při načtení
+ * layoutu — špatně nastavená `NEXT_PUBLIC_SITE_URL` (bez schématu) by jinak
+ * shodila celý web místo špatného canonicalu; proto pojistka na výchozí doménu.
+ */
+export function getSiteURLObject(): URL {
+  try {
+    return new URL(getSiteURL())
+  } catch {
+    return new URL('https://ara.cz')
+  }
+}
+
 /** Absolutní adresa na webu z cesty (`/norsko` → `https://ara.cz/norsko`). */
 export function absoluteUrl(path: string): string {
   return `${getSiteURL()}${path.startsWith('/') ? path : `/${path}`}`
-}
-
-/** Absolutní adresa média (relativní Payload upload → přes base URL CMS). */
-export function absoluteMediaUrl(url: string | null | undefined): string | null {
-  if (!url) return null
-  return url.startsWith('/') ? `${getPayloadURL()}${url}` : url
 }
 
 /**
@@ -117,6 +133,7 @@ export function ogImageUrl(url: string | null | undefined): string | null {
 }
 
 export type PageMetadataInput = {
+  /** Titulek bez přípony (šablonu doplní layout), nebo `{ absolute }` pro homepage. */
   title: NonNullable<Metadata['title']>
   description?: string
   /** Kanonická cesta na webu (s úvodním lomítkem). */
@@ -136,7 +153,9 @@ export type PageMetadataInput = {
  */
 export function buildPageMetadata(input: PageMetadataInput): Metadata {
   const url = absoluteUrl(input.path)
-  const image = ogImageUrl(input.imageUrl)
+  // Bez fotky (homepage, statické stránky, cíl bez obrázku) jde ven výchozí
+  // obrázek se značkou — sdílený odkaz bez náhledu má výrazně nižší proklik.
+  const image = ogImageUrl(input.imageUrl) ?? absoluteUrl(OG_FALLBACK_IMAGE_PATH)
   const type = input.type ?? 'website'
 
   return {
@@ -150,7 +169,7 @@ export function buildPageMetadata(input: PageMetadataInput): Metadata {
       url,
       siteName: SITE_NAME,
       locale: 'cs_CZ',
-      ...(image ? { images: [{ url: image }] } : {}),
+      images: [{ url: image }],
       ...(type === 'article'
         ? {
             ...(input.publishedTime ? { publishedTime: input.publishedTime } : {}),
@@ -159,7 +178,7 @@ export function buildPageMetadata(input: PageMetadataInput): Metadata {
           }
         : {}),
     },
-    twitter: { card: image ? 'summary_large_image' : 'summary' },
+    twitter: { card: 'summary_large_image' },
   }
 }
 
@@ -208,8 +227,11 @@ export function articleJsonLd(input: ArticleJsonLdInput): string {
   return toJsonLd(data)
 }
 
-/** Serializace JSON-LD s escapováním `<` (text nemůže utéct ze script tagu). */
-function toJsonLd(data: unknown): string {
+/**
+ * Serializace JSON-LD s escapováním `<` (text nemůže utéct ze script tagu) —
+ * jediné místo pro všechny `application/ld+json` bloky webu.
+ */
+export function toJsonLd(data: unknown): string {
   return JSON.stringify(data).replace(/</g, '\\u003c')
 }
 
