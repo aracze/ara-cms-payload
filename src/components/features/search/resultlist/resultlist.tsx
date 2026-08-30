@@ -23,7 +23,8 @@ export function ResultList({
   if (results.length === 0) return null
 
   return (
-    <div className="flex flex-col divide-y divide-gray-100 animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
+    {/* Animace jen pro uživatele bez omezeného pohybu (prefers-reduced-motion). */}
+    <div className="flex flex-col divide-y divide-gray-100 pt-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300">
       {results.slice(0, limit).map((result: FuseResult<SearchItem>, index: number) => {
         const item = result.item
         const showCategory = item.category && !PLACE_CATEGORIES.has(item.category)
