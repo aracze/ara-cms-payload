@@ -5,8 +5,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Globe, MapPin } from 'lucide-react'
 import { isCloudinary } from '@/lib/cloudinary-loader'
-import { reviewsCountLabel, websiteHref, websiteLabel } from '@/lib/utils'
-import { StarRating } from '@/components/features/reviews/star-rating'
+import { websiteHref, websiteLabel } from '@/lib/utils'
+import { RatingSummary } from '@/components/features/reviews/rating-summary'
 import { StarInput } from '@/components/features/reviews/star-input'
 import {
   InlineReviews,
@@ -158,10 +158,7 @@ export function ExpandableTouristPoint({
               onClick={openReviews}
               className="inline-flex items-center gap-2 text-[13px] text-[#888] hover:text-[#1a3f6c] transition-colors"
             >
-              <StarRating rating={Math.round(reviewAvg! * 2) / 2} size={14} />
-              <span>
-                {reviewCount} {reviewsCountLabel(reviewCount!)}
-              </span>
+              <RatingSummary avg={reviewAvg!} count={reviewCount!} size={14} />
             </button>
           ) : (
             <span className="inline-flex items-center gap-2 text-[13px] text-[#888]">

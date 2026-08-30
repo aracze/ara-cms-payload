@@ -126,7 +126,14 @@ function PhotoCard({
         // kartami recenzí (280 px) — drž 280 všude, ne 240 jako v mřížce míst.
         className="h-[280px]"
       >
-        <PlaceCardImage src={imageUrl} alt="" hasMap={false} className="object-cover" />
+        <PlaceCardImage
+          src={imageUrl}
+          alt=""
+          hasMap={false}
+          // Profil je na mobilu v jednom sloupci → ořez na šířku, ne portrét.
+          mobileLayout="full"
+          className="object-cover"
+        />
       </PhotoTile>
     )
   }

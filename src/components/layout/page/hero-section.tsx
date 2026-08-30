@@ -2,8 +2,7 @@ import Link from 'next/link'
 import { StaticHeroOverlay } from '@/components/features/static-hero-overlay'
 import { StaticHeroWave } from '@/components/features/static-hero-wave'
 import { StaticHeroImage } from '@/components/features/static-hero-image'
-import { StarRating } from '@/components/features/reviews/star-rating'
-import { reviewsCountLabel } from '@/lib/utils'
+import { RatingSummary } from '@/components/features/reviews/rating-summary'
 import type { Breadcrumb } from '@/lib/page-hierarchy'
 
 interface HeroSectionProps {
@@ -39,10 +38,6 @@ export const HeroSection = ({
   ratingCountSuffix,
   blurDataURL,
 }: HeroSectionProps) => {
-  const ratingLabel = rating
-    ? [rating.count, reviewsCountLabel(rating.count), ratingCountSuffix].filter(Boolean).join(' ')
-    : null
-
   return (
     <section className="relative w-full h-[315px] bg-[#3b444f]">
       {/* Cover Image Background with its own overflow clipping */}
@@ -109,8 +104,13 @@ export const HeroSection = ({
                 href={ratingHref}
                 className="inline-flex items-center gap-2.5 text-[15px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
               >
-                <StarRating rating={Math.round(rating.avg * 2) / 2} size={17} />
-                {ratingLabel}
+                <RatingSummary
+                  avg={rating.avg}
+                  count={rating.count}
+                  size={17}
+                  suffix={ratingCountSuffix}
+                  className="gap-2.5"
+                />
               </a>
             )}
           </div>
@@ -122,8 +122,12 @@ export const HeroSection = ({
             href={ratingHref}
             className="lg:hidden -translate-y-[4px] inline-flex items-center gap-2 text-[13.5px] font-semibold text-white/95 [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] transition-colors hover:text-white"
           >
-            <StarRating rating={Math.round(rating.avg * 2) / 2} size={14} />
-            {ratingLabel}
+            <RatingSummary
+              avg={rating.avg}
+              count={rating.count}
+              size={14}
+              suffix={ratingCountSuffix}
+            />
           </a>
         )}
       </div>

@@ -29,13 +29,11 @@ const THUMB_BOX: Record<ThumbSize, string> = { md: 'h-12 w-12', sm: 'h-11 w-11' 
 export function Thumb({
   src,
   size = 'md',
-  alt = '',
   fallback,
   className,
 }: {
   src: string | null | undefined
   size?: ThumbSize
-  alt?: string
   /** Co ukázat bez fotky (ikona…); bez zadání jemný modrý podklad. */
   fallback?: ReactNode
   className?: string
@@ -45,7 +43,8 @@ export function Thumb({
     return (
       <Image
         src={src}
-        alt={alt}
+        // Dekorativní: titulek stojí hned vedle, čtečka by ho četla dvakrát.
+        alt=""
         width={THUMB_PX[size]}
         height={THUMB_PX[size]}
         className={cn(box, 'object-cover')}
@@ -71,21 +70,28 @@ export function Thumb({
  *    hustý rejstřík 18+ řádků byl s tučným písmem těžký.
  * (Zpětná vazba uživatele 29. 8. 2026.)
  */
-export function thumbTitleClass(size: ThumbSize = 'md') {
+function thumbTitleClass(size: ThumbSize = 'md') {
   return cn(
     'leading-snug text-[#1a3f6c] transition-colors group-hover:text-[#215491]',
     size === 'sm' ? 'font-semibold text-[14px]' : 'font-bold text-[15px]',
   )
 }
 
-/** Celý řádek jako odkaz: miniatura vlevo, obsah (`children`) vpravo. */
+/**
+ * Celý řádek jako odkaz: miniatura vlevo, vpravo titulek (řádek si ho kreslí
+ * SÁM podle své velikosti — volající tak nemůže omylem spojit malou miniaturu
+ * s velkým písmem) a pod ním volitelný obsah (`children`: cesta, úryvek…).
+ * `titleExtra` je doplněk na řádku titulku (štítek kategorie v hledání).
+ */
 export function ThumbRow({
   href,
   onClick,
   size = 'md',
   src,
-  alt,
   fallback,
+  title,
+  titleLines,
+  titleExtra,
   children,
   className,
   hoverBg = false,
@@ -94,9 +100,12 @@ export function ThumbRow({
   onClick?: () => void
   size?: ThumbSize
   src: string | null | undefined
-  alt?: string
   fallback?: ReactNode
-  children: ReactNode
+  title: string
+  /** 1 = jeden řádek s výpustkou (hledání), 2/3 = ořez na N řádků; bez zadání bez ořezu. */
+  titleLines?: 1 | 2 | 3
+  titleExtra?: ReactNode
+  children?: ReactNode
   className?: string
   /** Šedý podklad při najetí — jen tam, kde se v řádcích vybírá (našeptávač). */
   hoverBg?: boolean
@@ -111,8 +120,23 @@ export function ThumbRow({
         className,
       )}
     >
-      <Thumb src={src} size={size} alt={alt} fallback={fallback} />
-      <div className="min-w-0 flex-1">{children}</div>
+      <Thumb src={src} size={size} fallback={fallback} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              thumbTitleClass(size),
+              titleLines === 1 && 'truncate',
+              titleLines === 2 && 'line-clamp-2',
+              titleLines === 3 && 'line-clamp-3',
+            )}
+          >
+            {title}
+          </span>
+          {titleExtra}
+        </div>
+        {children}
+      </div>
     </Link>
   )
 }

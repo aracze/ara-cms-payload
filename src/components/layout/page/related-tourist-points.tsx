@@ -66,6 +66,8 @@ export function RelatedTouristPoints({
                   src={item.imageUrl}
                   alt=""
                   hasMap={false}
+                  // Na mobilu jedna dlaždice přes celou šířku → ořez na šířku.
+                  mobileLayout="full"
                   className="object-cover"
                 />
               )}

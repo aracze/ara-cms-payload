@@ -36,9 +36,22 @@ interface PlaceCardImageProps {
   className?: string
   /** true = karta vedle mapy (3 sloupce, na výšku); false = 4 sloupce, skoro čtverec */
   hasMap?: boolean
+  /**
+   * Rozložení na mobilu: `pair` = dvě dlaždice vedle sebe (Co vidět → ořez na
+   * výšku 5:7), `full` = jedna dlaždice přes celou šířku (Co dalšího vidět,
+   * profil → ořez na šířku 3:2 a plná šířka pro srcset). S `pair` v plné
+   * šířce se stahoval úzký portrét a roztahoval do šířky — rozmazané.
+   */
+  mobileLayout?: 'pair' | 'full'
 }
 
-export function PlaceCardImage({ src, alt, className, hasMap = false }: PlaceCardImageProps) {
+export function PlaceCardImage({
+  src,
+  alt,
+  className,
+  hasMap = false,
+  mobileLayout = 'pair',
+}: PlaceCardImageProps) {
   // Desktop: vedle mapy portrét (~207×280 → 5:7), jinak skoro čtverec (~278×280 → 1:1)
   const desktopAr = hasMap ? '5:7' : '1:1'
   const desktopSizes = hasMap ? '210px' : '280px'
@@ -66,13 +79,16 @@ export function PlaceCardImage({ src, alt, className, hasMap = false }: PlaceCar
         unoptimized={unoptimized}
         className={`hidden sm:block lg:hidden ${className ?? ''}`}
       />
-      {/* Mobil (<640 px): dvě dlaždice vedle sebe → karta na výšku (~172×240) */}
+      {/* Mobil (<640 px): dvě dlaždice vedle sebe → karta na výšku (~172×240);
+          jedna přes celou šířku → na šířku (3:2) a srcset na 100vw */}
       <Image
         src={src}
         alt={alt}
         fill
-        loader={cropLoader('c_fill,g_auto,ar_5:7')}
-        sizes="50vw"
+        loader={cropLoader(
+          mobileLayout === 'full' ? 'c_fill,g_auto,ar_3:2' : 'c_fill,g_auto,ar_5:7',
+        )}
+        sizes={mobileLayout === 'full' ? '100vw' : '50vw'}
         unoptimized={unoptimized}
         className={`sm:hidden ${className ?? ''}`}
       />

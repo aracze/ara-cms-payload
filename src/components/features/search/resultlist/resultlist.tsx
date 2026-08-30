@@ -1,4 +1,4 @@
-import { ThumbRow, thumbTitleClass } from '@/components/features/thumb-row'
+import { ThumbRow } from '@/components/features/thumb-row'
 import type { FuseResult } from 'fuse.js'
 import type { SearchItem } from '@/types/search'
 import { MapPin } from 'lucide-react'
@@ -37,6 +37,15 @@ export function ResultList({
             onClick={handleLinkClicked ? () => handleLinkClicked() : undefined}
             src={item.image}
             hoverBg
+            title={item.title}
+            titleLines={1}
+            titleExtra={
+              showCategory && (
+                <span className="hidden md:inline-block shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#215491]/10 text-[#215491]">
+                  {item.category}
+                </span>
+              )
+            }
             fallback={
               <MapPin
                 className="w-5 h-5 text-[#1a3f6c]"
@@ -46,14 +55,6 @@ export function ResultList({
               />
             }
           >
-            <div className="flex items-center gap-2">
-              <span className={`${thumbTitleClass()} truncate`}>{item.title}</span>
-              {showCategory && (
-                <span className="hidden md:inline-block shrink-0 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[#215491]/10 text-[#215491]">
-                  {item.category}
-                </span>
-              )}
-            </div>
             {(item.path || item.text) && (
               <p className="text-[13.5px] text-gray-400 truncate mt-0.5">
                 {item.path && <span className="text-gray-500 font-medium">{item.path}</span>}
