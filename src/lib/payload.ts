@@ -129,6 +129,8 @@ const PAGE_SCALAR_SELECT = {
   detail: true,
   featuredImage: true,
   breadcrumbs: BREADCRUMBS_SELECT,
+  // SEO titulek a popisek z CMS pro `<title>`/meta description (generateMetadata).
+  meta: true,
   // Deep-linky destinace pro sekci „Příprava do …" (zájezdy/ubytování/auto).
   affiliate: true,
   // Klimatické normály pro sekci „Průměrné měsíční teploty a srážky" na
@@ -635,6 +637,12 @@ const ARTICLE_DETAIL_SELECT = {
   pages: true,
   createdBy: true,
   createdByPublic: true,
+  // SEO titulek/popisek z CMS + časy vydání a poslední úpravy (metadata,
+  // JSON-LD Article, viditelné datum v článku).
+  meta: true,
+  publishedAt: true,
+  createdAt: true,
+  updatedAt: true,
 } as const
 
 // Fullslug bez vodicích/koncových lomítek — pro porovnání s cestou z URL, která
@@ -2780,12 +2788,15 @@ const fetchSitemapEntriesCached = cached(fetchSitemapEntriesUncached, 'sitemap',
   'articles',
 ])
 
+// Chybu ZÁMĚRNĚ nepolykáme (stejně jako #22/#23 u detailů): prázdný seznam by
+// vypadal jako platná sitemapa „jen s homepage" a Google by ji vzal vážně.
+// Propadnutí chyby dá 500 → Google sitemapu zkusí později znovu.
 export const fetchSitemapEntries = async () => {
   try {
     return await fetchSitemapEntriesCached()
   } catch (err) {
     console.error('[sitemap] load failed:', err)
-    return { pages: [], articles: [] }
+    throw err
   }
 }
 

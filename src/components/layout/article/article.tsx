@@ -2,6 +2,8 @@ import React from 'react'
 import { Article as ArticleType, type Page as PayloadPage } from '@/types/payload'
 import { getPayloadURL, getSiteURL } from '@/lib/utils'
 import { richTextToHtml } from '@/lib/rich-text-html'
+import { articleJsonLd, resolveSeoDescription } from '@/lib/seo'
+import { formatPublishDate } from '@/lib/relative-time'
 import Link from 'next/link'
 import { UserAvatar } from '@/components/user-avatar'
 import { fetchPageLightByFullSlug, pageHasArticles, fetchArticleComments } from '@/lib/payload'
@@ -79,8 +81,36 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
       ? `${placePage.fullSlug}/${article.slug}`
       : null
 
+  // Datum vydání — viditelně u autora a ve strukturovaných datech (Google
+  // datum článku bere z JSON-LD, ale chce ho vidět i na stránce).
+  const publishedIso = article.publishedAt ?? article.createdAt ?? null
+  const publishDate = formatPublishDate(publishedIso)
+  const publishedLine = publishDate && (
+    <p className="text-sm text-gray-500">
+      Publikováno <time dateTime={publishDate.dateTime}>{publishDate.text}</time>
+    </p>
+  )
+
   return (
     <div className="bg-white min-h-screen">
+      {/* Strukturovaná data článku (schema.org Article): autor, datum vydání
+          a aktualizace, fotka, vydavatel. */}
+      {canonicalHref && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: articleJsonLd({
+              title: article.title,
+              description: resolveSeoDescription(article.meta, article.text),
+              path: canonicalHref,
+              imageUrl: heroImage.url,
+              publishedAt: publishedIso,
+              modifiedAt: article.updatedAt ?? null,
+              author: authorName ? { name: authorName, profilePath: profileHref } : null,
+            }),
+          }}
+        />
+      )}
       {/* Drobečky pro vyhledávače (BreadcrumbList) — cesta ve výsledku hledání. */}
       {breadcrumbs.length > 0 && canonicalHref && (
         <script
@@ -165,9 +195,14 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
                   ) : (
                     <span className="font-semibold text-[#215491]">{authorName}</span>
                   )}
+                  {publishedLine}
                   {authorBio && <p className="mt-1 leading-relaxed text-gray-600">{authorBio}</p>}
                 </div>
               </div>
+            )}
+            {/* Bez autora aspoň samotné datum (dnes nemá autora žádný článek). */}
+            {!authorName && publishedLine && (
+              <div className="mt-8 border-t border-[#dadbdc] pt-5 pb-2.5">{publishedLine}</div>
             )}
 
             {/* Comment count + "Vložit komentář" + "Sdílet" */}

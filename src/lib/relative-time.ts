@@ -16,6 +16,24 @@ const absFmt = new Intl.DateTimeFormat('cs-CZ', {
   timeZone: 'Europe/Prague',
 })
 
+// Datum vydání článku („12. března 2019") — bez času, pevná česká zóna.
+const publishDateFmt = new Intl.DateTimeFormat('cs-CZ', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'Europe/Prague',
+})
+
+/** Datum vydání pro článek: text pro čtenáře + ISO den pro `<time dateTime>`. */
+export function formatPublishDate(
+  iso: string | null | undefined,
+): { text: string; dateTime: string } | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return { text: publishDateFmt.format(date), dateTime: date.toISOString().slice(0, 10) }
+}
+
 export function formatCommentDate(
   iso: string | null,
   // Referenční „teď" — klientské komponenty (homepage feed) předávají čas

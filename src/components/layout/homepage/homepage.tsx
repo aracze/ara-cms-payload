@@ -51,7 +51,9 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
         </div>
 
         <StaticHeroTitle
-          title={'Najdi si svůj cíl'}
+          // Skrytý h1 (sr-only) — nese klíčová slova pro vyhledávače a čtečky;
+          // „Najdi si svůj cíl" zůstává jako nápověda v poli hledání.
+          title={'Ara.cz – cestovní průvodce po světě'}
           placeholderExample={heroPlace?.title ?? null}
         />
       </section>

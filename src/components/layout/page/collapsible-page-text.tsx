@@ -4,22 +4,18 @@ import { useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { PageContributor, type Contributor } from './page-contributor'
 
-function getPreviewHtml(html: string): {
-  previewHtml: string
-  shouldCollapse: boolean
-} {
-  const matches = [...html.matchAll(/<p\b[^>]*>[\s\S]*?<\/p>/gi)]
-  if (matches.length <= 2) {
-    return { previewHtml: html, shouldCollapse: false }
-  }
-
-  const secondParagraph = matches[1]
-  const secondParagraphEnd = (secondParagraph.index ?? 0) + secondParagraph[0].length
-
-  return {
-    previewHtml: html.slice(0, secondParagraphEnd),
-    shouldCollapse: true,
-  }
+/**
+ * Sbalovat má smysl až od tří odstavců — kratší text se vejde do sbaleného boxu
+ * celý a tlačítko „zobrazit více" by nemělo co odkrýt.
+ *
+ * SEO: do HTML jde VŽDY celý text a sbalení dělá jen CSS (`max-h` +
+ * `overflow-hidden`). Dřív se HTML usekávalo za druhým odstavcem a zbytek se
+ * do stránky dostal až po kliknutí — vyhledávače tak u zemí a měst indexovaly
+ * jen úvod (~100 slov). Obsah skrytý stylem Google indexuje plnou vahou, obsah
+ * mimo DOM ne.
+ */
+function countParagraphs(html: string): number {
+  return (html.match(/<p\b/gi) ?? []).length
 }
 
 export function CollapsiblePageTextWithContributor({
@@ -41,12 +37,8 @@ export function CollapsiblePageTextWithContributor({
   proseClassName?: string
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const { previewHtml, shouldCollapse: canCollapse } = useMemo(
-    () => getPreviewHtml(textHtml),
-    [textHtml],
-  )
+  const canCollapse = useMemo(() => countParagraphs(textHtml) > 2, [textHtml])
   const shouldCollapse = collapsible && canCollapse
-  const displayedHtml = !isExpanded && shouldCollapse ? previewHtml : textHtml
 
   return (
     <>
@@ -62,7 +54,7 @@ export function CollapsiblePageTextWithContributor({
             'reading-prose prose max-w-[808px] prose-a:text-[#215491] prose-a:no-underline hover:prose-a:underline',
             proseClassName,
           )}
-          dangerouslySetInnerHTML={{ __html: displayedHtml }}
+          dangerouslySetInnerHTML={{ __html: textHtml }}
         />
         {/* Text mizí do bílé — naznačuje, že pokračuje dál. */}
         {shouldCollapse && !isExpanded && (

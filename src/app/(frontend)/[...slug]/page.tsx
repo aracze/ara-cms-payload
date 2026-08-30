@@ -1,16 +1,12 @@
 import { Page } from '@/components/layout/page/page'
 import { Article } from '@/components/layout/article/article'
 import { LeaderboardAd } from '@/components/features/article-ad'
-import {
-  fetchPageByFullSlug,
-  fetchPageLightByFullSlug,
-  fetchArticleBySlug,
-  pageHasArticlesBySlug,
-} from '@/lib/payload'
+import { fetchPageLightByFullSlug, pageHasArticlesBySlug } from '@/lib/payload'
 import { buildPageTitle, rootPageCategories } from '@/lib/page-title'
 import { PageCategory } from '@/types/payload'
-import { isValidArticleParent } from '@/lib/utils'
+import { getArticleImageUrl } from '@/lib/utils'
 import { resolveSlugRoute } from '@/lib/resolve-route'
+import { absoluteUrl, buildPageMetadata, resolveSeoDescription, resolveSeoTitle } from '@/lib/seo'
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -30,11 +26,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const fullSlug = slug.join('/')
 
-  // 1. Try fetching as a Page
-  const { data: pageData } = await fetchPageByFullSlug(fullSlug)
+  // Stejné rozhodnutí stránka/článek/404 jako layout a render (React cache →
+  // žádné opakované DB dotazy). Metadata skládá src/lib/seo.ts: SEO titulek
+  // a popisek z CMS (fallback: kontextový titulek / začátek textu), absolutní
+  // canonical, Open Graph s hero fotkou.
+  const resolution = await resolveSlugRoute(fullSlug)
 
-  if (pageData?.pages.length > 0) {
-    const page = pageData.pages[0]
+  if (resolution.kind === 'page') {
+    const page = resolution.page
 
     let rootPage = page
     if (!rootPageCategories.includes(page.category)) {
@@ -47,34 +46,39 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       }
     }
 
-    return { title: buildPageTitle(page, rootPage) }
+    // Náhled pro sdílení = hero fotka stránky (u podstránek fotka kořenového
+    // místa — stejné pravidlo jako getHeroImage v komponentě Page).
+    const heroOwner = rootPageCategories.includes(page.category) ? page : rootPage
+    const { title } = resolveSeoTitle(page.meta, buildPageTitle(page, rootPage))
+
+    return buildPageMetadata({
+      title,
+      description: resolveSeoDescription(page.meta, page.text),
+      path: page.fullSlug,
+      imageUrl: heroOwner.featuredImage?.image?.url ?? null,
+    })
   }
 
-  // 2. If not a page, try fetching as an Article (last segment = article slug)
-  if (slug.length > 1) {
-    const articleSlug = slug[slug.length - 1]
-    const parentSlug = slug.slice(0, -1).join('/')
-    const { data: articleData } = await fetchArticleBySlug(articleSlug, parentSlug)
+  if (resolution.kind === 'article') {
+    const { article } = resolution
+    // Kanonická adresa = mainPage + slug (článek může viset i pod vedlejšími
+    // stránkami; ty odkazují sem). Bez mainPage aspoň aktuální cesta.
+    const canonicalPath = article.mainPage?.fullSlug
+      ? `${article.mainPage.fullSlug}/${article.slug}`
+      : `/${fullSlug}`
+    const author = article.createdByPublic
+    const { title } = resolveSeoTitle(article.meta, article.title)
 
-    const article = articleData?.articles[0]
-    // #21: článek uznáme jen pod platným rodičem (mainPage nebo některá z pages);
-    // pod „duchem" (cizí/starou cestou) propadneme na notFound() níže.
-    if (article && isValidArticleParent(parentSlug, articleData.validParentSlugs)) {
-      const canonicalSlug = article.mainPage?.fullSlug
-        ? `${article.mainPage.fullSlug}/${article.slug}`
-        : null
-
-      return {
-        title: article.title,
-        ...(canonicalSlug
-          ? {
-              alternates: {
-                canonical: canonicalSlug,
-              },
-            }
-          : {}),
-      }
-    }
+    return buildPageMetadata({
+      title,
+      description: resolveSeoDescription(article.meta, article.text),
+      path: canonicalPath,
+      imageUrl: getArticleImageUrl(article),
+      type: 'article',
+      publishedTime: article.publishedAt ?? article.createdAt ?? null,
+      modifiedTime: article.updatedAt ?? null,
+      authors: author?.username ? [absoluteUrl(`/profil/${author.username}`)] : undefined,
+    })
   }
 
   notFound()

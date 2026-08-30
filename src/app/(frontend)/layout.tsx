@@ -8,7 +8,8 @@
 import type { Metadata } from 'next'
 import { Open_Sans, Poppins } from 'next/font/google'
 import './globals.css'
-import { isProduction } from '@/lib/utils'
+import { getSiteURL, isProduction } from '@/lib/utils'
+import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_TITLE_SUFFIX } from '@/lib/seo'
 import { Header } from '@/components/layout/header/header'
 import { sanitizeHeaderLogoSvg } from '@/lib/rich-text-html'
 import { Footer } from '@/components/layout/footer/footer'
@@ -39,13 +40,20 @@ const poppins = Poppins({
 })
 
 // 2. SEO METADATA
-// Definují <title> a <meta name="description"> v hlavičce webu
+// Výchozí <title>/<meta description> a společné části Open Graph. Stránky si
+// titulek, popisek, canonical a OG skládají přes `buildPageMetadata` v
+// src/lib/seo.ts (Next vnořená pole jako `openGraph` mezi layoutem a stránkou
+// neslučuje, proto je tady jen fallback pro routy bez vlastních metadat).
+// `metadataBase` dělá z relativních adres (canonical, og:image) absolutní.
 export const metadata: Metadata = {
+  metadataBase: new URL(getSiteURL()),
   title: {
-    template: '%s | Ara.cz - Cestovní průvodce',
-    default: 'Ara.cz - Cestovní průvodce',
+    template: `%s | ${SITE_TITLE_SUFFIX}`,
+    default: SITE_TITLE_SUFFIX,
   },
-  description: 'Váš průvodce po světě',
+  description: DEFAULT_DESCRIPTION,
+  openGraph: { type: 'website', siteName: SITE_NAME, locale: 'cs_CZ' },
+  twitter: { card: 'summary' },
 }
 
 export default async function RootLayout({

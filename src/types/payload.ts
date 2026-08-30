@@ -239,9 +239,15 @@ export interface Article {
   attribution?: string | RichTextRoot | null
   category: GeneratedArticle['category']
   publishedAt: string
+  /** Časová razítka Payloadu — detail článku je má pro datum vydání/aktualizace
+   *  (JSON-LD `Article`, Open Graph). Seznamy je tahat nemusí. */
+  createdAt?: string | null
+  updatedAt?: string | null
   featuredImage: ArticleFeaturedImage | null
   mainPage?: ArticleMainPage | null
   createdByPublic?: ArticleAuthor | null
+  /** SEO záložka z CMS (plugin-seo) — titulek a popisek pro vyhledávače. */
+  meta?: GeneratedArticle['meta']
 }
 
 export interface Page {
@@ -272,6 +278,8 @@ export interface Page {
   breadcrumbs?: { label?: string | null; url?: string | null }[] | null
   // Odvozeno ze schématu (payload-types.ts) — nebude se rozcházet s CMS.
   detail?: GeneratedPage['detail']
+  /** SEO záložka z CMS (plugin-seo) — titulek a popisek pro vyhledávače. */
+  meta?: GeneratedPage['meta']
   /**
    * Partnerské odkazy pro sekci „Příprava do …“ — deep-linky pro konkrétní
    * destinaci (zájezdy/ubytování/auto). Prázdné pole = obecný výchozí odkaz
