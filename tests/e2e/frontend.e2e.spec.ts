@@ -11,10 +11,11 @@ test.describe('Frontend', () => {
   test('can go on homepage', async ({ page }) => {
     await page.goto('http://localhost:3000')
 
-    await expect(page).toHaveTitle(/Ara\.cz - Cestovní průvodce/)
+    await expect(page).toHaveTitle(/Ara\.cz – Cestovní průvodce po světě/)
 
     const heading = page.locator('h1').first()
 
-    await expect(heading).toHaveText('Najdi si svůj cíl')
+    // Skrytý h1 (sr-only) s klíčovými slovy — viditelně titulek nese hledací pole.
+    await expect(heading).toHaveText('Ara.cz – cestovní průvodce po světě')
   })
 })

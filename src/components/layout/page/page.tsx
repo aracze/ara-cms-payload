@@ -305,12 +305,15 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       })()
     : Promise.resolve([])
   // Fotka: nejbližší místo, a když žádnou nemá, spadneme na zemi, ať hero nezůstane
-  // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc).
+  // prázdné (legacy mělo jen dvě úrovně, tady je fallback navíc). URL, popisek
+  // (alt média z CMS) i pozice ohniska (featureImageStyleCss) musí pocházet ze
+  // STEJNÉ stránky — jinak by zděděná fotka dostala výřez/popisek jiné fotky.
+  const heroOwnerPage = getHeroImage(page, contextPlace)
+    ? heroImageOwner(page, contextPlace)
+    : heroImageOwner(page, safeRootPage)
   const cmsImageUrl = getHeroImage(page, contextPlace) ?? getHeroImage(page, safeRootPage)
-  // Popisek fotky z CMS ze stejného zdroje jako URL; bez něj název stránky.
-  const cmsImageAlt = getHeroImage(page, contextPlace)
-    ? getHeroImageAlt(page, contextPlace)
-    : getHeroImageAlt(page, safeRootPage)
+  const cmsImageAlt = heroOwnerPage.featuredImage?.image?.alternativeText || null
+  const cmsStyleCss = heroOwnerPage.featuredImage?.featureImageStyleCss || undefined
   // Statická stránka nemá nad sebou žádné místo, ze kterého by fotku podědila,
   // takže bez vyplněného obrázku v CMS zůstal v heru holý tmavý pruh. Spadneme
   // proto na sdílenou výchozí obálku (stejnou, jakou mají profily) — jakmile se
@@ -670,11 +673,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           // Popisek fotky z CMS (co je na ní), jinak název stránky; sdílená
           // výchozí obálka je dekorace → bez popisku.
           imageAlt={useDefaultCover ? '' : cmsImageAlt || pageTitle}
-          styleCss={
-            useDefaultCover
-              ? DEFAULT_COVER_POSITION
-              : page.featuredImage?.featureImageStyleCss || undefined
-          }
+          styleCss={useDefaultCover ? DEFAULT_COVER_POSITION : cmsStyleCss}
           blurDataURL={useDefaultCover ? DEFAULT_COVER_BLUR : undefined}
           filterId={`blurFilter-${page.id}`}
           breadcrumbs={breadcrumbs}
@@ -978,11 +977,6 @@ function heroImageOwner(page: PayloadPage, rootPage: PayloadPage): PayloadPage {
 function getHeroImage(page: PayloadPage, rootPage: PayloadPage) {
   const url = heroImageOwner(page, rootPage).featuredImage?.image?.url
   return url ? (url.startsWith('/') ? new URL(url, getPayloadURL()).toString() : url) : null
-}
-
-/** Alt text hero fotky z CMS (pole alt média) — ze STEJNÉ stránky jako URL. */
-function getHeroImageAlt(page: PayloadPage, rootPage: PayloadPage): string | null {
-  return heroImageOwner(page, rootPage).featuredImage?.image?.alternativeText || null
 }
 
 async function fetchRootPage(page: PayloadPage): Promise<PayloadPage> {
