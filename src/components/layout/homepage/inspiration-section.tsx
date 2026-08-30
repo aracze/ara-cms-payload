@@ -4,7 +4,7 @@ import Image from 'next/image'
 import type { HomepageInspiration } from '@/types/payload'
 import { SectionHeading } from './section-heading'
 import { PhotoTile } from '@/components/features/photo-tile'
-import { ThumbRow, thumbTitleClass } from '@/components/features/thumb-row'
+import { ThumbRow } from '@/components/features/thumb-row'
 
 // Sekce „Rady a tipy na cestu" — dlaždice 2×2 s denním výběrem rad a boční
 // seznam nejnovějších článků (varianta D, 8/2026; název sekce 4. 8. 2026).
@@ -95,9 +95,12 @@ export function InspirationSection({ data }: { data: HomepageInspiration | null 
                     <li role="presentation" aria-hidden="true" className="h-px bg-gray-100" />
                   )}
                   <li>
-                    <ThumbRow href={article.href} src={article.imageUrl} className="py-2 md:py-0">
-                      <span className={thumbTitleClass()}>{article.title}</span>
-                    </ThumbRow>
+                    <ThumbRow
+                      href={article.href}
+                      src={article.imageUrl}
+                      title={article.title}
+                      className="py-2 md:py-0"
+                    />
                   </li>
                 </Fragment>
               ))}

@@ -3,8 +3,7 @@ import { PageCategory, PageChild, RichTextRoot } from '@/types/payload'
 import { MapLibreMap, MapMarker } from '@/components/features/maplibre-map'
 import { richTextToHtml } from '@/lib/rich-text-html'
 import { getTurnstileSiteKey } from '@/lib/comment-spam'
-import { reviewsCountLabel } from '@/lib/utils'
-import { StarRating } from '@/components/features/reviews/star-rating'
+import { RatingSummary } from '@/components/features/reviews/rating-summary'
 import { ExpandableTouristPoint, type TouristPointAuthor } from './expandable-tourist-point'
 import { PlaceCardImage } from './place-card-image'
 import { AnalyticsDebugBadge } from './analytics-debug-badge'
@@ -219,12 +218,13 @@ function SuperordinateGrid({
             }
             meta={
               rating ? (
-                <span className="mt-1.5 flex items-center gap-[7px] text-[12.5px] font-semibold text-white/95 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]">
-                  <StarRating rating={Math.round(rating.avg * 2) / 2} size={13} />
-                  <span className="font-normal text-white/85">
-                    {rating.count} {reviewsCountLabel(rating.count)}
-                  </span>
-                </span>
+                <RatingSummary
+                  avg={rating.avg}
+                  count={rating.count}
+                  size={13}
+                  className="mt-1.5 flex gap-[7px] text-[12.5px] font-semibold text-white/95 [text-shadow:0_1px_2px_rgba(0,0,0,0.35)]"
+                  countClassName="font-normal text-white/85"
+                />
               ) : undefined
             }
           >

@@ -2,7 +2,7 @@
 
 import { LoadMoreButton } from '@/components/features/load-more-button'
 import { useEffect, useRef, useState } from 'react'
-import { ThumbRow, thumbTitleClass } from './thumb-row'
+import { ThumbRow } from './thumb-row'
 import { ArticleRowCard, type ArticleCardVM } from './article-row'
 
 // Klientský ostrůvek: drží jen `visibleCount` a přepíná viditelnost přebytku.
@@ -179,9 +179,14 @@ export const ArticlesRowsClient = ({ items }: { items: ArticleCardVM[] }) => {
                 {items.map((item) => (
                   <li key={item.key}>
                     {/* Kompaktní velikost (44 px) — rejstřík s 18+ položkami. */}
-                    <ThumbRow href={item.href} src={item.imageUrl} size="sm" className="py-2">
-                      <span className={`${thumbTitleClass('sm')} line-clamp-2`}>{item.title}</span>
-                    </ThumbRow>
+                    <ThumbRow
+                      href={item.href}
+                      src={item.imageUrl}
+                      size="sm"
+                      title={item.title}
+                      titleLines={2}
+                      className="py-2"
+                    />
                   </li>
                 ))}
               </ul>
