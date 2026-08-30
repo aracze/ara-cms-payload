@@ -142,7 +142,11 @@ export function sanitizePriceHistory(raw: unknown): KiwiPricePoint[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue
     const { date, price } = item as { date?: unknown; price?: unknown }
+    // Tvar i kalendář: „2026-02-31" regexem projde, ale Date ho posune na
+    // březen — takový bod by seděl v mediánu pod cizím datem.
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
+    const parsed = new Date(`${date}T00:00:00Z`)
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) continue
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) continue
     out.push({ date, price })
   }

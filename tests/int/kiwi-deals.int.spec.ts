@@ -113,6 +113,7 @@ describe('historie cen', () => {
       sanitizePriceHistory([
         { date: '2026-08-30', price: 986 },
         { date: '30. 8. 2026', price: 986 },
+        { date: '2026-02-31', price: 986 },
         { date: '2026-08-29', price: -5 },
         { date: '2026-08-28', price: '900' },
         null,

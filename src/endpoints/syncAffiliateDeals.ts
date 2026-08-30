@@ -597,6 +597,9 @@ async function collectDeals(
           kiwiByKey.set(key, flight)
           verifiedKeys.add(key)
         } catch (err) {
+          // Podezřelou hromadnou cenu bez ověření neukládat — raději včerejší
+          // nabídka i historie beze změny než výkyv zapsaný do mediánu.
+          if (suspicious) flight = null
           errors.push(`${page.fullSlug} kiwi(${iata}): ${err instanceof Error ? err.message : err}`)
         }
         await sleep(KIWI_DELAY_MS)
