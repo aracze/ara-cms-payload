@@ -18,9 +18,13 @@ export const SITE_NAME = 'Ara.cz'
  * nesou samy titulky stránek — homepage má vlastní absolutní titulek.
  */
 export const SITE_TITLE_SUFFIX = SITE_NAME
-/** Výchozí popisek (homepage + stránky bez vlastního textu). */
+/**
+ * Výchozí popisek (homepage + stránky bez vlastního textu). Úvodní věta je ze
+ * starého webu (znění vybral Jan 30. 8. 2026), zbytek nese hledaná slova;
+ * 147 znaků → na počítači se ve výsledku zobrazí celý.
+ */
 export const DEFAULT_DESCRIPTION =
-  'Cestovní průvodce po světě: tipy, kam jet a co vidět, praktické informace o vízech, měně, počasí a dopravě, cestopisy a rady na cestu od lidí, kteří tam byli.'
+  'Web věnovaný lidem, co milují cestování. Cestovní rady a tipy, kam jet a co vidět, praktické informace před cestou a poctivě napsané rady na cestu.'
 
 /** Horní mez popisku pro výsledky hledání (Google zobrazuje ~155–160 znaků). */
 export const DESCRIPTION_MAX = 160
