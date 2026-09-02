@@ -103,7 +103,12 @@ export const HeroSection = ({
             Odkaz sroluje na recenze. */}
         <div className="mx-auto flex w-full max-w-7xl -translate-y-[16px] items-center px-6">
           <div className="hidden flex-1 lg:block" />
-          <h1 className="w-full text-[40px] font-semibold text-white text-center tracking-normal [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] lg:w-auto">
+          {/* Na mobilu se dlouhý název (články mívají celou větu) láme do mnoha
+              řádků a při 40px přetékal hero (315px) až pod vlnku — proto menší
+              písmo a mírně těsnější řádkování; plných 40px až od lg.
+              `text-balance` rozdělí slova do řádků rovnoměrně (žádné osamocené
+              slovo na konci) — schválená varianta B z porovnání 2.9.2026. */}
+          <h1 className="w-full text-balance text-[26px] leading-[1.35] sm:text-[32px] font-semibold text-white text-center tracking-normal [text-shadow:1px_1px_1px_rgba(0,0,0,0.5)] lg:w-auto lg:text-[40px] lg:leading-normal">
             {title}
           </h1>
           <div className="hidden flex-1 justify-center lg:flex">
