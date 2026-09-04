@@ -92,8 +92,11 @@ export function PhotoTile({
   topRight?: ReactNode
   /** Řádek pod titulkem (hodnocení…). */
   meta?: ReactNode
-  /** Omezit titulek na N řádků (profil: 3). */
-  titleLines?: 2 | 3
+  /**
+   * Ořez titulku na 3 řádky (profil — dlouhé názvy článků). Jiné výpisy
+   * dlaždic titulek neořezávají; další hodnotu přidej, až ji někdo použije.
+   */
+  titleLines?: 3
   /**
    * Styl titulku nezávisle na výšce dlaždice — výchozí = podle `size`.
    * Sekce s malými i velkými dlaždicemi (Témata ke čtení) tak mají všechny
@@ -147,7 +150,6 @@ export function PhotoTile({
           className={cn(
             'text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]',
             TITLE_CLASS[titleSize ?? size],
-            titleLines === 2 && 'line-clamp-2',
             titleLines === 3 && 'line-clamp-3',
           )}
         >
