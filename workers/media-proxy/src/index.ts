@@ -8,6 +8,7 @@ import {
   deriveR2Keys,
   negotiateFormat,
   parsePath,
+  robotsTxt,
   signTransform,
 } from './media-path'
 
@@ -34,6 +35,12 @@ const IMMUTABLE_CACHE = `public, max-age=${YEAR_SECONDS}, immutable`
 const UNVERSIONED_CACHE = `public, max-age=${DAY_SECONDS}`
 /** Nouzový režim jen krátce — po oživení Cloudinary se rychle vrátí zmenšeniny. */
 const FALLBACK_CACHE = 'public, max-age=300'
+/**
+ * robots.txt: hlavička je pro keše botů (Google si ho drží až 24 h), ne pro edge —
+ * custom doména Workeru volá Worker vždy a odpověď bez subrequestu se na edge
+ * nekešuje. Pár požadavků denně, řešit to Cache API by bylo víc kódu než užitku.
+ */
+const ROBOTS_CACHE = `public, max-age=${DAY_SECONDS}`
 
 /** Z upstreamu kopírujeme jen tohle; x-cld-error a spol. ven nepatří. */
 const COPIED_HEADERS = ['content-type', 'content-length', 'etag', 'last-modified']
@@ -64,6 +71,18 @@ const mediaProxy = {
     }
     const isHead = request.method === 'HEAD'
     const url = new URL(request.url)
+    // Vlastní robots.txt pro doménu fotek — bez něj Cloudflare podává jen
+    // komentářový managed robots.txt bez jediného zákazu (viz TRAINING_BOTS).
+    if (url.pathname === '/robots.txt') {
+      return new Response(isHead ? null : robotsTxt(), {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': ROBOTS_CACHE,
+          'x-content-type-options': 'nosniff',
+        },
+      })
+    }
     const parsed = parsePath(url.pathname)
     if (!parsed.ok) {
       return new Response(parsed.status === 400 ? 'Invalid transformation' : 'Not found', {

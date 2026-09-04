@@ -29,6 +29,14 @@ Frontend na proxy přepisuje adresy přes `toMediaProxy`
    Secret: `npx wrangler secret put CLOUDINARY_API_SECRET` (hodnota
    = `CLOUDINARY_API_SECRET` z `/opt/aracze/.env` na serveru). Bez secretu
    Worker posílá adresy nepodepsané → funguje jen s vypnutým strict režimem.
+5. **robots.txt pro doménu fotek:** `media.ara.cz/robots.txt` zakazuje
+   trénovacím AI botům (GPTBot, ClaudeBot, CCBot, Amazonbot, Bytespider…)
+   vše, ostatním povoluje vše. Pravidla robots.txt platí per hostname —
+   zákaz v `src/app/robots.ts` na ara.cz na fotky nedosáhl a bot, který
+   adresy fotek už zná, si je směl dál stahovat (v srpnu 2026 dělali
+   trénovací crawleři přes polovinu přenosů z Cloudinary). Seznam botů je
+   zrcadlem `TRAINING_BOTS` v appu, shodu hlídá test. Vyhledávací a
+   asistenční boti zůstávají povolení (citace v AI odpovědích vodí lidi).
 
 ## Nasazení
 
