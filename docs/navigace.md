@@ -178,8 +178,12 @@ Menu se lepí k hornímu okraji okna (`src/components/layout/page/subnav-reveal.
   (po 12 px), ať nepřekáží čtení; při scrollu **nahoru** vyjede zpátky se stínem (po 24 px —
   víc než u schování, aby drobné zavrtění prstem lištu nerozblikalo). Stejně na mobilu,
   tabletu i počítači (vzor Medium, Google, zpravodajské appky).
-- Prvek je `position: sticky` a schovává se posunem (`translate`), takže si drží místo v toku
-  stránky a obsah při ukázání/schování neposkočí (žádný posun rozložení).
+- Prvek je `position: sticky`. Schovaná lišta má kotvu `top: -výška` (výška v CSS proměnné
+  `--subnav-h`, měří ResizeObserver), takže při scrollu dolů odjede s obsahem přirozeně a
+  nikde se nezadrhne; odhalená má `top: 0`. Přechod animuje `top` — prohlížeč polohu sticky
+  prvku počítá z animované hodnoty, takže lišta plynule vyjede i zajede. Drží si místo
+  v toku stránky, obsah při ukázání/schování neposkočí (žádný posun rozložení). Jakmile se
+  lišta vrátí na své místo pod hero, odhalení se ruší.
 - Po kliku na odkaz s kotvou (položka lišty „Místa", obsah stránky vpravo…) lišta
   „zamrzne" v aktuálním stavu, dokud čtenář sám znovu nezascrolluje (kolečko, dotyk,
   klávesa, posuvník). Prohlížeč totiž spočítal cíl s tehdejším `scroll-padding-top`: kdyby

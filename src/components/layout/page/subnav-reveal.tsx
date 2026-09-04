@@ -13,8 +13,10 @@ const SHOW_AFTER = 24
  * zpátky (vzor Medium, Google, zpravodajské appky). Nad hero sedí na svém
  * místě v toku stránky jako dřív.
  *
- * Sticky prvek si drží místo v toku, takže obsah při schování ani ukázání
- * neposkočí (žádný posun rozložení). Ostatním přilepeným panelům (obsah
+ * Schovaná lišta se lepí až o svou výšku NAD horní okraj (`top: -výška`), takže
+ * při scrollu dolů odjede s obsahem přirozeně a nikde se nezadrhne; odhalení
+ * ji jen přesune na okraj (`top: 0`). Sticky prvek si drží místo v toku, takže
+ * obsah při schování ani ukázání neposkočí (žádný posun rozložení). Ostatním přilepeným panelům (obsah
  * stránky, mapa, reklama) říká přes CSS proměnnou `--subnav-offset` na <html>,
  * o kolik mají uhnout dolů; stejná proměnná řídí i `scroll-padding-top`, aby
  * cíl kotvy nezajel pod lištu.
@@ -44,7 +46,15 @@ export function SubnavReveal({ children }: { children: ReactNode }) {
     const sentinel = sentinelRef.current
     if (!sentinel) return
     const observer = new IntersectionObserver(([entry]) => {
-      setStuck(!entry.isIntersecting && entry.boundingClientRect.top < 0)
+      const isStuck = !entry.isIntersecting && entry.boundingClientRect.top < 0
+      setStuck(isStuck)
+      // Jakmile se lišta vrátí na své místo pod hero, „odhalení" už nemá
+      // smysl — jinak by se při dalším scrollu dolů nejdřív přilepila a pak
+      // animovaně schovávala, místo aby odjela s obsahem.
+      if (!isStuck) {
+        revealedRef.current = false
+        setRevealed(false)
+      }
     })
     observer.observe(sentinel)
     return () => observer.disconnect()
@@ -91,22 +101,22 @@ export function SubnavReveal({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const visible = !stuck || revealed
   const overlaying = stuck && revealed
 
-  // Panely lepené 20 px pod hranou (obsah, mapa, reklama) a kotvy uhnou o výšku
-  // lišty jen ve chvíli, kdy je přilepená A vidět — jinak by zbytečně
-  // nechávaly prázdný pruh. Výšku hlídá ResizeObserver (mění se s breakpointem
-  // písma, otočením displeje).
+  // Výška lišty: `--subnav-h` na liště určuje skryté ukotvení (`top: -výška`);
+  // `--subnav-offset` na <html> říká panelům lepeným 20 px pod hranou (obsah,
+  // mapa, reklama) a kotvám, o kolik uhnout — jen ve chvíli, kdy je lišta
+  // přilepená A vidět, jinak by zbytečně nechávaly prázdný pruh. Výšku hlídá
+  // ResizeObserver (mění se s breakpointem písma, otočením displeje).
   useEffect(() => {
-    const root = document.documentElement
-    if (!overlaying) {
-      root.style.setProperty('--subnav-offset', '0px')
-      return
-    }
     const bar = barRef.current
     if (!bar) return
-    const apply = () => root.style.setProperty('--subnav-offset', `${bar.offsetHeight}px`)
+    const root = document.documentElement
+    const apply = () => {
+      const height = bar.offsetHeight
+      bar.style.setProperty('--subnav-h', `${height}px`)
+      root.style.setProperty('--subnav-offset', overlaying ? `${height}px` : '0px')
+    }
     apply()
     const observer = new ResizeObserver(apply)
     observer.observe(bar)
@@ -126,11 +136,15 @@ export function SubnavReveal({ children }: { children: ReactNode }) {
         ref={barRef}
         // Klávesnice: když fokus doputuje na položku schované lišty, ukážeme ji.
         onFocus={() => reveal(true)}
-        // Tailwind 4 posouvá vlastností `translate` (ne `transform`) — animujeme ji;
-        // stín se přepíná naráz, jeho animace by jen zbytečně překreslovala.
-        className={`sticky top-0 z-30 transition-[translate] duration-300 ease-out motion-reduce:transition-none ${
-          visible ? 'translate-y-0' : '-translate-y-full'
-        } ${overlaying ? 'shadow-[0_2px_10px_rgba(0,0,0,0.08)]' : ''}`}
+        // Schovaná: kotva o výšku nad okrajem (než se výška změří, bezpečně
+        // vysoko — při načtení uprostřed stránky lišta nesmí probliknout).
+        // Odhalená: kotva na okraji. Přechod mezi nimi animuje `top`; prohlížeč
+        // polohu sticky prvku počítá z animované hodnoty, takže lišta plynule
+        // vyjede i zajede. Stín se přepíná naráz.
+        style={{ top: revealed ? 0 : 'calc(-1 * var(--subnav-h, 999px))' }}
+        className={`sticky z-30 transition-[top] duration-300 ease-out motion-reduce:transition-none ${
+          overlaying ? 'shadow-[0_2px_10px_rgba(0,0,0,0.08)]' : ''
+        }`}
       >
         {children}
       </div>
