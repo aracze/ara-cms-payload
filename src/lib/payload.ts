@@ -3733,24 +3733,30 @@ async function fetchPopularDestinationsUncached(): Promise<PopularDestination[]>
     : 'views_365'
   const byTitle = (a: PopularDestinationRow, b: PopularDestinationRow) =>
     a.title.localeCompare(b.title, 'cs')
-  const top = rows
+  const ranked = rows
     .filter((r) => r[selectBy] > 0)
     .sort((a, b) => b[selectBy] - a[selectBy] || byTitle(a, b))
-    .slice(0, POPULAR_DESTINATIONS_COUNT)
-    .sort((a, b) => b.views_365 - a.views_365 || byTitle(a, b))
 
   // fullSlug není unikátní sloupec — dvě země se stejnou cestou by daly dvě
-  // stejné bublinky (a duplicitní React key); dorovnání ze zálohy bez duplicit.
-  const picked: PopularDestination[] = []
-  const seen = new Set<string>()
-  const add = (d: PopularDestination) => {
-    if (picked.length >= POPULAR_DESTINATIONS_COUNT || seen.has(d.href)) return
+  // stejné bublinky (a duplicitní React key). Duplicity se vyřazují PŘED
+  // výběrem čtveřice, ať místo druhé kopie postoupí další skutečná země, ne
+  // až záloha. Ze stejného důvodu se pak i dorovnání ze zálohy dedupuje.
+  const top: PopularDestinationRow[] = []
+  for (const r of ranked) {
+    if (top.length >= POPULAR_DESTINATIONS_COUNT) break
+    if (!top.some((t) => t.full_slug === r.full_slug)) top.push(r)
+  }
+  top.sort((a, b) => b.views_365 - a.views_365 || byTitle(a, b))
+
+  const picked: PopularDestination[] = top.map((r) => ({ title: r.title, href: r.full_slug }))
+  const seen = new Set(picked.map((d) => d.href))
+  const fromData = picked.length
+  for (const d of POPULAR_DESTINATIONS_FALLBACK) {
+    if (picked.length >= POPULAR_DESTINATIONS_COUNT) break
+    if (seen.has(d.href)) continue
     seen.add(d.href)
     picked.push(d)
   }
-  for (const r of top) add({ title: r.title, href: r.full_slug })
-  const fromData = picked.length
-  for (const d of POPULAR_DESTINATIONS_FALLBACK) add(d)
   if (fromData < POPULAR_DESTINATIONS_COUNT) {
     console.info(`[popular-destinations] z dat jen ${fromData}, doplněno ze záložní čtveřice`)
   }
