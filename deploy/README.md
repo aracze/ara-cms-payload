@@ -202,5 +202,149 @@ cd /opt/aracze && docker compose pull && docker compose up -d
 - **Vyhledávání**: index se staví za běhu z Payload Local API a obnovuje se
   automaticky při změně obsahu (revalidace cache tagů v hoocích) — žádný
   samostatný build/workflow už není potřeba.
-- **Zálohy DB**: CMS má endpointy pro dump/import databáze; doporučuji nastavit
-  pravidelnou zálohu volume `pgdata`.
+- **Zálohy DB**: ✅ hotovo (4. 9. 2026) — viz sekce „Zálohy databáze" níže.
+  Kromě nich má CMS pořád endpointy pro ruční dump/import databáze v adminu.
+
+---
+
+## Zálohy databáze
+
+Denní záloha na Cloudflare R2, nasazená 4. 9. 2026. Do té doby web žádnou
+automatickou zálohu neměl — nejnovější byla ruční z 9. 8. 2026.
+
+**Co kde je**
+
+| Soubor v repu                          | Kam patří na server                    |
+| -------------------------------------- | -------------------------------------- |
+| `deploy/backup-db.sh`                  | `/opt/aracze/backup-db.sh` (práva 750) |
+| `deploy/systemd/aracze-backup.service` | `/etc/systemd/system/`                 |
+| `deploy/systemd/aracze-backup.timer`   | `/etc/systemd/system/`                 |
+
+Nasazení nic z toho nekopíruje — po změně skriptu ho na server nahraj ručně
+(stejně jako `docker-compose.yml` a `Caddyfile`).
+
+**Jak to běží**
+
+Timer `aracze-backup.timer` spustí skript denně v 01:30 UTC (rozptyl 15 min,
+`Persistent=true` doběhne po startu, když byl server v tu dobu vypnutý). Skript:
+
+1. udělá `pg_dump -Fc` z kontejneru `aracze-postgres-1` do `/opt/aracze/backups/`;
+2. **ověří dump** — musí být čitelný pro `pg_restore --list`, mít aspoň 1 MB
+   a obsahovat aspoň 90 % tabulek, které databáze právě má (počet se zjišťuje
+   za běhu, aby pevné číslo nezastaralo s novou kolekcí);
+3. nahraje ho na R2 a **porovná velikost** vzdáleného souboru s lokálním;
+4. promaže staré zálohy podle retence.
+
+**Retence**
+
+| Kde                                     | Jak dlouho |
+| --------------------------------------- | ---------- |
+| lokálně `/opt/aracze/backups/`          | 7 dní      |
+| R2 `db-zalohy/denni/`                   | 30 dní     |
+| R2 `db-zalohy/mesicni/` (1. dne měsíce) | 400 dní    |
+
+Dump má ~12 MB, celkem tedy ~0,5 GB, tj. ~5 % bezplatných 10 GB na R2.
+
+**Když se záloha nepovede**, přijde e-mail na `SMTP_FROM` (info@ara.cz)
+s posledními 25 řádky logu a skript skončí nenulovým kódem, takže selhání
+uvidíš i v `systemctl status aracze-backup.service`. Neověřený dump se maže,
+aby v seznamu záloh nevypadal jako platný. Platí to i pro **přerušení
+signálem** (timeout ze systemd, Ctrl+C) a pro **vlastní kontroly** skriptu —
+ty hlásí chyby přes funkci `fail()`, protože samotné `exit 1` v bashi ERR trap
+nespustí, takže by se úklid i e-mail přeskočily.
+
+Dump obsahuje e-maily uživatelů a hashe hesel, proto má `/opt/aracze/backups/`
+práva 700 a soubory v něm 600 (skript si nastavuje `umask 077`).
+
+Úklid neověřeného dumpu maže **jen soubor, který vytvořil daný běh**. Značka
+v názvu je proto na sekundy — s rozlišením na minuty dostaly dva běhy ve stejné
+minutě stejné jméno a spadlý druhý běh smazal platnou zálohu prvního (stalo se
+při testování 4. 9. 2026). Když soubor toho jména už existuje, skript se ho
+nedotkne a skončí chybou.
+
+Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
+
+- adresář se zakládá **až po** instalaci trapů — i „nejde založit `$BACKUP_DIR`"
+  (plný disk, špatná práva) tak pošle e-mail;
+- `log()` píše vždy na stdout (pod systemd ho sbírá journal) a do souboru jen
+  když to jde;
+- výstup `curl`u jde do `/tmp`, ne do `$LOG` — přesměrování do nedostupného
+  adresáře by selhalo a curl by se vůbec nespustil;
+- čekání na databázi má **dva** limity a oba jsou potřeba: `timeout
+--kill-after=5s 10s` na jeden pokus (`docker exec` se umí zaseknout na
+  nereagujícím démonu; `--kill-after` řeší proces, který ignoruje `SIGTERM`)
+  a k tomu celkový limit `READINESS_TIMEOUT` (výchozí 120 s). Jen ten první
+  nestačí — n pokusů × timeout by se sečetlo do násobku inzerovaného limitu.
+  Celkový limit se měří **monotonním časem z `/proc/uptime`**, ne přes
+  `date +%s`: krok NTP krátce po startu serveru (přesně scénář
+  `Persistent=true`) by nástěnný deadline přeskočil a záloha by ten den
+  neproběhla kvůli planému poplachu;
+- **dvě zálohy nemohou běžet zároveň** — `flock -n` na `/run/aracze-backup.lock`;
+  druhý běh skončí bez chyby s poznámkou v logu. Jméno dumpu se navíc zabírá
+  atomicky (`set -o noclobber`, tedy `O_EXCL`), takže mezi „existuje?" a
+  „zabírám" se nevejde druhý běh;
+- retence ani rotace logu **nemohou shodit už hotovou zálohu**: v retenci není
+  `| tee -a "$LOG"` (s `pipefail` by neúspěšný zápis do logu shodil krok po
+  nahrání dumpu a přeskočil retenci na R2), rotace se dělá v `if` (jako první
+  člen `&&` listu `tail` nespustí ani `set -e`, ani ERR trap, a jako poslední
+  příkaz skriptu by hotovou zálohu ukončil nenulovým kódem bez hlášení)
+  a skript končí explicitním `exit 0`;
+- log se zkracuje podle **bajtů** (~1 MB), ne řádků — jediný dlouhý řádek by
+  ho jinak držel nad limitem navždy a rotace by běžela naprázdno;
+- informativní údaj „stav na R2" na konci běhu je **nefatální** — zakolísání R2
+  by jinak poslalo „ZALOHA SELHALA" o záloze, která je nahraná i ověřená.
+  Naopak `rclone delete` (retence) fatální **zůstává**: neúspěch by znamenal
+  neomezeně rostoucí úložiště, a to za e-mail stojí. Předmět e-mailu je pak
+  nepřesný, ale v jeho těle je konec logu, kde je vidět, který krok spadl;
+
+Zaseknutí v `pg_dump` nebo při nahrávání na R2 řeší `TimeoutStartSec=30min`
+ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-mailem.
+
+**Ruční použití**
+
+```bash
+/opt/aracze/backup-db.sh                    # záloha hned
+DRY_RUN=1 /opt/aracze/backup-db.sh          # jen dump + ověření, nic se nenahraje
+READINESS_TIMEOUT=20 /opt/aracze/backup-db.sh  # kratší limit čekání na databázi
+tail -30 /opt/aracze/backups/zaloha.log     # log
+systemctl list-timers aracze-backup.timer   # kdy poběží příště
+rclone lsl r2zal:aracze-db-zalohy/denni     # co je na R2
+```
+
+**Obnova ze zálohy** (ověřeno 4. 9. 2026 — počty řádků po obnově souhlasily
+s produkcí). Nejdřív nanečisto do vedlejší databáze, ať nepřepíšeš ostrá data:
+
+```bash
+docker exec aracze-postgres-1 psql -U postgres -d postgres -c "create database zaloha_test"
+docker exec -i aracze-postgres-1 pg_restore --dbname zaloha_test -U postgres \
+  --no-owner --no-acl --single-transaction --exit-on-error < /opt/aracze/backups/<soubor>.dump
+docker exec aracze-postgres-1 psql -U postgres -d zaloha_test -Atc "select count(*) from pages"
+docker exec aracze-postgres-1 psql -U postgres -d postgres -c "drop database zaloha_test"
+```
+
+**Nastavení rclone** je v `/root/.config/rclone/rclone.conf` a má **dva remote**:
+
+| Remote  | Bucket             | Klíče v `.env`                         | K čemu                |
+| ------- | ------------------ | -------------------------------------- | --------------------- |
+| `r2`    | `aracze`           | `S3_*`                                 | zrcadlo médií (appka) |
+| `r2zal` | `aracze-db-zalohy` | `R2_ZALOHY_KEY_ID`, `R2_ZALOHY_SECRET` | zálohy databáze       |
+
+Zálohy mají **vlastní bucket a vlastní token** (od 4. 9. 2026), aby klíč od médií
+na ně nedosáhl a naopak — ověřeno: `rclone lsjson r2zal:aracze` vrací 403.
+Token má práva jen _Object Read & Write_ na ten jeden bucket, `TTL: Forever`
+(token s expirací by zálohy tiše zastavil) a **filtr na IP serveru**
+`217.154.225.117` — stejný podepsaný požadavek vrací 200 ze serveru a 403 odjinud
+(ověřeno). Server nemá IPv6, takže filtr na IPv4 stačí; **při změně IP serveru
+je potřeba token v Cloudflare upravit**, jinak zálohy začnou selhávat.
+
+Dvě pasti:
+
+- `S3_ENDPOINT` v `.env` má bucket zapečený v cestě (`…r2.cloudflarestorage.com/aracze`).
+  V rclone konfiguraci musí být **jen host**, jinak rclone hledá `aracze/aracze`.
+- `--s3-no-head` je povinné: rclone si po nahrání objekt zpětně načte dotazem
+  s `?versionId=`, což R2 neumí (501 Not Implemented) a první pokus vždy selže.
+  Proto si velikost ověřuje sám skript.
+
+**Co by šlo zlepšit**: zálohy leží u téhož poskytovatele jako web i média.
+Proti ztrátě serveru chrání, proti ztrátě účtu u Cloudflare ne — druhá kopie
+mimo Cloudflare (stažení k sobě nebo jiná služba) je zbylý nepokrytý risk.

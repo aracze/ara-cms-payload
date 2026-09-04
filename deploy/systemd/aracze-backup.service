@@ -1,0 +1,11 @@
+[Unit]
+Description=Záloha produkční databáze aracze na Cloudflare R2
+Documentation=file:/opt/aracze/backup-db.sh
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aracze/backup-db.sh
+# Skript si chybu ohlásí e-mailem sám; tohle je jen pojistka proti zaseknutí.
+TimeoutStartSec=30min
