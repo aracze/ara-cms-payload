@@ -11,13 +11,31 @@
 -- Prod: stejně proti produkční DB (služba `postgres`), potom `docker compose up -d --force-recreate cms` (cache).
 BEGIN;
 CREATE SCHEMA IF NOT EXISTS zaloha;
+-- Předci (město, země…) z poslední PUBLIKOVANÉ verze: řádek v `pages` nese poslední
+-- uloženou verzi, což může být rozpracovaný draft s jiným názvem/pádem než to, co web
+-- ukazuje. Stránky bez publikované verze (nemělo by nastat) padají na řádek v `pages`.
+CREATE TEMP TABLE anc AS
+SELECT p.id,
+  COALESCE(v.version_parent_id, p.parent_id) parent_id,
+  COALESCE(v.version_category::text, p.category::text) category,
+  COALESCE(v.version_title, p.title) title,
+  COALESCE(v.version_detail_locative, p.detail_locative) detail_locative
+FROM pages p
+LEFT JOIN LATERAL (
+  SELECT * FROM _pages_v v
+  WHERE v.parent_id = p.id AND v.version__status = 'published'
+  ORDER BY v.updated_at DESC, v.id DESC LIMIT 1
+) v ON true;
+
 CREATE TEMP TABLE t AS
 WITH RECURSIVE up AS (
-  SELECT p.id root, p.id cur, p.parent_id, p.category, p.title, p.detail_locative, 0 d
+  -- Cíl sám: `_status = 'published'` na hlavním řádku = žádný novější draft, takže
+  -- jeho meta_title níž je ten publikovaný.
+  SELECT p.id root, p.id cur, p.parent_id, p.category::text category, p.title, p.detail_locative, 0 d
   FROM pages p WHERE p._status = 'published' AND p.category = 'Turistický cíl'
   UNION ALL
   SELECT up.root, q.id, q.parent_id, q.category, q.title, q.detail_locative, up.d + 1
-  FROM up JOIN pages q ON q.id = up.parent_id
+  FROM up JOIN anc q ON q.id = up.parent_id
   WHERE up.category <> 'Místo k navštívení' AND up.d < 8
 )
 SELECT DISTINCT ON (root) root, title place_title, COALESCE(detail_locative, '') place_loc
