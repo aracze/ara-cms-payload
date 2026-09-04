@@ -25,17 +25,25 @@ KEEP_LOCAL_DAYS=7
 KEEP_DAILY=30d
 KEEP_MONTHLY=400d
 MIN_SIZE_BYTES=$((1024 * 1024)) # dump menší než 1 MB = něco se pokazilo
+READINESS_TIMEOUT="${READINESS_TIMEOUT:-120}" # kolik s celkem čekat na databázi
+LOCKFILE="${LOCKFILE:-/run/aracze-backup.lock}"
 LOG="$BACKUP_DIR/zaloha.log"
 DRY_RUN="${DRY_RUN:-}"
 
-# Dump obsahuje e-maily uživatelů a hashe hesel, takže nesmí být čitelný pro
-# nikoho dalšího na stroji. `umask` platí pro nově zakládané soubory (dumpy,
-# log), `chmod` srovná i adresář, který mohl vzniknout dřív s volnějšími právy.
-umask 077
-mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
+# Hlášení jde VŽDY na stdout (pod systemd ho sbírá journal) a do souboru jen
+# když to jde. Původní `| tee -a "$LOG"` by na nezapisovatelném adresáři vrátil
+# nenulový kód, spustil ERR trap a hlášení o chybě by se tím samo utnulo.
+# Monotonní sekundy (viz čekání na databázi níže) — `date +%s` skáče s NTP.
+uptime_s() { awk '{print int($1)}' /proc/uptime; }
 
-log() { printf '%s  %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "$*" | tee -a "$LOG"; }
+log() {
+  local msg
+  msg="$(date -u '+%Y-%m-%d %H:%M:%S UTC')  $*"
+  # Obojí s `|| true`: kdyby byl stdout zavřený, `printf` vrátí nenulový kód
+  # a pod `set -e` by se log() ukončil ještě před odesláním e-mailu.
+  printf '%s\n' "$msg" || true
+  printf '%s\n' "$msg" >> "$LOG" 2>/dev/null || true
+}
 
 # Při jakékoli chybě pošli e-mail — jinak by se rozbitá záloha tiše ztratila.
 notify_failure() {
@@ -58,24 +66,38 @@ notify_failure() {
     printf 'Denni zaloha produkcni databaze se nedokoncila.\n\n'
     printf 'Server: %s\nRadek skriptu: %s (exit %s)\n\n' "$(hostname)" "$line" "$rc"
     printf 'Poslednich 25 radku logu:\n\n'
-    tail -25 "$LOG"
+    # `-f` místo `-r`: kdyby `$LOG` byl FIFO, `tail` by se na něm zablokoval
+    # a e-mail by nikdy neodešel. `timeout` krytí i pro ostatní patologie.
+    if ! { [ -f "$LOG" ] && timeout 5 tail -25 "$LOG" 2>/dev/null; }; then
+      printf '(log %s nedostupny — viz `journalctl -u aracze-backup.service`)\n' "$LOG"
+    fi
   } > "$mail"
 
+  # Výstup curlu jde do /tmp, NE do `$LOG`. Kdyby byl `$BACKUP_DIR` nedostupný,
+  # přesměrování `>> "$LOG"` by selhalo a curl by se vůbec nespustil — hlášení
+  # o chybě by tiše nedorazilo právě v případě, kdy je nejpotřebnější.
+  local curlout
+  curlout=$(mktemp)
   if curl --silent --show-error --ssl-reqd --max-time 60 \
     --url "smtps://$host:465" --user "$user:$pass" \
-    --mail-from "$from" --mail-rcpt "$from" --upload-file "$mail" >> "$LOG" 2>&1
+    --mail-from "$from" --mail-rcpt "$from" --upload-file "$mail" > "$curlout" 2>&1
   then
     log "e-mail o chybě odeslán na $from"
   else
-    log "e-mail o chybě se NEPODAŘILO poslat (viz řádky curl výše)"
+    log "e-mail o chybě se NEPODAŘILO poslat: $(tr '\n' ' ' < "$curlout" | cut -c1-300)"
   fi
+  rm -f "$curlout"
   rm -f "$mail"
 }
 # Nedokončený dump musí zmizet — v seznamu záloh by vypadal jako platný.
 # Když už ověření prošlo (`dump_ok`), soubor si necháme: selhalo jen nahrání
 # nebo úklid a lokální kopie je v pořádku.
 cleanup_partial() {
-  [ -n "${dump:-}" ] && [ -e "${dump:-}" ] && [ -z "${dump_ok:-}" ] || return 0
+  # Tři podmínky, všechny nutné: soubor vytvořil TENTO běh (`dump_owned`),
+  # ještě neprošel ověřením (`dump_ok`) a existuje. Bez `dump_owned` mohl
+  # spadlý běh smazat platnou zálohu z JINÉHO běhu — což se 4. 9. 2026 při
+  # testování skutečně stalo, protože značka měla rozlišení jen na minuty.
+  [ -n "${dump_owned:-}" ] && [ -z "${dump_ok:-}" ] && [ -e "${dump:-}" ] || return 0
   rm -f "$dump"
   log "neověřený dump smazán: $dump"
 }
@@ -97,7 +119,25 @@ fail() {
   exit 1
 }
 
-stamp=$(date -u +%Y%m%d-%H%M)
+# Adresář se zakládá teprve TEĎ, až po instalaci trapů — kdyby to selhalo
+# (plný disk, špatná práva), musí i o tom přijít e-mail. Dump obsahuje
+# e-maily uživatelů a hashe hesel, proto `umask 077` pro nově zakládané
+# soubory a `chmod 700` i na adresář, který mohl vzniknout dřív volnější.
+umask 077
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+
+# Dvě zálohy zároveň nechceme: zdvojily by zátěž databáze a sahaly by si na
+# tytéž soubory. Zámek je v `/run`, aby nezávisel na `$BACKUP_DIR`.
+exec 9> "$LOCKFILE"
+if ! flock -n 9; then
+  log "jiná záloha už běží ($LOCKFILE) — končím bez chyby"
+  exit 0
+fi
+
+# Sekundy jsou tu podstatné: se značkou na minuty dostanou dva běhy v téže
+# minutě stejné jméno souboru (viz `dump_owned` u cleanup_partial).
+stamp=$(date -u +%Y%m%d-%H%M%S)
 dump="$BACKUP_DIR/aracze-$stamp.dump"
 
 log "== start zálohy =="
@@ -106,16 +146,41 @@ log "== start zálohy =="
 # kontejner s databází ještě přijímat spojení nemusí (`Persistent=true` navíc
 # dohání zálohu zmeškanou během vypnutí). Bez čekání by první záloha po
 # restartu selhala a poslala planý poplach. Platí i pro ruční spuštění.
-for i in $(seq 1 30); do
-  if docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
-    [ "$i" -gt 1 ] && log "databáze připravená po $((i * 2)) s"
+# Limit se drží podle HODIN, ne podle počtu pokusů. `timeout` na jeden pokus je
+# nutný, protože `docker exec` se umí zaseknout (nereagující démon) — ale sám
+# nestačí: n pokusů × timeout by se sečetlo do násobku inzerovaného limitu.
+# Čas se bere z `/proc/uptime`, protože je MONOTONNÍ. `date +%s` je nástěnný
+# čas a krok NTP krátce po startu serveru — přesně scénář, na který tohle
+# čekání je (`Persistent=true`) — by deadline přeskočil: první neúspěšný
+# pokus by po dvou sekundách ohlásil „nenaběhla ani po 120 s", poslal planý
+# poplach a záloha by ten den neproběhla.
+readiness_start=$(uptime_s)
+readiness_deadline=$((readiness_start + READINESS_TIMEOUT))
+while true; do
+  # `--kill-after`: kdyby `docker exec` ignoroval SIGTERM, samotný `timeout`
+  # by na něj čekal dál. Takhle dostane po dalších 5 s SIGKILL.
+  if timeout --kill-after=5s 10s docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
+    waited=$(($(uptime_s) - readiness_start))
+    [ "$waited" -gt 0 ] && log "databáze připravená po $waited s"
     break
   fi
-  [ "$i" -lt 30 ] || fail "databáze v kontejneru $CONTAINER nenaběhla ani po 60 s"
+  [ "$(uptime_s)" -lt "$readiness_deadline" ] \
+    || fail "databáze v kontejneru $CONTAINER nenaběhla ani po $READINESS_TIMEOUT s"
   sleep 2
 done
 
 # 1) Dump. `< /dev/null` je pojistka, aby si docker exec nebral stdin skriptu.
+#
+# Jméno se zabírá ATOMICKY: `noclobber` dělá z `>` otevření s O_EXCL, takže
+# „zkontroluj, jestli existuje" a „zaber" nejsou dva kroky, mezi které se vejde
+# druhý běh. Zabrání je PŘED `dump_owned=1`, aby `fail` (a tím `cleanup_partial`)
+# cizí soubor nesmazal.
+set -o noclobber
+if ! : > "$dump"; then
+  fail "soubor $dump už existuje — neběží druhá záloha zároveň?"
+fi
+set +o noclobber
+dump_owned=1
 docker exec "$CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$dump" < /dev/null
 size=$(stat -c %s "$dump")
 log "dump hotov: $dump ($(numfmt --to=iec "$size"))"
@@ -164,16 +229,46 @@ fi
 
 # 4) Retence. Lokálně mažeme jen naše `aracze-*.dump` — ruční zálohy
 #    s jiným jménem zůstávají ležet.
-find "$BACKUP_DIR" -maxdepth 1 -name 'aracze-*.dump' -mtime "+$KEEP_LOCAL_DAYS" -print -delete \
-  | sed 's/^/  smazáno lokálně: /' | tee -a "$LOG"
+# Žádné `| tee -a "$LOG"` v rouře: s `pipefail` by neúspěšný zápis do logu
+# shodil celý krok a poslal „ZALOHA SELHALA" po tom, co už je dump nahraný —
+# a přeskočil by i retenci na R2 níž.
+smazano=$(find "$BACKUP_DIR" -maxdepth 1 -name 'aracze-*.dump' -mtime "+$KEEP_LOCAL_DAYS" -print -delete | wc -l)
+if [ "$smazano" -gt 0 ]; then
+  log "lokálně smazáno starých záloh: $smazano"
+fi
+# Tyhle dvě naopak ZŮSTÁVAJÍ fatální. Neúspěšná retence není kosmetika: úložiště
+# by rostlo bez omezení, a to je hodné e-mailu. Předmět „ZALOHA SELHALA" je pak
+# nepřesný, ale tělo e-mailu obsahuje konec logu, kde je vidět, který krok spadl.
 rclone delete "$REMOTE/denni" --min-age "$KEEP_DAILY" "${RCLONE_OPTS[@]}"
 rclone delete "$REMOTE/mesicni" --min-age "$KEEP_MONTHLY" "${RCLONE_OPTS[@]}"
 
-remote_daily=$(rclone size "$REMOTE/denni" --json "${RCLONE_OPTS[@]}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'], 'záloh,', round(d['bytes'] / 1e6), 'MB')")
-log "stav na R2: denní $remote_daily"
+# Tenhle údaj je čistě informativní, takže NESMÍ shodit hotovou zálohu —
+# zakolísání R2 nebo změna formátu výstupu by jinak poslaly „ZALOHA SELHALA"
+# o záloze, která je v tu chvíli nahraná i ověřená.
+if remote_daily=$(rclone size "$REMOTE/denni" --json "${RCLONE_OPTS[@]}" 2>/dev/null \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'], 'záloh,', round(d['bytes'] / 1e6), 'MB')" 2>/dev/null); then
+  log "stav na R2: denní $remote_daily"
+else
+  log "stav na R2 se nepodařilo zjistit — na výsledek zálohy to nemá vliv"
+fi
 log "== záloha OK =="
 
-# Log nenecháme růst do nekonečna.
-if [ "$(stat -c %s "$LOG")" -gt $((2 * 1024 * 1024)) ]; then
-  tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+# Log nenecháme růst do nekonečna. Pozor: `tail` jako PRVNÍ člen `&&` listu
+# nespustí ani `set -e`, ani ERR trap — a protože je tohle poslední příkaz
+# skriptu, skončila by hotová záloha nenulovým kódem bez jediného hlášení.
+if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt $((2 * 1024 * 1024)) ]; then
+  # Zkracuje se podle BAJTŮ, ne řádků: cíl je držet velikost, a jediný dlouhý
+  # řádek (např. obří chybový výstup) by log nad limitem udržel navždy —
+  # rotace by se pak spouštěla při každém běhu naprázdno. První řádek tím může
+  # zůstat rozpůlený, což je u logu přijatelné.
+  if tail -c 1000000 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG"; then
+    log "log zkrácen na poslední ~1 MB"
+  else
+    rm -f "$LOG.tmp"
+    log "rotaci logu se nepovedlo dokončit — na výsledek zálohy to nemá vliv"
+  fi
 fi
+
+# Záloha je v tuhle chvíli hotová a ověřená; nic po ní už nesmí změnit
+# návratový kód.
+exit 0
