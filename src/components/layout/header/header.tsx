@@ -194,7 +194,7 @@ export function Header({
       />
 
       <nav aria-label="Hlavní navigace" className="h-[65px] flex items-center">
-        <div className="max-w-7xl mx-auto px-4 md:px-12 flex items-center w-full gap-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-12 lg:px-6 xl:px-12 flex items-center w-full gap-8">
           {logo && (
             <Link href="/" className="flex items-center shrink-0">
               {logoSvgHtml ? (
@@ -222,11 +222,14 @@ export function Header({
             </Link>
           )}
 
-          {/* Počítačové menu až od lg (1024 px): s lupou, „Rady na cestu" a účtem
-              potřebuje ~875+ px, takže na md šířkách (768–1023) přetékalo o ~55 px
-              za okraj okna. Pod lg jede mobilní hlavička s hamburgerem, která je
-              na dotykových tabletech stejně pohodlnější. Stejnou hranici hlídá
-              i matchMedia výš a „Rady na cestu" ji měla už dřív. */}
+          {/* Počítačové menu až od lg (1024 px). Pod lg jede mobilní hlavička
+              s hamburgerem, která je na dotykových tabletech stejně pohodlnější.
+              Stejnou hranici hlídá i matchMedia výš.
+              Logo + 5 kontinentů + lupa + „Rady na cestu" + účet potřebují
+              ~1000 px, s odsazením 48 px po stranách tedy ~1095 px — na iPadu Pro
+              na výšku (přesně 1024 px) papoušek přetékal o ~23 px za okraj okna.
+              Proto má pásmo lg–xl (1024–1279) užší odsazení kontejneru (24 px)
+              i položek menu (16 px); od xl se vrací původní rozměry. */}
           <div className="hidden lg:flex items-center gap-0 h-full text-white/90 font-semibold">
             {sortedNavPages.map((page, index) => {
               const hasChildren = (page.children?.docs?.length ?? 0) > 0
@@ -244,7 +247,7 @@ export function Header({
                     onClick={() => setActiveDropdown(null)}
                     aria-haspopup={hasChildren || undefined}
                     aria-expanded={hasChildren ? activeDropdown === String(pageId) : undefined}
-                    className="px-5 text-white hover:text-gray-100 transition-colors tracking-wide text-[15px] font-semibold font-heading flex items-center gap-1 whitespace-nowrap"
+                    className="px-4 xl:px-5 text-white hover:text-gray-100 transition-colors tracking-wide text-[15px] font-semibold font-heading flex items-center gap-1 whitespace-nowrap"
                   >
                     {page.title}
                     {hasChildren && (
@@ -296,7 +299,7 @@ export function Header({
           onMouseLeave={handleMouseLeave}
         >
           <div className="bg-white py-2">
-            <div className="max-w-7xl mx-auto px-4 md:px-12 py-4">
+            <div className="max-w-7xl mx-auto px-4 md:px-12 lg:px-6 xl:px-12 py-4">
               <div className="grid grid-cols-6 gap-y-1 gap-x-8">
                 {[...(activePage.children?.docs || [])]
                   .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
