@@ -622,3 +622,9 @@ export interface GlobalFooter {
   navItems: FooterNavItem[]
   copyrightText: RichTextRoot | null
 }
+
+/** Bublinka „Oblíbené:" pod vyhledáváním na úvodní stránce (země + její cesta). */
+export interface PopularDestination {
+  title: string
+  href: string
+}

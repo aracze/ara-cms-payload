@@ -321,6 +321,49 @@ protože ji nic nevolalo a mířila na vypnuté One Call 2.5.
 - Části dne se zobrazují **chronologicky od aktuální chvíle** (Večer → V noci →
   Ráno → Odpoledne), stejně jako na starém webu.
 
+### `POST /api/sync-analytics`
+
+Denní sync návštěvnosti z **Google Analytics 4** do stránek
+(`src/endpoints/syncAnalytics.ts`, GitHub Actions cron
+`.github/workflows/sync-analytics.yml` ve 3:17 UTC; autentizace hlavičkou
+`X-Sync-Secret` = `ANALYTICS_SYNC_SECRET` nebo admin session, `?dryRun=1` jen
+vypíše vzorek). Jeden dotaz do GA4 (dimenze `pagePath` + `dateRange`) plní
+**dvě klouzavá okna** najednou:
+
+- `analyticsPageViews` — **12 měsíců**, řadí dlaždice v sekci „Co vidět" míst.
+- `analyticsPageViews30d` — **30 dní**, vybírá **„Oblíbené:"** pod
+  vyhledáváním na úvodní stránce (`fetchPopularDestinations` v
+  `src/lib/payload.ts`): čtyři země s největším součtem zobrazení za **celý
+  podstrom** země (podstránky, města, cíle — samotná stránka země má zlomek
+  návštěv proti svým městům). Země = publikované „Místo k navštívení" přímo pod
+  kontinentem; strom se jde po `parent` (rekurzivní CTE, limit hloubky), ne
+  prefixem URL. **Výběr** čtveřice řídí 30 dní (sezónnost), **pořadí** bublinek
+  12 měsíců, aby se nepřehazovaly každý den podle šumu. Dokud 30denní sloupec
+  není naplněný (první noc po nasazení), vybírá se podle 12 měsíců; země bez
+  návštěv se nedoplňují a chybějící místa dorovná ruční záložní čtveřice
+  (Chorvatsko, Itálie, Řecko, USA). Ruční přepis z adminu záměrně není —
+  automat se má nechat běžet.
+
+Zápis jde **přímým SQL mimo Payload hooky** v jedné transakci (reset obou
+sloupců na 0 → hromadný UPDATE po dávkách → totéž do **poslední verze
+v `_pages_v`**, jinak by publikace stránky z rozpracovaného návrhu vrátila
+stará čísla; advisory lock proti souběhu vrací 409), aby noční běh nespouštěl
+revalidaci tisíců stránek — „Co vidět" se občerství pojistkou `revalidate: 300`
+v `cached()`, homepage tag `homepage-popular-destinations` sync invaliduje sám.
+Když GA4 nevrátí žádný rozpoznaný řádek (změna API), sync skončí **500** a nic
+nevynuluje; `?dryRun=1` vypíše i `skippedRows`.
+
+**Nasazení sloupce na produkci** (schema push jen v dev, viz „Jednorázové
+doběhy"): před nasazením image
+
+```sql
+ALTER TABLE pages ADD COLUMN IF NOT EXISTS analytics_page_views30d numeric;
+ALTER TABLE _pages_v ADD COLUMN IF NOT EXISTS version_analytics_page_views30d numeric;
+```
+
+pak force-recreate `cms` a ruční spuštění workflow _Sync analytics_ (jinak se
+30denní čísla objeví až po noci).
+
 ### `POST /api/sync-affiliate-deals`
 
 Denní obnova sekce **„Akční nabídky"** na stránkách míst: pro stránky

@@ -1,8 +1,9 @@
 name: Sync analytics
 
-# Denní sync návštěvnosti z Google Analytics 4 do pole `analyticsPageViews`
-# (endpoint /api/sync-analytics, viz src/endpoints/syncAnalytics.ts) — používá
-# se pro řazení v sekci „Co vidět". Žádné SSH/Docker — jde o prostý
+# Denní sync návštěvnosti z Google Analytics 4 do polí `analyticsPageViews`
+# (12 měsíců — řazení v sekci „Co vidět") a `analyticsPageViews30d` (30 dní —
+# „Oblíbené" pod vyhledáváním na homepage); endpoint /api/sync-analytics, viz
+# src/endpoints/syncAnalytics.ts. Žádné SSH/Docker — jde o prostý
 # autentizovaný HTTP požadavek na běžící produkci.
 on:
   schedule:

@@ -370,6 +370,10 @@ export interface Page {
    * Zobrazení za posledních 12 měsíců z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. Používá se pro řazení v sekci „Co vidět".
    */
   analyticsPageViews?: number | null;
+  /**
+   * Zobrazení TÉTO stránky za posledních 30 dní z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. „Oblíbené" pod vyhledáváním na úvodní stránce sčítají tato čísla za celou zemi včetně podstránek a měst.
+   */
+  analyticsPageViews30d?: number | null;
   createdBy?: (number | null) | User;
   parent?: (number | null) | Page;
   fullSlug?: string | null;
@@ -815,6 +819,7 @@ export interface PagesSelect<T extends boolean = true> {
   slug?: T;
   legacyPageId?: T;
   analyticsPageViews?: T;
+  analyticsPageViews30d?: T;
   createdBy?: T;
   parent?: T;
   fullSlug?: T;
