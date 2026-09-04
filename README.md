@@ -578,6 +578,9 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) i už 
   `scripts/seo-legacy-titles-targets.sql`, aby se uplatnila šablona (rozhodnutí 4. 9. 2026;
   šablona cíle bez 6. pádu místa dává „Název – cestovní průvodce", ne „v Astana"). Přípona
   titulku je všude „ • Ara.cz" (layout šablona i generátor v adminu).
+  Pády míst, která po migraci žádné neměla (456 z 669), doplňuje
+  `scripts/seo-fill-place-cases.sql` (tvary navržené AI, prošlé uživatelem 4. 9. 2026;
+  zapisuje jen do prázdných polí, i do `_pages_v`).
 - **Strukturovaná data navíc**: homepage `WebSite` + `SearchAction` (`/hledani?q=…`) a
   `Organization` (logo `/icon-512.png`) v jednom `@graph`; stránky „Místo k navštívení"
   `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
