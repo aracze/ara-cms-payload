@@ -40,7 +40,24 @@ interface MapLibreMapProps {
    * mapa s jediným pinem (karta cíle) zůstává na středu/zoomu z CMS.
    */
   fitToMarkers?: boolean
+  /**
+   * Odsazení výřezu při fitBounds v pixelech — když přes roh mapy leží karta
+   * (podstránka Ubytování), piny se dorámují do zbylé plochy. Použije se jen
+   * když je mapa dost široká (odsazení + ~240 px na piny), na užší mapě zůstává
+   * výchozí odsazení. Předávej STABILNÍ referenci (konstantu modulu), jinak se
+   * mapa při každém renderu bourá a staví znovu.
+   */
+  fitPadding?: FitPadding
 }
+
+export interface FitPadding {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+const DEFAULT_FIT_PADDING: FitPadding = { top: 56, right: 40, bottom: 24, left: 40 }
 
 const STYLE_URL = '/map-styles/aracze.json'
 const MARKER_SIZE = 44
@@ -144,6 +161,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
   zoom,
   height,
   fitToMarkers = false,
+  fitPadding,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<HTMLDivElement>(null)
@@ -382,8 +400,13 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         })
 
         if (fitToMarkers && currentMarkers.length > 1) {
+          // Vlastní odsazení jen na dost široké mapě — jinak by fitBounds
+          // s odsazením větším než plátno vyhodil chybu.
+          const width = mapRef.current?.clientWidth ?? 0
+          const useCustomPadding =
+            fitPadding !== undefined && width > fitPadding.left + fitPadding.right + 240
           map.fitBounds(bounds, {
-            padding: { top: 56, right: 40, bottom: 24, left: 40 },
+            padding: useCustomPadding ? fitPadding : DEFAULT_FIT_PADDING,
             maxZoom: MAX_FIT_ZOOM,
             animate: false,
           })
@@ -432,7 +455,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
       mapInstanceRef.current?.remove()
       mapInstanceRef.current = null
     }
-  }, [inView, stableMarkers, centerLat, centerLng, zoom, fitToMarkers])
+  }, [inView, stableMarkers, centerLat, centerLng, zoom, fitToMarkers, fitPadding])
 
   // Vnější kontejner je vždy v DOM (i před načtením) se stejnými rozměry —
   // IntersectionObserver má co pozorovat a nevzniká CLS při dokreslení mapy.

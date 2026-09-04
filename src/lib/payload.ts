@@ -1868,6 +1868,106 @@ export const fetchPlaceWeatherChild = cache((placeId: number): Promise<PlaceWeat
 )
 
 // ————————————————————————————————————————————————————————————————
+// Mapa s kartou „Hledat ubytování" na podstránce Ubytování
+// ————————————————————————————————————————————————————————————————
+
+/** Pin mapy na podstránce Ubytování — turistický cíl místa se souřadnicemi. */
+export interface AccommodationMapMarker {
+  id: number | string
+  title: string
+  fullSlug: string
+  lat: number
+  lng: number
+  imageUrl: string | null
+}
+
+export interface AccommodationMapData {
+  markers: AccommodationMapMarker[]
+  /** Booking deep-link místa (pole „Rezervace ubytování"), zděděný po nejbližším předkovi. */
+  accommodationUrl: string | null
+}
+
+type RawTouristPointMarker = {
+  id: number
+  title: string
+  fullSlug?: string | null
+  featuredImage?: { image?: unknown } | null
+  detail?: { latitude?: string | null; longitude?: string | null } | null
+}
+
+/**
+ * Turistické cíle místa se souřadnicemi — piny mapy na podstránce Ubytování.
+ * Stránka Ubytování je sourozenec cílů (dítě místa), takže je nemá načtené;
+ * sekce „Co vidět" místa řeší i vnořená místa (resolvePlacesToVisit), tady
+ * stačí přímé cíle — mapa jen ukazuje, kde na ostrově/v zemi co leží.
+ */
+async function fetchPlaceTouristPointMarkersUncached(
+  placeId: number,
+): Promise<AccommodationMapMarker[]> {
+  const payload = await getDb()
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [{ parent: { equals: placeId } }, { category: { equals: PageCategory.Turisticky_cil } }],
+    },
+    depth: 0,
+    limit: 100,
+    pagination: false,
+    select: { id: true, title: true, fullSlug: true, featuredImage: true, detail: true },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<RawTouristPointMarker>
+  // depth 0 → featuredImage.image je id; fotky pinů doplní hromadný překlad.
+  const docs = await enrichFeaturedImages(res.docs ?? [])
+  const markers: AccommodationMapMarker[] = []
+  for (const doc of docs) {
+    const lat = Number.parseFloat(doc.detail?.latitude ?? '')
+    const lng = Number.parseFloat(doc.detail?.longitude ?? '')
+    if (!doc.fullSlug || !Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    const imageUrl = (doc.featuredImage?.image as { url?: string } | null | undefined)?.url
+    markers.push({
+      id: doc.id,
+      title: doc.title,
+      fullSlug: doc.fullSlug,
+      lat,
+      lng,
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+    })
+  }
+  return markers
+}
+
+const fetchPlaceTouristPointMarkersCached = cached(
+  fetchPlaceTouristPointMarkersUncached,
+  'place-tourist-point-markers',
+  () => ['pages'],
+)
+
+/**
+ * Data mapového bloku podstránky Ubytování: piny cílů místa + Booking deep-link
+ * nejbližšího předka, který ho má (Grand Teton → vlastní, Zakynthos → vlastní,
+ * jinak země). Předky dodá volající seřazené od nejbližšího
+ * (`ancestorSlugsNearestFirst`) — sdílí se cachovaný dotaz s měnou a nabídkami.
+ */
+export const fetchAccommodationMapData = cache(
+  async (placeId: number, ancestorFullSlugs: string[]): Promise<AccommodationMapData> => {
+    const [markers, ancestors] = await Promise.all([
+      fetchPlaceTouristPointMarkersCached(placeId),
+      fetchAncestorDocs(ancestorFullSlugs),
+    ])
+    let accommodationUrl: string | null = null
+    for (const doc of ancestors) {
+      const url = doc.affiliate?.accommodationUrl?.trim()
+      if (url) {
+        accommodationUrl = url
+        break
+      }
+    }
+    return { markers, accommodationUrl }
+  },
+)
+
+// ————————————————————————————————————————————————————————————————
 // Veřejný profil uživatele (/profil/<username>)
 // ————————————————————————————————————————————————————————————————
 

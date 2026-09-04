@@ -74,6 +74,16 @@
     font-weight: 500;
   }
 
+  /* Pokračování textu za vloženým blokem (mapa ubytování, viz MainContent
+     `midText`): jeho první odstavec NENÍ úvodní lead — vrací se běžný odstavec. */
+  .prose.prose-continued > p:first-of-type {
+    font-size: 18px;
+    line-height: 1.9;
+    color: #353535;
+    margin-bottom: 26px;
+    font-weight: 400;
+  }
+
   /* Motto rubriky — heslo vycentrované nad mřížkou článků (parita se starým
      webem: „Štěstí při cestování přeje připraveným."). Všech 8 rubrik má jako
      text právě jedno motto. Selektor míří na PRVNÍ PRVEK, ať je to odstavec,

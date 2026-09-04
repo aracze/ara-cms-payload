@@ -7,7 +7,8 @@ import { MainContent } from './main-content'
 import { PlacesToVisit } from './places-to-visit'
 import { ReviewsSection } from '@/components/features/reviews/reviews-section'
 import { RelatedTouristPoints } from './related-tourist-points'
-import { PreparationSection } from './preparation-section'
+import { PreparationSection, accommodationHref } from './preparation-section'
+import { AccommodationMapSection } from './accommodation-map-section'
 import {
   PracticalInfoLinks,
   practicalInfoPanelDefs,
@@ -37,6 +38,7 @@ import {
   type InheritedPlaceDetail,
   fetchWeatherOverviewPlaces,
   fetchPlaceWeatherChild,
+  fetchAccommodationMapData,
 } from '@/lib/payload'
 import { extractSeasonalityBlock, seasonFromClimate } from '@/lib/seasonality'
 import { TeamSection } from './team-section'
@@ -363,6 +365,21 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
       ? fetchPlaceWeather(panelLat, panelLng)
       : Promise.resolve(null)
 
+  // Mapa s kartou „Hledat ubytování" pod textem podstránky Ubytování: piny =
+  // cíle kontextového místa (rodič podstránky), střed/zoom z jeho detailu,
+  // Booking deep-link zděděný po předcích. Kontext rovný stránce samé by
+  // znamenal, že žádné místo nad ní není — pak se blok nekreslí.
+  const isAccommodationPage = page.category === PageCategory.Ubytovani
+  const accommodationPlace =
+    isAccommodationPage && menuContext.contextFullSlug !== page.fullSlug
+      ? menuContext.contextPage
+      : null
+  const accommodationPlaceId = Number(accommodationPlace?.id)
+  const accommodationMapPromise =
+    accommodationPlace && Number.isInteger(accommodationPlaceId)
+      ? fetchAccommodationMapData(accommodationPlaceId, ancestorSlugs).catch(() => null)
+      : Promise.resolve(null)
+
   // "Místa"/"Články" v sekundárním menu patří kontextovému místu (např. Chorvatsko),
   // ne aktuální podstránce (Vstupní podmínky). Data kontextové stránky načítáme jen když
   // se menu vůbec renderuje (jinak zbytečný fetch pro rubriky/statické stránky).
@@ -381,6 +398,7 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     overviewItems,
     seasonSource,
     panelWeather,
+    accommodationMap,
   ] = await Promise.all([
     fetchPracticalInfoSource(page, safeRootPage, menuContext.isSubPlace),
     (async (): Promise<{ hasPlaces: boolean; hasArticles: boolean }> => {
@@ -422,7 +440,30 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
     overviewWeatherPromise,
     seasonSourcePromise,
     panelWeatherPromise,
+    accommodationMapPromise,
   ])
+
+  // Blok mapy se štítkem (viz accommodationMapPromise). Bez souřadnic místa
+  // zůstane jen štítek. Blok nemá nadpis, takže ani položku v obsahu vpravo.
+  const accommodationLat = Number.parseFloat(accommodationPlace?.detail?.latitude ?? '')
+  const accommodationLng = Number.parseFloat(accommodationPlace?.detail?.longitude ?? '')
+  const accommodationCenter =
+    Number.isFinite(accommodationLat) && Number.isFinite(accommodationLng)
+      ? { lat: accommodationLat, lng: accommodationLng }
+      : null
+  const accommodationProps = accommodationPlace
+    ? {
+        placeTitle: accommodationPlace.title,
+        locative: accommodationPlace.detail?.locative ?? null,
+        center: accommodationCenter,
+        zoom: accommodationPlace.detail?.googleMapsZoom ?? 7,
+        markers: accommodationMap?.markers ?? [],
+        href: accommodationHref(accommodationMap?.accommodationUrl),
+      }
+    : null
+  const accommodationSection = accommodationProps ? (
+    <AccommodationMapSection {...accommodationProps} />
+  ) : null
 
   // Sezóna pro pruh v panelu: ruční blok z adminu má vždycky přednost (umí
   // říct i „na severu jinak než na jihu"), automat z klimatu je jen záskok
@@ -752,6 +793,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           // z adminu (rozhodnutí uživatele). Nad textem tak zůstane jen to,
           // co text komentuje — aktuální stav a dlouhodobé průměry; krátkodobá
           // předpověď je praktický dovětek, ne úvod.
+          // Mapa s kartou ubytování jde MEZI text — za úvod, před první nadpis
+          // (čtenář si zorientuje ostrov dřív, než čte o letoviscích; výzvu vidí
+          // i kdo nedočte). Text bez nadpisu ji dostane až za sebe.
+          midText={accommodationSection}
           belowText={
             teamSection ? (
               <TeamSection {...teamSection} />
@@ -777,8 +822,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
                 ]
               : []),
           ]}
-          extraHeadings={
-            placeWeather && placeWeather.days.length > 0
+          extraHeadings={[
+            ...(placeWeather && placeWeather.days.length > 0
               ? [
                   {
                     id: 'predpoved-pocasi',
@@ -786,8 +831,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
                     level: 2,
                   },
                 ]
-              : []
-          }
+              : []),
+          ]}
           // Na stránkách počasí patří podpis autora až za předpověď (rozhodnutí
           // uživatele) — mezi textem a grafy by rozdělil související sekce.
           contributorAtEnd={page.category === PageCategory.Pocasi}

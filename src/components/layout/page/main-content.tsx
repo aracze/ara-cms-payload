@@ -148,6 +148,8 @@ export const MainContent = ({
   createdByPublic,
   touristPointInfo = null,
   aboveText = null,
+  midText = null,
+  midHeadings = [],
   belowText = null,
   preHeadings = [],
   extraHeadings = [],
@@ -205,6 +207,14 @@ export const MainContent = ({
    */
   aboveText?: React.ReactNode
   /**
+   * Blok vložený DO textu: za úvod, před první nadpis h2 (mapa s kartou
+   * ubytování). Text bez h2 ho dostane až za sebe (před `belowText`). Jen pro
+   * nesbalované stránky — rozdělený text by sbalování rozbilo.
+   */
+  midText?: React.ReactNode
+  /** Položky obsahu (TOC) bloku `midText` — zařadí se mezi nadpisy textu na jeho místo. */
+  midHeadings?: TocItem[]
+  /**
    * Položky obsahu (TOC) PŘED nadpisy z textu — pro sekce v `aboveText`.
    */
   preHeadings?: TocItem[]
@@ -244,14 +254,31 @@ export const MainContent = ({
     PageCategory.Zdravi_a_bezpeci,
     PageCategory.Jazyk_a_kultura,
     PageCategory.Jidlo_a_pit,
+    // Ubytování je informační podstránka jako ostatní (starý web jí dával
+    // obsah vpravo i autora) — bez ní tu stránka stála vlevo s prázdným sloupcem.
+    PageCategory.Ubytovani,
     PageCategory.Prakticke_informace,
   ]
   const showTableOfContents = !!pageCategory && tocCategories.includes(pageCategory)
   // Složené Praktické informace mají nadpisy posunuté o úroveň níž — obsah
   // proto bere h2–h4 (sekce + dvě úrovně podkapitol, jako starý web s h1–h3).
   const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
+  // Rozdělení textu pro `midText`: před prvním h2 (úvod) / od něj dál. Nadpisy
+  // jsou v HTML z richTextToHtml na nejvyšší úrovni, takže řez mezi bloky
+  // nechá oba kusy validní. Bez h2 zůstane text celý a blok jde až za něj.
+  const firstH2 = midText ? textHtml.search(/<h2[\s>]/i) : -1
+  const splitText = midText && firstH2 > 0
+  const textBefore = splitText ? textHtml.slice(0, firstH2) : textHtml
+  const textAfter = splitText ? textHtml.slice(firstH2) : ''
+  const headingLevel = isPracticalInfo ? 4 : 3
   const headings = showTableOfContents
-    ? [...preHeadings, ...extractHeadings(textHtml, isPracticalInfo ? 4 : 3), ...extraHeadings]
+    ? [
+        ...preHeadings,
+        ...extractHeadings(textBefore, headingLevel),
+        ...(midText ? midHeadings : []),
+        ...extractHeadings(textAfter, headingLevel),
+        ...extraHeadings,
+      ]
     : []
 
   // Celý 2. pád i s předložkou („do Myanmaru", „na Slovensko") — stejně jako
@@ -330,6 +357,18 @@ export const MainContent = ({
   // Šířku ani vnitřní odsazení sloupce neměníme — text má pořád stejnou míru
   // řádku, mění se jen jeho poloha.
   const justify = hasSidebar || centerColumn || isRubric ? 'lg:justify-center' : 'lg:justify-start'
+  // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
+  // orientované fotky by jinak zabraly celou obrazovku. Praktické informace:
+  // posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose). Rubrika: text
+  // je jednořádkové motto vycentrované nad mřížkou článků (viz `isRubric`
+  // a .rubric-motto v globals.css).
+  const proseClassName = touristPointInfo
+    ? 'poi-prose'
+    : isPracticalInfo
+      ? 'pi-prose'
+      : isRubric
+        ? 'rubric-motto'
+        : undefined
 
   return (
     <main
@@ -344,8 +383,16 @@ export const MainContent = ({
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
         {aboveText}
+        {splitText && (
+          <CollapsiblePageTextWithContributor
+            textHtml={textBefore}
+            collapsible={false}
+            proseClassName={proseClassName}
+          />
+        )}
+        {splitText && midText}
         <CollapsiblePageTextWithContributor
-          textHtml={textHtml}
+          textHtml={splitText ? textAfter : textHtml}
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
           // i na informačních podstránkách (Vstupní podmínky, Měna a ceny, Počasí…)
           // — jako na původním webu. Rubriky a statické stránky autora nemají.
@@ -357,21 +404,13 @@ export const MainContent = ({
               : null
           }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
-          // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
-          // orientované fotky by jinak zabraly celou obrazovku. Praktické
-          // informace: posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose).
-          // Rubrika: text je jednořádkové motto vycentrované nad mřížkou
-          // článků (viz `isRubric` a .rubric-motto v globals.css).
+          // Pokračování za vloženým blokem: první odstavec už není úvodní
+          // „lead" (viz .prose-continued v globals.css).
           proseClassName={
-            touristPointInfo
-              ? 'poi-prose'
-              : isPracticalInfo
-                ? 'pi-prose'
-                : isRubric
-                  ? 'rubric-motto'
-                  : undefined
+            splitText ? `${proseClassName ?? ''} prose-continued`.trim() : proseClassName
           }
         />
+        {midText && !splitText && midText}
         {belowText}
         {contributorAtEnd && contributor && (
           <div className="mt-10">
