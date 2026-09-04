@@ -535,10 +535,10 @@ v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
 
 - **Titulek a popisek** berou SEO záložku z CMS (`meta.title`, `meta.description` — u stránek
   a článků migrovaných z Grails vyplněná). Jediná přípona na celém webu je layout šablona
-  `%s | Ara.cz` (krátká schválně — Google ukazuje ~60 znaků, klíčová slova nesou titulky
-  samy; homepage má vlastní absolutní titulek). Legacy přípony (`• Ara.cz`, `- cestovní
-průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřezává
-  `stripSiteSuffix`. Bez SEO titulku se použije šablona kategorie, resp. kontextový titulek
+  `%s • Ara.cz` (krátká schválně — Google ukazuje ~60 znaků, klíčová slova nesou titulky
+  samy; homepage má vlastní absolutní titulek). Legacy přípony (`| Ara.cz`, `- cestovní
+průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) i už vyplněnou
+  `• Ara.cz` odřezává `stripSiteSuffix`, aby se přípona nepřidala dvakrát. Bez SEO titulku se použije šablona kategorie, resp. kontextový titulek
   z `buildPageTitle`. Popisek bez `meta` = šablona kategorie, jinak začátek textu zkrácený na
   hranici slova (`DESCRIPTION_MAX` 160), úplně bez textu výchozí popisek layoutu
   (`DEFAULT_DESCRIPTION`). Pro stránky (Page) to celé počítá `src/lib/page-seo.ts`
@@ -572,7 +572,12 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
   bez nich název s předložkou. Šablony mění jen `<title>`/popisek — viditelný h1 dál skládá
   `buildPageTitle`. Stránky a články, které po migraci SEO pole neměly, doplnil jednorázově
   `scripts/seo-fill-missing-meta.sql` (idempotentní; na produkci spustit stejně jako ostatní
-  SQL doběhy + force-recreate `cms`).
+  SQL doběhy + force-recreate `cms`). Titulky zděděné ze starého webu („Läckerli Huus:
+  Cestovní průvodce Basilejí") zůstávají, kde jsou správně skloněné a vejdou se do ~60 znaků;
+  rozbité (bez města), příliš dlouhé a nesklonované u turistických cílů vynuluje
+  `scripts/seo-legacy-titles-targets.sql`, aby se uplatnila šablona (rozhodnutí 4. 9. 2026;
+  šablona cíle bez 6. pádu místa dává „Název – cestovní průvodce", ne „v Astana"). Přípona
+  titulku je všude „ • Ara.cz" (layout šablona i generátor v adminu).
 - **Strukturovaná data navíc**: homepage `WebSite` + `SearchAction` (`/hledani?q=…`) a
   `Organization` (logo `/icon-512.png`) v jednom `@graph`; stránky „Místo k navštívení"
   `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
@@ -622,6 +627,23 @@ Pravidla tučnosti a velikostí (rozhodnutí uživatele z 29. 8. 2026) jsou zaps
 těchto souborů, ne tady — README jen říká, kde je hledat. Odznaky míst záměrně používají dvě
 rodiny ikon: vyplněný špendlík (`PinIcon`) na fotce, obrysový lucide `MapPin` v textových
 řádcích („Co je nového", hledání) — na fotce sedí plná plocha, v řádku textu tenká linka.
+
+### Fotky dlaždic míst — `<picture>` místo tří `next/image`
+
+Dlaždice v „Co vidět", „Co dalšího vidět" a na profilu (`PlaceCardImage`,
+`src/components/layout/page/place-card-image.tsx`) mají jiný ořez pro mobil (5:7 nebo 3:2
+přes celou šířku), tablet (3:2) a desktop (5:7 vedle mapy / 1:1). Kreslí ho jeden nativní
+`<picture>` se třemi `<source media>` — prohlížeč vybere JEDNU variantu podle šířky okna a hustoty
+pixelů a stáhne jen ji. Do 4. 9. 2026 to byly tři `next/image fill` přepínané `hidden lg:block`;
+u pevné šířky v pixelech (`sizes="210px"`) ale `next/image` vypisuje všech 14 šířek
+z `imageSizes ∪ deviceSizes`, takže jedna dlaždice nesla 26 adres (~4,3 kB) a Řecko s 96 místy
+mělo 420 kB HTML jen v adresách fotek (HTML 992 → 635 kB v dev). Šířky kandidátů musí být
+z whitelistu media proxy (`ALLOWED_WIDTHS` ve `workers/media-proxy/src/media-path.ts`), jinak
+Worker vrátí 400 — nová šířka v kódu = nejdřív rozšířit whitelist a nasadit Worker. Komponenta
+zůstává klientská záměrně: přes RSC hranici jdou jen props, ne hotový `<picture>` (jako serverová
+by RSC payload narostl o to, co se ušetřilo v HTML). Špendlík na dlaždicích (`PinIcon`) a hvězdičky
+(`StarRating`) jsou CSS masky (`.pin-glyph`, `.star-glyph` v `globals.css`), ne inline SVG —
+na stránce s desítkami dlaždic to byly desítky kB opakovaného SVG.
 
 ### Fotky v obsahu — lightbox (PhotoSwipe)
 

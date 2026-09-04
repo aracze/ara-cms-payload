@@ -45,6 +45,11 @@ export type SeoTemplateOptions = {
 }
 
 /** „do Norska" — druhý pád s předložkou, fallback na název. */
+/** Kolik znaků titulku Google zpravidla ukáže (delší usekne). */
+const TITLE_DISPLAY_MAX = 60
+/** Délka přípony „ • Ara.cz", kterou přidá layout šablona. */
+const SITE_SUFFIX_LENGTH = 9
+
 export function genitiveOf(place: SeoPlaceLike): string {
   return place.detail?.genitive?.trim() || `do ${place.title}`
 }
@@ -79,10 +84,18 @@ export function seoTitleTemplate(page: SeoPageLike, place: SeoPlaceLike): string
   const gen = genitiveOf(place)
   const loc = locativeOf(place)
   switch (page.category) {
-    case PageCategory.Turisticky_cil:
+    case PageCategory.Turisticky_cil: {
       // Legacy šablona „{{title}} v {{parentTitle}} - cestovní průvodce";
       // „cestovní průvodce" doplní přípona layoutu.
-      return place.title && place.title !== page.title ? `${page.title} ${loc}` : null
+      if (!place.title || place.title === page.title) return null
+      // Bez vyplněného 6. pádu by fallback „v Astana" dal špatnou češtinu →
+      // raději neutrální „– cestovní průvodce" (tvar šablony pro místa).
+      const hasLocative = !!place.detail?.locative?.trim()
+      const candidate = hasLocative ? `${page.title} ${loc}` : `${page.title} – cestovní průvodce`
+      // Google ukáže ~60 znaků včetně „ • Ara.cz" (9) — když se doplněk nevejde,
+      // je lepší samotný název než useknutý titulek.
+      return candidate.length + SITE_SUFFIX_LENGTH > TITLE_DISPLAY_MAX ? page.title : candidate
+    }
     case PageCategory.Misto_k_navstiveni:
       // Legacy „{{title}}: Cestovní průvodce {{title}}" (7. pád doplňoval editor).
       return `${page.title} – cestovní průvodce`

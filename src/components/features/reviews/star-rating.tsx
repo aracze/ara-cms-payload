@@ -1,11 +1,13 @@
 import React from 'react'
-import { Star } from 'lucide-react'
 
 /**
  * Hodnocení 1–5 hvězdiček, jen pro čtení. Plné oranžové hvězdičky + šedé
  * „vypnuté" — jako legacy raty (star-on/star-off, 13 px). Umí i zlomkové
  * hodnoty (průměr ve výpisu cílů): částečná hvězdička se kreslí oranžovým
  * překryvem oříznutým na příslušnou šířku.
+ *
+ * Tvar kreslí CSS maska `.star-glyph` (globals.css), ne inline SVG — na
+ * stránce cíle je i 50 hvězd a každá inline kopie SVG cesty stála ~600 B.
  */
 export function StarRating({
   rating,
@@ -17,6 +19,7 @@ export function StarRating({
   className?: string
 }) {
   const label = rating.toLocaleString('cs-CZ', { maximumFractionDigits: 1 })
+  const box = { width: size, height: size }
 
   return (
     <span
@@ -28,38 +31,22 @@ export function StarRating({
         const fraction = Math.min(Math.max(rating - (n - 1), 0), 1)
         if (fraction >= 1 || fraction <= 0) {
           return (
-            <Star
+            <span
               key={n}
               aria-hidden="true"
-              style={{ width: size, height: size }}
-              className={
-                fraction >= 1 ? 'fill-[#f5a623] text-[#f5a623]' : 'fill-[#d9dee3] text-[#d9dee3]'
-              }
-              strokeWidth={0}
+              style={box}
+              className={`star-glyph ${fraction >= 1 ? 'text-[#f5a623]' : 'text-[#d9dee3]'}`}
             />
           )
         }
         return (
-          <span
-            key={n}
-            aria-hidden="true"
-            className="relative inline-block"
-            style={{ width: size, height: size }}
-          >
-            <Star
-              className="absolute inset-0 fill-[#d9dee3] text-[#d9dee3]"
-              style={{ width: size, height: size }}
-              strokeWidth={0}
-            />
+          <span key={n} aria-hidden="true" className="relative inline-block" style={box}>
+            <span className="star-glyph absolute inset-0 text-[#d9dee3]" style={box} />
             <span
               className="absolute inset-y-0 left-0 overflow-hidden"
               style={{ width: `${fraction * 100}%` }}
             >
-              <Star
-                className="fill-[#f5a623] text-[#f5a623]"
-                style={{ width: size, height: size }}
-                strokeWidth={0}
-              />
+              <span className="star-glyph text-[#f5a623]" style={box} />
             </span>
           </span>
         )
