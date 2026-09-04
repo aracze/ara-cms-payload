@@ -252,6 +252,13 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         // (Google to řešil autopanem; tohle je klidnější). Offsety posouvají
         // kartičku mimo pin (44 px, ukotvený dolním středem) pro každou stranu.
         const popup = new maplibregl.Popup({
+          // MapLibre jinak po otevření přesune fokus na první odkaz v kartičce.
+          // Kartička se otevírá i pouhým najetím myší na řádek výpisu — fokus
+          // by pak stránku posunul za kartičkou (mapa pod okrajem okna, nebo
+          // přilepená nad výpisem u posledních položek), řádek pod kurzorem
+          // by se vyměnil a stránka by skákala nahoru a dolů. Najetí myší
+          // nesmí hýbat fokusem ani stránkou.
+          focusAfterOpen: false,
           offset: {
             center: [0, 0],
             bottom: [0, -(MARKER_SIZE + 6)],
