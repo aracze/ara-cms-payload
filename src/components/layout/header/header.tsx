@@ -10,6 +10,7 @@ import { isCloudinary } from '@/lib/cloudinary-loader'
 import Search from '@/components/features/search/search'
 import { HeaderAccount } from '@/components/features/auth/header-account'
 import type { CurrentUser } from '@/lib/auth'
+import { HEADER_CONTAINER_CLASS } from './container'
 
 const CONTINENT_ORDER = ['Evropa', 'Amerika', 'Asie', 'Afrika', 'Austrálie']
 
@@ -50,7 +51,7 @@ export function Header({
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Mobilní menu (do `md` breakpointu). Vlastní stav nezávislý na desktop mega menu.
+  // Mobilní menu (do `lg` breakpointu). Vlastní stav nezávislý na desktop mega menu.
   const [mobileOpen, setMobileOpen] = useState(false)
   const [mobileExpandedId, setMobileExpandedId] = useState<string | null>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -194,7 +195,7 @@ export function Header({
       />
 
       <nav aria-label="Hlavní navigace" className="h-[65px] flex items-center">
-        <div className="max-w-7xl mx-auto px-4 md:px-12 flex items-center w-full gap-8">
+        <div className={`${HEADER_CONTAINER_CLASS} flex items-center w-full gap-6 xl:gap-8`}>
           {logo && (
             <Link href="/" className="flex items-center shrink-0">
               {logoSvgHtml ? (
@@ -222,11 +223,17 @@ export function Header({
             </Link>
           )}
 
-          {/* Počítačové menu až od lg (1024 px): s lupou, „Rady na cestu" a účtem
-              potřebuje ~875+ px, takže na md šířkách (768–1023) přetékalo o ~55 px
-              za okraj okna. Pod lg jede mobilní hlavička s hamburgerem, která je
-              na dotykových tabletech stejně pohodlnější. Stejnou hranici hlídá
-              i matchMedia výš a „Rady na cestu" ji měla už dřív. */}
+          {/* Počítačové menu až od lg (1024 px). Pod lg jede mobilní hlavička
+              s hamburgerem, která je na dotykových tabletech stejně pohodlnější.
+              Stejnou hranici hlídá i matchMedia výš.
+              Logo, kontinenty, lupa, „Rady na cestu" a účet potřebují ~1000 px;
+              s odsazením 2×48 px to je ~1095 px, takže na iPadu Pro na výšku
+              (přesně 1024 px) účet vyjížděl ~23 px za okraj okna (pravé odsazení
+              se do okna nevešlo vůbec). Proto má pásmo lg–xl (1024–1279) užší
+              odsazení kontejneru (24 px, sdílená HEADER_CONTAINER_CLASS), menší
+              mezeru za logem (24 px) i užší položky menu (16 px); od xl se vrací
+              původní rozměry. Rezerva je i tak malá (~30 px nepřihlášený, ~10 px
+              s avatarem a šipkou) — šestý kontinent nebo delší název ji spolkne. */}
           <div className="hidden lg:flex items-center gap-0 h-full text-white/90 font-semibold">
             {sortedNavPages.map((page, index) => {
               const hasChildren = (page.children?.docs?.length ?? 0) > 0
@@ -244,7 +251,7 @@ export function Header({
                     onClick={() => setActiveDropdown(null)}
                     aria-haspopup={hasChildren || undefined}
                     aria-expanded={hasChildren ? activeDropdown === String(pageId) : undefined}
-                    className="px-5 text-white hover:text-gray-100 transition-colors tracking-wide text-[15px] font-semibold font-heading flex items-center gap-1 whitespace-nowrap"
+                    className="px-4 xl:px-5 text-white hover:text-gray-100 transition-colors tracking-wide text-[15px] font-semibold font-heading flex items-center gap-1 whitespace-nowrap"
                   >
                     {page.title}
                     {hasChildren && (
@@ -296,7 +303,7 @@ export function Header({
           onMouseLeave={handleMouseLeave}
         >
           <div className="bg-white py-2">
-            <div className="max-w-7xl mx-auto px-4 md:px-12 py-4">
+            <div className={`${HEADER_CONTAINER_CLASS} py-4`}>
               <div className="grid grid-cols-6 gap-y-1 gap-x-8">
                 {[...(activePage.children?.docs || [])]
                   .sort((a, b) => a.title.localeCompare(b.title, 'cs'))
@@ -316,7 +323,7 @@ export function Header({
         </div>
       )}
 
-      {/* Mobilní menu (do `md`) — backdrop + rozbalovací panel s accordionem. */}
+      {/* Mobilní menu (do `lg`) — backdrop + rozbalovací panel s accordionem. */}
       {mobileOpen && (
         <div className="lg:hidden">
           <button

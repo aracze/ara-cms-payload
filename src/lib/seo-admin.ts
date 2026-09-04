@@ -78,7 +78,7 @@ export async function generateSeoTitle(
     collectionSlug === 'pages'
       ? (seoTitleTemplate(doc, (await resolvePlaceForAdmin(doc, req)).place) ?? doc.title)
       : doc.title
-  return `${base || ''} | ${SITE_NAME}`.trim()
+  return `${base || ''} • ${SITE_NAME}`.trim()
 }
 
 export async function generateSeoDescription(

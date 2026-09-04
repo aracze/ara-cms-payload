@@ -111,11 +111,37 @@ export function richTextToPlainText(value: unknown): string {
   return texts.join(' ').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Zkrátí text na `max` znaků VČETNĚ závěrečné výpustky, na hranici slova. Jedno
+ * místo pro perexy článků, řádky novinek i meta description (`truncateDescription`).
+ * Počítá Unicode znaky (code points), ne UTF-16 jednotky — řez uprostřed emoji by
+ * jinak nechal osamocený surrogate.
+ */
+export function truncateAtWord(text: string, max: number): string {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  const chars = Array.from(compact)
+  if (chars.length <= max) return compact
+  const cut = chars.slice(0, max - 1).join('')
+  const lastSpace = cut.lastIndexOf(' ')
+  // Useknutí uprostřed slova jen když by hranice slova zahodila přes 40 % textu
+  // (extrémně dlouhé „slovo", typicky URL).
+  const base = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut
+  return `${base.replace(/[\s,;:(–—-]+$/, '')}…`
+}
+
 // ─── Sdílené odvozeniny pro článkové karty/seznamy (jedno místo pravdy) ──────
 
-/** Plain-text perex z rich-textu článku. */
+/**
+ * Horní mez perexu ve výpisech. Karta ukazuje nejvýš tři řádky (`line-clamp-3`,
+ * ~90 znaků na řádek na desktopu), takže víc textu nikdo neuvidí — a perex
+ * putuje přes RSC hranici do klientských výpisů (ArticlesRowsClient…), kde
+ * celý text článku jen nafukoval HTML (na /asie 71 kB pro šest článků).
+ */
+const ARTICLE_EXCERPT_MAX = 320
+
+/** Plain-text perex z rich-textu článku — zkrácený na hranici slova. */
 export function getArticleExcerpt(article: Article): string {
-  return richTextToPlainText(article.text)
+  return truncateAtWord(richTextToPlainText(article.text), ARTICLE_EXCERPT_MAX)
 }
 
 /**

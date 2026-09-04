@@ -66,6 +66,23 @@ describe('seoTitleTemplate — titulek bez přípony webu', () => {
         { title: 'Graz', detail: { locative: 've Štýrském Hradci' } },
       ),
     ).toBe('Skulpturenpark ve Štýrském Hradci')
+    // Místo bez 6. pádu: ne „v Astana", ale neutrální „– cestovní průvodce".
+    expect(
+      seoTitleTemplate(
+        { title: 'Věž Bajtěrek', category: PageCategory.Turisticky_cil },
+        { title: 'Astana', detail: null },
+      ),
+    ).toBe('Věž Bajtěrek – cestovní průvodce')
+    // Když by se doplněk s příponou „ • Ara.cz" nevešel do ~60 znaků, zůstane jen název.
+    expect(
+      seoTitleTemplate(
+        {
+          title: 'Centro para os Assuntos da Arte e Arquitectura',
+          category: PageCategory.Turisticky_cil,
+        },
+        { title: 'Guimarães', detail: null },
+      ),
+    ).toBe('Centro para os Assuntos da Arte e Arquitectura')
     // Cíl přímo pod kontinentem/bez místa → jen název (šablona null).
     expect(
       seoTitleTemplate(
