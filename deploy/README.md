@@ -248,7 +248,13 @@ Dump má ~12 MB, celkem tedy ~0,5 GB, tj. ~5 % bezplatných 10 GB na R2.
 **Když se záloha nepovede**, přijde e-mail na `SMTP_FROM` (info@ara.cz)
 s posledními 25 řádky logu a skript skončí nenulovým kódem, takže selhání
 uvidíš i v `systemctl status aracze-backup.service`. Neověřený dump se maže,
-aby v seznamu záloh nevypadal jako platný.
+aby v seznamu záloh nevypadal jako platný. Platí to i pro **přerušení
+signálem** (timeout ze systemd, Ctrl+C) a pro **vlastní kontroly** skriptu —
+ty hlásí chyby přes funkci `fail()`, protože samotné `exit 1` v bashi ERR trap
+nespustí, takže by se úklid i e-mail přeskočily.
+
+Dump obsahuje e-maily uživatelů a hashe hesel, proto má `/opt/aracze/backups/`
+práva 700 a soubory v něm 600 (skript si nastavuje `umask 077`).
 
 **Ruční použití**
 

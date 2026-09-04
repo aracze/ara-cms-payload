@@ -28,7 +28,12 @@ MIN_SIZE_BYTES=$((1024 * 1024)) # dump menší než 1 MB = něco se pokazilo
 LOG="$BACKUP_DIR/zaloha.log"
 DRY_RUN="${DRY_RUN:-}"
 
+# Dump obsahuje e-maily uživatelů a hashe hesel, takže nesmí být čitelný pro
+# nikoho dalšího na stroji. `umask` platí pro nově zakládané soubory (dumpy,
+# log), `chmod` srovná i adresář, který mohl vzniknout dřív s volnějšími právy.
+umask 077
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 log() { printf '%s  %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "$*" | tee -a "$LOG"; }
 
@@ -78,10 +83,37 @@ cleanup_partial() {
 # by rozbitou zálohu nahlásil jako úspěšnou.
 trap 'rc=$?; cleanup_partial; notify_failure $rc $LINENO; exit $rc' ERR
 
+# Když skript zabije systemd (timeout) nebo Ctrl+C, ERR trap se NESPUSTÍ —
+# bez tohohle by po sobě nechal neověřený dump a nikdo by se nic nedozvěděl.
+trap 'rc=143; log "PŘERUŠENO signálem"; cleanup_partial; notify_failure $rc $LINENO; exit $rc' TERM INT
+
+# Vlastní kontroly hlásí chyby TUDY, ne přes `exit 1`. Samotné `exit` totiž
+# ERR trap nespouští (ověřeno), takže by se přeskočil úklid i e-mail —
+# a to zrovna u případů, kde na nich záleží nejvíc (nekompletní dump).
+fail() {
+  log "$1"
+  cleanup_partial
+  notify_failure 1 "${BASH_LINENO[0]}"
+  exit 1
+}
+
 stamp=$(date -u +%Y%m%d-%H%M)
 dump="$BACKUP_DIR/aracze-$stamp.dump"
 
 log "== start zálohy =="
+
+# Po restartu serveru běží tato služba hned, jak je nahoře Docker — ale
+# kontejner s databází ještě přijímat spojení nemusí (`Persistent=true` navíc
+# dohání zálohu zmeškanou během vypnutí). Bez čekání by první záloha po
+# restartu selhala a poslala planý poplach. Platí i pro ruční spuštění.
+for i in $(seq 1 30); do
+  if docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
+    [ "$i" -gt 1 ] && log "databáze připravená po $((i * 2)) s"
+    break
+  fi
+  [ "$i" -lt 30 ] || fail "databáze v kontejneru $CONTAINER nenaběhla ani po 60 s"
+  sleep 2
+done
 
 # 1) Dump. `< /dev/null` je pojistka, aby si docker exec nebral stdin skriptu.
 docker exec "$CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$dump" < /dev/null
@@ -90,15 +122,15 @@ log "dump hotov: $dump ($(numfmt --to=iec "$size"))"
 
 # 2) Ověření, že dump je čitelný a není odseknutý. Bez tohoto kroku by se
 #    nepovedená záloha nahrála na R2 a vypadala jako v pořádku.
-[ "$size" -ge "$MIN_SIZE_BYTES" ] || { log "dump je podezřele malý ($size B)"; exit 1; }
+[ "$size" -ge "$MIN_SIZE_BYTES" ] || fail "dump je podezřele malý ($size B)"
 # Kolik tabulek má dump obsahovat, se ptáme ŽIVÉ databáze — pevné číslo by
 # zastaralo při každé nové kolekci. Tolerance 10 % kryje běh během migrace.
 live=$(docker exec "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -Atc \
   "select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace \
    where c.relkind = 'r' and n.nspname not in ('pg_catalog', 'information_schema')" < /dev/null)
 tables=$(docker exec -i "$CONTAINER" pg_restore --list < "$dump" | grep -c 'TABLE DATA' || true)
-[ "$((tables * 10))" -ge "$((live * 9))" ] || {
-  log "dump má jen $tables tabulek, databáze jich má $live — nedůvěryhodné"; exit 1; }
+[ "$((tables * 10))" -ge "$((live * 9))" ] \
+  || fail "dump má jen $tables tabulek, databáze jich má $live — nedůvěryhodné"
 dump_ok=1
 log "ověřeno: dump je čitelný, $tables tabulek s daty (databáze má $live)"
 
@@ -120,8 +152,8 @@ upload() {
   rclone copyto "$src" "$dest" "${RCLONE_OPTS[@]}"
   local_size=$(stat -c %s "$src")
   remote_size=$(rclone lsjson "$dest" "${RCLONE_OPTS[@]}" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Size"])')
-  [ "$remote_size" = "$local_size" ] || {
-    log "na R2 dorazilo $remote_size B místo $local_size B — $dest"; exit 1; }
+  [ "$remote_size" = "$local_size" ] \
+    || fail "na R2 dorazilo $remote_size B místo $local_size B — $dest"
   log "nahráno a ověřeno ($(numfmt --to=iec "$remote_size")): $dest"
 }
 
