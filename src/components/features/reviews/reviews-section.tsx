@@ -65,7 +65,7 @@ export async function ReviewsSection({
           <aside className="hidden w-[340px] shrink-0 lg:block">
             <ArticleAd
               variant={reviews.length < 2 ? 'box' : 'primary'}
-              className="mt-10 lg:sticky lg:top-5"
+              className="mt-10 lg:sticky lg:top-pod-listou"
             />
           </aside>
         </div>

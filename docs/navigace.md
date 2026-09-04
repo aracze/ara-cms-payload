@@ -170,20 +170,51 @@ se titulky podstránek skládají z názvu v prvním pádě („Ubytování Koda
 - Odkazy „Místa"/„Články" míří na kotvu (`#mista`, `#clanky`) na stránce kontextového
   místa — z podstránky tedy nejdřív přejdou na místo a pak sjedou na sekci.
 
+### Chování při scrollu (lišta „ukáže se při scrollu nahoru")
+
+Menu se lepí k hornímu okraji okna (`src/components/layout/page/subnav-reveal.tsx`):
+
+- Nahoře na stránce sedí pod hero jako dřív. Při scrollu **dolů** zajede nahoru z obrazu
+  (po 12 px), ať nepřekáží čtení; při scrollu **nahoru** vyjede zpátky se stínem (po 24 px —
+  víc než u schování, aby drobné zavrtění prstem lištu nerozblikalo). Stejně na mobilu,
+  tabletu i počítači (vzor Medium, Google, zpravodajské appky).
+- Prvek je `position: sticky`. Schovaná lišta má kotvu `top: -výška` (výška v CSS proměnné
+  `--subnav-h`, měří ResizeObserver), takže při scrollu dolů odjede s obsahem přirozeně a
+  nikde se nezadrhne; odhalená má `top: 0`. Přechod animuje `top` — prohlížeč polohu sticky
+  prvku počítá z animované hodnoty, takže lišta plynule vyjede i zajede. Drží si místo
+  v toku stránky, obsah při ukázání/schování neposkočí (žádný posun rozložení). Jakmile se
+  lišta vrátí na své místo pod hero, odhalení se ruší.
+- Po kliku na odkaz s kotvou (položka lišty „Místa", obsah stránky vpravo…) lišta
+  „zamrzne" v aktuálním stavu, dokud čtenář sám znovu nezascrolluje (kolečko, dotyk,
+  klávesa, posuvník). Prohlížeč totiž spočítal cíl s tehdejším `scroll-padding-top`: kdyby
+  lišta cestou dolů zmizela, sekce by přistála pod prázdným pruhem, kdyby cestou nahoru
+  vyjela, zakryla by nadpis.
+- Když je lišta přilepená a vidět, nastaví na `<html>` CSS proměnnou `--subnav-offset`
+  (její výšku; jinak `0px`). Z ní vychází `scroll-padding-top` (cíl kotvy `#mista` přistane
+  pod lištou, ne za ní) a utilita `top-pod-listou` v `globals.css` — používají ji panely
+  lepené 20 px pod hranou (obsah stránky, mapa u míst, reklamy u článků a recenzí), aby pod
+  lištu uhnuly (bez animace, skokem). Nový přilepený panel má použít `top-pod-listou` místo
+  `top-5`. Pozor: sekce s vlastním `scroll-mt-24` (recenze, komentáře) mají odstup od lišty
+  o těch 96 px větší — obě hodnoty se sčítají.
+- Pružení za horní okraj (iOS) se bere jako nula, ať lištu nepřepíná; při fokusu klávesnicí
+  na položku schované lišty se lišta ukáže; animace lišty respektuje
+  `prefers-reduced-motion`.
+
 ## 4. Kde to je v kódu
 
-| Soubor                                         | Co řeší                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------ |
-| `src/lib/page-url.ts`                          | pravidlo pro skládání adres (`buildPageUrl`)                       |
-| `src/lib/page-hierarchy.ts`                    | drobečky z hierarchie, JSON-LD, `menuOwnerCategories`              |
-| `src/lib/page-ancestors.ts`                    | předci z adresy — menu kontext a pojistka drobečků                 |
-| `src/payload.config.ts`                        | zapojení pluginu nested-docs (`generateURL`)                       |
-| `src/collections/Pages.ts`                     | pole `parent`, `fullSlug`, `includeInChildUrlPaths`, `breadcrumbs` |
-| `src/components/layout/page/page.tsx`          | drobečky a kontext menu pro stránky                                |
-| `src/components/layout/article/article.tsx`    | drobečky a kontext menu pro články                                 |
-| `src/components/layout/page/hero-section.tsx`  | vykreslení drobečků                                                |
-| `src/components/layout/page/subnavigation.tsx` | vykreslení sekundárního menu                                       |
-| `src/lib/page-title.ts`                        | skládání titulků podstránek z pádů kontextového místa              |
+| Soubor                                         | Co řeší                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| `src/lib/page-url.ts`                          | pravidlo pro skládání adres (`buildPageUrl`)                        |
+| `src/lib/page-hierarchy.ts`                    | drobečky z hierarchie, JSON-LD, `menuOwnerCategories`               |
+| `src/lib/page-ancestors.ts`                    | předci z adresy — menu kontext a pojistka drobečků                  |
+| `src/payload.config.ts`                        | zapojení pluginu nested-docs (`generateURL`)                        |
+| `src/collections/Pages.ts`                     | pole `parent`, `fullSlug`, `includeInChildUrlPaths`, `breadcrumbs`  |
+| `src/components/layout/page/page.tsx`          | drobečky a kontext menu pro stránky                                 |
+| `src/components/layout/article/article.tsx`    | drobečky a kontext menu pro články                                  |
+| `src/components/layout/page/hero-section.tsx`  | vykreslení drobečků                                                 |
+| `src/components/layout/page/subnavigation.tsx` | vykreslení sekundárního menu                                        |
+| `src/components/layout/page/subnav-reveal.tsx` | lepení menu k hornímu okraji a schování/ukázání podle směru scrollu |
+| `src/lib/page-title.ts`                        | skládání titulků podstránek z pádů kontextového místa               |
 
 ## 5. Známé odchylky od starého webu
 

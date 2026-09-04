@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { PageChild, PageCategory } from '@/types/payload'
 import { SubnavScroller } from '@/components/layout/page/subnav-scroller'
+import { SubnavReveal } from '@/components/layout/page/subnav-reveal'
 
 const hiddenCategories: string[] = [PageCategory.Misto_k_navstiveni, PageCategory.Turisticky_cil]
 
@@ -88,82 +89,84 @@ export const Subnavigation = ({
     .map(({ child }) => child)
 
   return (
-    <nav aria-label="Sekundární navigace" className="bg-white relative z-30">
-      {/* Oddělovací linka jen do šířky obsahu (parita se starým webem), ne přes
+    <SubnavReveal>
+      <nav aria-label="Sekundární navigace" className="bg-white">
+        {/* Oddělovací linka jen do šířky obsahu (parita se starým webem), ne přes
           celý viewport — proto border na vnitřním kontejneru, ne na <nav>. */}
-      <SubnavScroller className="max-w-7xl mx-auto border-b border-gray-100 overflow-x-auto whitespace-nowrap subnav-scroll">
-        {/* w-max + mx-auto místo justify-center: vycentruje, jen když se záložky
+        <SubnavScroller className="max-w-7xl mx-auto border-b border-gray-100 overflow-x-auto whitespace-nowrap subnav-scroll">
+          {/* w-max + mx-auto místo justify-center: vycentruje, jen když se záložky
             vejdou. justify-center + overflow by levý kraj ořízl NEDOSAŽITELNĚ
             (scroll začíná na nule) — na mobilu tak mizely první položky. */}
-        <div className="flex w-max mx-auto gap-0 text-xs md:text-base font-semibold font-heading px-4 md:px-12">
-          {/* Context page (the Place that owns this menu) */}
-          <Link
-            href={contextFullSlug}
-            aria-current={isContextActive ? 'page' : undefined}
-            className={itemClass(isContextActive)}
-          >
-            {contextTitle}
-          </Link>
+          <div className="flex w-max mx-auto gap-0 text-xs md:text-base font-semibold font-heading px-4 md:px-12">
+            {/* Context page (the Place that owns this menu) */}
+            <Link
+              href={contextFullSlug}
+              aria-current={isContextActive ? 'page' : undefined}
+              className={itemClass(isContextActive)}
+            >
+              {contextTitle}
+            </Link>
 
-          {/* Anchor to the context place's "Co vidět" section (on the context page). */}
-          {hasPlaces &&
-            (isContextActive ? (
-              <a
-                href="#mista"
-                aria-current={activeSection === 'mista' ? true : undefined}
-                className={itemClass(activeSection === 'mista')}
-              >
-                Místa
-              </a>
-            ) : (
-              <Link
-                href={sectionHref('mista')}
-                aria-current={activeSection === 'mista' ? true : undefined}
-                className={itemClass(activeSection === 'mista')}
-              >
-                Místa
-              </Link>
-            ))}
+            {/* Anchor to the context place's "Co vidět" section (on the context page). */}
+            {hasPlaces &&
+              (isContextActive ? (
+                <a
+                  href="#mista"
+                  aria-current={activeSection === 'mista' ? true : undefined}
+                  className={itemClass(activeSection === 'mista')}
+                >
+                  Místa
+                </a>
+              ) : (
+                <Link
+                  href={sectionHref('mista')}
+                  aria-current={activeSection === 'mista' ? true : undefined}
+                  className={itemClass(activeSection === 'mista')}
+                >
+                  Místa
+                </Link>
+              ))}
 
-          {/* Menu items from the context page's children */}
-          {sortedChildren.map((pageChild) => {
-            const isActive =
-              currentPageFullSlug === pageChild.fullSlug ||
-              currentPageFullSlug.startsWith(pageChild.fullSlug + '/')
-            return (
-              <Link
-                key={pageChild.id}
-                href={pageChild.fullSlug}
-                aria-current={isActive ? 'page' : undefined}
-                className={itemClass(isActive)}
-              >
-                {pageChild.title}
-              </Link>
-            )
-          })}
+            {/* Menu items from the context page's children */}
+            {sortedChildren.map((pageChild) => {
+              const isActive =
+                currentPageFullSlug === pageChild.fullSlug ||
+                currentPageFullSlug.startsWith(pageChild.fullSlug + '/')
+              return (
+                <Link
+                  key={pageChild.id}
+                  href={pageChild.fullSlug}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={itemClass(isActive)}
+                >
+                  {pageChild.title}
+                </Link>
+              )
+            })}
 
-          {/* Anchor to the context place's "Články a cestopisy" section — always last,
+            {/* Anchor to the context place's "Články a cestopisy" section — always last,
               only if the context place has articles. */}
-          {hasArticles &&
-            (isContextActive ? (
-              <a
-                href="#clanky"
-                aria-current={activeSection === 'clanky' ? true : undefined}
-                className={itemClass(activeSection === 'clanky')}
-              >
-                Články
-              </a>
-            ) : (
-              <Link
-                href={sectionHref('clanky')}
-                aria-current={activeSection === 'clanky' ? true : undefined}
-                className={itemClass(activeSection === 'clanky')}
-              >
-                Články
-              </Link>
-            ))}
-        </div>
-      </SubnavScroller>
-    </nav>
+            {hasArticles &&
+              (isContextActive ? (
+                <a
+                  href="#clanky"
+                  aria-current={activeSection === 'clanky' ? true : undefined}
+                  className={itemClass(activeSection === 'clanky')}
+                >
+                  Články
+                </a>
+              ) : (
+                <Link
+                  href={sectionHref('clanky')}
+                  aria-current={activeSection === 'clanky' ? true : undefined}
+                  className={itemClass(activeSection === 'clanky')}
+                >
+                  Články
+                </Link>
+              ))}
+          </div>
+        </SubnavScroller>
+      </nav>
+    </SubnavReveal>
   )
 }

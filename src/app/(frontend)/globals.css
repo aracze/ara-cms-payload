@@ -10,9 +10,22 @@
   --font-poppins: var(--font-poppins);
 }
 
+/* Přilepený panel 20 px pod horní hranou, který uhne pod přilepené sekundární
+   menu (obsah stránky, mapa, reklama). Proměnnou `--subnav-offset` řídí
+   SubnavReveal — bez lišty je 0 a chová se jako `top-5`. Bez animace: `top`
+   u sticky prvku se animuje přes layout (mapa, reklama, obsah by se 300 ms
+   přepočítávaly) a u obsahu stránky by se navíc rozešel s `max-h`. */
+@utility top-pod-listou {
+  top: calc(var(--subnav-offset, 0px) + 1.25rem);
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Cíl kotvy (#mista, nadpisy z obsahu) nesmí zajet pod přilepené
+       sekundární menu — proměnnou nastavuje SubnavReveal jen ve chvíli,
+       kdy je lišta přilepená a vidět. */
+    scroll-padding-top: var(--subnav-offset, 0px);
     /* Vodorovné přetečení nesmí rozjet stránku do strany — full-bleed pruhy
        (w-screen, „Co je nového") a dekorace přesahující okraj. `clip` na
        rozdíl od `hidden` neomezí sticky pozicování. */

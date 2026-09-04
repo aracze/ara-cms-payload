@@ -252,6 +252,14 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         // (Google to řešil autopanem; tohle je klidnější). Offsety posouvají
         // kartičku mimo pin (44 px, ukotvený dolním středem) pro každou stranu.
         const popup = new maplibregl.Popup({
+          // MapLibre jinak po otevření přesune fokus na první odkaz v kartičce.
+          // Kartička se otevírá i pouhým najetím myší na řádek výpisu — fokus
+          // by pak stránku posunul za kartičkou (mapa pod okrajem okna, nebo
+          // přilepená nad výpisem u posledních položek), řádek pod kurzorem
+          // by se vyměnil a stránka by skákala nahoru a dolů. Najetí myší
+          // nesmí hýbat fokusem ani stránkou; po kliku či klávese na pin fokus
+          // do kartičky přesouvá `openPopup` samo (viz `focus`).
+          focusAfterOpen: false,
           offset: {
             center: [0, 0],
             bottom: [0, -(MARKER_SIZE + 6)],
@@ -274,13 +282,22 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         // výřez mapu přisune do středu; pin u okraje řeší automatická kotva
         // kartičky a zbylý drobný přesah dorovná panBy o změřený rozdíl —
         // dohromady stejné chování jako autopan Google InfoWindow.
-        const openPopup = (m: MapMarker) => {
+        // `focus`: po výslovné akci (klik, Enter/mezerník na pinu) přejde fokus
+        // na první odkaz v kartičce, ať se klávesnicí dá pokračovat dovnitř;
+        // při otevření z hoveru fokus zůstává, kde byl.
+        const openPopup = (m: MapMarker, { focus = false }: { focus?: boolean } = {}) => {
           const outOfView = !map.getBounds().contains([m.lng, m.lat])
           if (outOfView) map.easeTo({ center: [m.lng, m.lat], duration: snizitPohyb ? 0 : 350 })
           popup
             .setLngLat([m.lng, m.lat])
             .setHTML(DOMPurify.sanitize(buildInfoWindowContent(m)))
             .addTo(map)
+          if (focus) {
+            popup
+              .getElement()
+              ?.querySelector<HTMLElement>('a[href], button, [tabindex]:not([tabindex="-1"])')
+              ?.focus()
+          }
           if (outOfView) return // po vycentrování se kartička vejde vždy
           requestAnimationFrame(() => {
             if (cancelled || !mapInstanceRef.current) return
@@ -310,7 +327,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           el.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              openPopup(m)
+              openPopup(m, { focus: true })
             }
           })
           // Stejná hygiena URL jako u kartičky: do <img src> jen ověřená
@@ -335,7 +352,7 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
           }
           el.addEventListener('click', (e) => {
             e.stopPropagation()
-            openPopup(m)
+            openPopup(m, { focus: true })
           })
 
           new maplibregl.Marker({ element: el, anchor: 'bottom' })

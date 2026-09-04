@@ -107,7 +107,7 @@ export function TocSidebar({
   return (
     <div
       ref={containerRef}
-      className="hidden lg:block sticky top-5 max-h-[calc(100vh-40px)] overflow-y-auto overscroll-contain pr-2"
+      className="hidden lg:block sticky top-pod-listou max-h-[calc(100vh-40px-var(--subnav-offset,0px))] overflow-y-auto overscroll-contain pr-2"
     >
       {items.length > 0 && (
         <nav aria-label="Obsah stránky">

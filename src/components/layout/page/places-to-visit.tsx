@@ -152,7 +152,7 @@ export const PlacesToVisit: React.FC<PlacesToVisitProps> = ({
           {/* Map */}
           {hasMap && (
             <div className="w-full lg:w-[44%]">
-              <div className="lg:sticky lg:top-5">
+              <div className="lg:sticky lg:top-pod-listou">
                 <MapLibreMap
                   markers={markers}
                   centerLat={mapCenter.lat}

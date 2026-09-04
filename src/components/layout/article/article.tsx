@@ -219,10 +219,10 @@ export const Article: React.FC<ArticleProps> = async ({ article, contextSlug }) 
           <aside className="hidden lg:flex flex-col w-[340px] shrink-0">
             {/* AdSense loader — rendered once, shared by both ad boxes below. */}
             <div className="flex-1">
-              <ArticleAd variant="primary" className="sticky top-5" />
+              <ArticleAd variant="primary" className="sticky top-pod-listou" />
             </div>
             <div className="flex-1">
-              <ArticleAd variant="secondary" className="sticky top-5 mt-10" />
+              <ArticleAd variant="secondary" className="sticky top-pod-listou mt-10" />
             </div>
           </aside>
         </div>
