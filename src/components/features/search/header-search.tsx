@@ -6,6 +6,7 @@ import { ResultList } from './resultlist/resultlist'
 import { SearchStatus } from './search-status'
 import { useSearch } from './use-search'
 import { SearchGraphic } from './search-graphic'
+import { HEADER_CONTAINER_CLASS } from '@/components/layout/header/container'
 
 export function HeaderSearch() {
   const { query, setQuery, results, clearSearch, isLoading, hasError } = useSearch()
@@ -75,8 +76,10 @@ export function HeaderSearch() {
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClear} />
             <div className="relative bg-white shadow-2xl animate-in slide-in-from-top-4 duration-300">
               {/* h-[65px] = přesná výška hlavičky — panel ji při otevření nahradí
-                  bez poskočení (hlavička má h-[65px] v header.tsx). */}
-              <div className="max-w-7xl mx-auto px-4 md:px-12 h-[65px] flex items-center gap-4">
+                  bez poskočení (hlavička má h-[65px] v header.tsx). Stejně tak
+                  odsazení: HEADER_CONTAINER_CLASS drží lištu i výsledky
+                  zarovnané s hlavičkou i v tabletovém pásmu (1024–1279 px). */}
+              <div className={`${HEADER_CONTAINER_CLASS} h-[65px] flex items-center gap-4`}>
                 {/* Lupa se během hledání točí — signál „pracuju" přímo v poli. */}
                 {isLoading ? (
                   <Loader2
@@ -121,7 +124,7 @@ export function HeaderSearch() {
                   {/* Staré výsledky při načítání nového dotazu zůstávají, jen
                       ztlumené (stale-while-revalidate) — výpis nepoblikává. */}
                   <div
-                    className={`max-w-7xl mx-auto px-4 md:px-12 pb-8 transition-opacity duration-200 ${
+                    className={`${HEADER_CONTAINER_CLASS} pb-8 transition-opacity duration-200 ${
                       isLoading && results.length > 0 ? 'opacity-50' : ''
                     }`}
                   >
