@@ -14,6 +14,7 @@ import {
   fetchHomepageInspiration,
   fetchHomepageHeroPlace,
   fetchTopAffiliateDeals,
+  fetchPopularDestinations,
 } from '@/lib/payload'
 import { toMediaProxy } from '@/lib/cloudinary-loader'
 
@@ -26,11 +27,12 @@ const HOMEPAGE_HERO_IMAGE_FALLBACK = toMediaProxy(
 
 export const Homepage = async ({ homepage }: { homepage?: HomepageType | null }) => {
   // Všechny nezávisle — pomalejší nesmí blokovat začátek ostatních.
-  const [activity, inspiration, heroPlace, topDeals] = await Promise.all([
+  const [activity, inspiration, heroPlace, topDeals, popularDestinations] = await Promise.all([
     fetchLatestActivity(),
     fetchHomepageInspiration(),
     fetchHomepageHeroPlace(),
     fetchTopAffiliateDeals(),
+    fetchPopularDestinations(),
   ])
 
   return (
@@ -56,6 +58,7 @@ export const Homepage = async ({ homepage }: { homepage?: HomepageType | null })
           // „Najdi si svůj cíl" zůstává jako nápověda v poli hledání.
           title={'Ara.cz – cestovní průvodce po světě'}
           placeholderExample={heroPlace?.title ?? null}
+          popularDestinations={popularDestinations}
         />
       </section>
 

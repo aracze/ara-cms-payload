@@ -21,6 +21,9 @@ import type {
 // → ERR_MODULE_NOT_FOUND. `next/cache.js` je fyzický soubor, který se resolvne
 // nativně i přes bundler. Líné načtení navíc znamená, že mimo Next runtime
 // (payload CLI, skripty jako generate:types) se `next/cache` vůbec nesáhne.
+/** Cache tag „Oblíbené" na homepage — invaliduje ho noční sync návštěvnosti (syncAnalytics.ts). */
+export const HOMEPAGE_POPULAR_DESTINATIONS_TAG = 'homepage-popular-destinations'
+
 export const safeRevalidate = async (tags: string[]) => {
   try {
     const { revalidateTag } = await import('next/cache.js')

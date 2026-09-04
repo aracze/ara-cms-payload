@@ -1,22 +1,19 @@
 import Link from 'next/link'
 import Search from '@/components/features/search/search'
-
-// Ručně vybrané top destinace pod vyhledáváním („Oblíbené:").
-const POPULAR_DESTINATIONS = [
-  { title: 'Chorvatsko', href: '/chorvatsko' },
-  { title: 'Itálie', href: '/italie' },
-  { title: 'Řecko', href: '/recko' },
-  { title: 'USA', href: '/usa' },
-]
+import type { PopularDestination } from '@/types/payload'
 
 export const StaticHeroTitle = ({
   title,
   placeholderExample,
+  popularDestinations,
 }: {
   title: string
   /** Název denně vylosovaného místa z hero fotky — nápověda v poli hledání
    *  („Najdi si svůj cíl — třeba X…"). Bez místa se použije statický fallback. */
   placeholderExample?: string | null
+  /** Země pod vyhledáváním („Oblíbené:") — nejnavštěvovanější za posledních
+   *  30 dní z Google Analytics (fetchPopularDestinations), ne ruční výběr. */
+  popularDestinations: PopularDestination[]
 }) => {
   return (
     <div className="relative z-[101] h-full flex flex-col items-center justify-center px-4">
@@ -41,7 +38,7 @@ export const StaticHeroTitle = ({
 
         <div className="relative mt-4 flex flex-wrap items-center justify-center gap-2">
           <span className="text-[13px] font-medium text-white/85">Oblíbené:</span>
-          {POPULAR_DESTINATIONS.map((destination) => (
+          {popularDestinations.map((destination) => (
             <Link
               key={destination.href}
               href={destination.href}

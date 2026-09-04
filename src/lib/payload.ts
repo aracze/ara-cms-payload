@@ -25,6 +25,7 @@ import {
   TeamMemberPublic,
   ContributorFace,
   HomepageTourDeal,
+  PopularDestination,
 } from '@/types/payload'
 import { CONTRIBUTOR_FACES_LIMIT, NON_PERSON_USERNAMES, TEAM_USERNAMES } from './team'
 import { practicalInfoSectionCategories } from './practical-info'
@@ -33,7 +34,9 @@ import { cache } from 'react'
 import type { Payload } from 'payload'
 import type { PostgresAdapter } from '@payloadcms/db-postgres'
 import { and, asc, count, eq, isNotNull } from '@payloadcms/db-postgres/drizzle'
+import { sql } from '@payloadcms/db-postgres'
 import { getDb } from './db'
+import { HOMEPAGE_POPULAR_DESTINATIONS_TAG } from '@/hooks/revalidation'
 import { resolveSeoDescription } from '@/lib/seo'
 import {
   getArticleImageUrl,
@@ -3643,5 +3646,133 @@ export const fetchHomepageHeroPlace = async (): Promise<HomepageHeroPlace | null
     // Homepage nesmí spadnout kvůli hero fotce — zavolající má statický fallback.
     console.error('[hero-place] load failed:', err)
     return null
+  }
+}
+
+// Záložní čtveřice („Oblíbené:" pod vyhledáváním) — dřívější ruční výběr.
+// Použije se jen když sync návštěvnosti ještě nikdy neběžel (prázdné sloupce)
+// nebo dotaz selže; web nikdy nezůstane bez bublinek.
+const POPULAR_DESTINATIONS_FALLBACK: PopularDestination[] = [
+  { title: 'Chorvatsko', href: '/chorvatsko' },
+  { title: 'Itálie', href: '/italie' },
+  { title: 'Řecko', href: '/recko' },
+  { title: 'USA', href: '/usa' },
+]
+
+const POPULAR_DESTINATIONS_COUNT = 4
+
+type PopularDestinationRow = {
+  title: string
+  full_slug: string
+  views_30: number
+  views_365: number
+}
+
+/**
+ * Nejnavštěvovanější země pro „Oblíbené:" na homepage — ZÁMĚRNĚ přímý SQL
+ * (rekurzivní CTE) přes drizzle: sčítá zobrazení z GA4 za CELÝ podstrom země
+ * (podstránky Počasí/Doprava…, města, cíle), protože samotná stránka země má
+ * zlomek návštěv proti svým městům (Řecko 31 vs. Rhodos+Kréta+… tisíce).
+ * Local API takový součet neumí a potřebujeme jen název a cestu. Sčítají se
+ * i nepublikované potomci — zobrazení je zobrazení; publikovaná musí být země.
+ *
+ * Země = publikované „Místo k navštívení" přímo pod kontinentem (kořenová
+ * stránka téže kategorie). Strom se jde po `parent`, ne prefixem fullSlug —
+ * místo se může z URL potomků vynechat (includeInChildUrlPaths). Limit hloubky
+ * (sdílený s „Co vidět") chrání před zacyklením, kdyby v adminu vznikl kruh.
+ *
+ * VÝBĚR čtveřice řídí 30denní okno (sezónnost: v létě Chorvatsko, v zimě
+ * Thajsko), POŘADÍ bublinek 12měsíční součet — složení se mění se sezónou,
+ * ale nepřehazuje se každý den podle denního šumu mezi 3. a 4. místem.
+ * Dokud 30denní sloupec není naplněný (sync po nasazení ještě neběžel),
+ * vybírá se podle 12 měsíců. Země BEZ návštěv se nikdy nedoplňují (byly by
+ * podle abecedy); chybějící místa dorovná záložní ruční čtveřice.
+ * Práva se neobcházejí: filtr `_status = published` odpovídá anonymnímu
+ * pravidlu čtení stránek; zobrazují se jen název a cesta země.
+ */
+async function fetchPopularDestinationsUncached(): Promise<PopularDestination[]> {
+  const payload = await getDb()
+  const db = payload.db as unknown as PostgresAdapter
+  // Sloupce jsou v SQL jako řetězce (rekurzi drizzle builder neumí); názvy
+  // odpovídají Payload konvenci snake_case (`analyticsPageViews30d` →
+  // `analytics_page_views30d`, BEZ podtržítka před 30d — ověřeno v DB).
+  const result = (await db.drizzle.execute(sql`
+    WITH RECURSIVE tree AS (
+      SELECT
+        c.id AS country_id, c.title, c.full_slug, c.id AS page_id,
+        c.analytics_page_views30d AS views_30, c.analytics_page_views AS views_365,
+        0 AS depth
+      FROM pages AS c
+      JOIN pages AS continent ON continent.id = c.parent_id
+      WHERE continent.parent_id IS NULL
+        AND continent.category = ${PageCategory.Misto_k_navstiveni}
+        AND c.category = ${PageCategory.Misto_k_navstiveni}
+        AND c._status = 'published'
+        AND c.full_slug IS NOT NULL
+      UNION ALL
+      SELECT
+        t.country_id, t.title, t.full_slug, p.id,
+        p.analytics_page_views30d, p.analytics_page_views,
+        t.depth + 1
+      FROM tree AS t
+      JOIN pages AS p ON p.parent_id = t.page_id
+      WHERE t.depth < ${MAX_PLACES_TO_VISIT_DEPTH}
+    )
+    SELECT
+      title,
+      full_slug,
+      sum(coalesce(views_30, 0))::int AS views_30,
+      sum(coalesce(views_365, 0))::int AS views_365
+    FROM tree
+    GROUP BY country_id, title, full_slug
+  `)) as { rows: PopularDestinationRow[] }
+
+  const rows = result.rows
+  const selectBy: 'views_30' | 'views_365' = rows.some((r) => r.views_30 > 0)
+    ? 'views_30'
+    : 'views_365'
+  const byTitle = (a: PopularDestinationRow, b: PopularDestinationRow) =>
+    a.title.localeCompare(b.title, 'cs')
+  const top = rows
+    .filter((r) => r[selectBy] > 0)
+    .sort((a, b) => b[selectBy] - a[selectBy] || byTitle(a, b))
+    .slice(0, POPULAR_DESTINATIONS_COUNT)
+    .sort((a, b) => b.views_365 - a.views_365 || byTitle(a, b))
+
+  // fullSlug není unikátní sloupec — dvě země se stejnou cestou by daly dvě
+  // stejné bublinky (a duplicitní React key); dorovnání ze zálohy bez duplicit.
+  const picked: PopularDestination[] = []
+  const seen = new Set<string>()
+  const add = (d: PopularDestination) => {
+    if (picked.length >= POPULAR_DESTINATIONS_COUNT || seen.has(d.href)) return
+    seen.add(d.href)
+    picked.push(d)
+  }
+  for (const r of top) add({ title: r.title, href: r.full_slug })
+  const fromData = picked.length
+  for (const d of POPULAR_DESTINATIONS_FALLBACK) add(d)
+  if (fromData < POPULAR_DESTINATIONS_COUNT) {
+    console.info(`[popular-destinations] z dat jen ${fromData}, doplněno ze záložní čtveřice`)
+  }
+  return picked
+}
+
+// Čísla mění jen noční sync (přímé SQL mimo hooky), který tag
+// HOMEPAGE_POPULAR_DESTINATIONS_TAG invaliduje sám; `pages` pokrývá publikaci,
+// přejmenování či přesun země v adminu (má se projevit hned, ne až za 5 min).
+const fetchPopularDestinationsCached = cached(
+  fetchPopularDestinationsUncached,
+  HOMEPAGE_POPULAR_DESTINATIONS_TAG,
+  () => [HOMEPAGE_POPULAR_DESTINATIONS_TAG, 'pages'],
+)
+
+/** Země pod vyhledáváním na homepage („Oblíbené:") — viz fetchPopularDestinationsUncached. */
+export const fetchPopularDestinations = async (): Promise<PopularDestination[]> => {
+  try {
+    return await fetchPopularDestinationsCached()
+  } catch (err) {
+    // Homepage nesmí spadnout kvůli bublinkám — ruční čtveřice jako záloha.
+    console.error('[popular-destinations] load failed:', err)
+    return POPULAR_DESTINATIONS_FALLBACK
   }
 }

@@ -336,6 +336,21 @@ export const Pages: CollectionConfig = {
       },
     },
     {
+      name: 'analyticsPageViews30d',
+      label: 'Zobrazení za 30 dní (GA4)',
+      type: 'number',
+      admin: {
+        position: 'sidebar',
+        readOnly: true,
+        description:
+          'Zobrazení TÉTO stránky za posledních 30 dní z Google Analytics — aktualizuje se automaticky jednou denně, needituj ručně. „Oblíbené" pod vyhledáváním na úvodní stránce sčítají tato čísla za celou zemi včetně podstránek a měst.',
+      },
+      // Stejná ochrana proti přepsání přes API jako u analyticsPageViews výše.
+      access: {
+        update: ({ req: { user } }) => Boolean(user?.roles?.includes('admin')),
+      },
+    },
+    {
       name: 'createdBy',
       label: 'Autor',
       type: 'relationship',
