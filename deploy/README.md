@@ -270,10 +270,27 @@ Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
   když to jde;
 - výstup `curl`u jde do `/tmp`, ne do `$LOG` — přesměrování do nedostupného
   adresáře by selhalo a curl by se vůbec nespustil;
-- čekání na databázi má **dva** limity a oba jsou potřeba: `timeout 10` na jeden
-  pokus (samotné `docker exec` se umí zaseknout na nereagujícím démonu) a k tomu
-  celkový limit podle hodin (`READINESS_TIMEOUT`, výchozí 120 s). Jen ten první
+- čekání na databázi má **dva** limity a oba jsou potřeba: `timeout
+--kill-after=5s 10s` na jeden pokus (`docker exec` se umí zaseknout na
+  nereagujícím démonu; `--kill-after` řeší proces, který ignoruje `SIGTERM`)
+  a k tomu celkový limit `READINESS_TIMEOUT` (výchozí 120 s). Jen ten první
   nestačí — n pokusů × timeout by se sečetlo do násobku inzerovaného limitu.
+  Celkový limit se měří **monotonním časem z `/proc/uptime`**, ne přes
+  `date +%s`: krok NTP krátce po startu serveru (přesně scénář
+  `Persistent=true`) by nástěnný deadline přeskočil a záloha by ten den
+  neproběhla kvůli planému poplachu;
+- **dvě zálohy nemohou běžet zároveň** — `flock -n` na `/run/aracze-backup.lock`;
+  druhý běh skončí bez chyby s poznámkou v logu. Jméno dumpu se navíc zabírá
+  atomicky (`set -o noclobber`, tedy `O_EXCL`), takže mezi „existuje?" a
+  „zabírám" se nevejde druhý běh;
+- retence ani rotace logu **nemohou shodit už hotovou zálohu**: v retenci není
+  `| tee -a "$LOG"` (s `pipefail` by neúspěšný zápis do logu shodil krok po
+  nahrání dumpu a přeskočil retenci na R2), rotace se dělá v `if` (jako první
+  člen `&&` listu `tail` nespustí ani `set -e`, ani ERR trap, a jako poslední
+  příkaz skriptu by hotovou zálohu ukončil nenulovým kódem bez hlášení)
+  a skript končí explicitním `exit 0`;
+- log se zkracuje podle **bajtů** (~1 MB), ne řádků — jediný dlouhý řádek by
+  ho jinak držel nad limitem navždy a rotace by běžela naprázdno;
 
 Zaseknutí v `pg_dump` nebo při nahrávání na R2 řeší `TimeoutStartSec=30min`
 ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-mailem.

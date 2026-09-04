@@ -26,12 +26,16 @@ KEEP_DAILY=30d
 KEEP_MONTHLY=400d
 MIN_SIZE_BYTES=$((1024 * 1024)) # dump menší než 1 MB = něco se pokazilo
 READINESS_TIMEOUT="${READINESS_TIMEOUT:-120}" # kolik s celkem čekat na databázi
+LOCKFILE="${LOCKFILE:-/run/aracze-backup.lock}"
 LOG="$BACKUP_DIR/zaloha.log"
 DRY_RUN="${DRY_RUN:-}"
 
 # Hlášení jde VŽDY na stdout (pod systemd ho sbírá journal) a do souboru jen
 # když to jde. Původní `| tee -a "$LOG"` by na nezapisovatelném adresáři vrátil
 # nenulový kód, spustil ERR trap a hlášení o chybě by se tím samo utnulo.
+# Monotonní sekundy (viz čekání na databázi níže) — `date +%s` skáče s NTP.
+uptime_s() { awk '{print int($1)}' /proc/uptime; }
+
 log() {
   local msg
   msg="$(date -u '+%Y-%m-%d %H:%M:%S UTC')  $*"
@@ -123,6 +127,14 @@ umask 077
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
+# Dvě zálohy zároveň nechceme: zdvojily by zátěž databáze a sahaly by si na
+# tytéž soubory. Zámek je v `/run`, aby nezávisel na `$BACKUP_DIR`.
+exec 9> "$LOCKFILE"
+if ! flock -n 9; then
+  log "jiná záloha už běží ($LOCKFILE) — končím bez chyby"
+  exit 0
+fi
+
 # Sekundy jsou tu podstatné: se značkou na minuty dostanou dva běhy v téže
 # minutě stejné jméno souboru (viz `dump_owned` u cleanup_partial).
 stamp=$(date -u +%Y%m%d-%H%M%S)
@@ -137,24 +149,37 @@ log "== start zálohy =="
 # Limit se drží podle HODIN, ne podle počtu pokusů. `timeout` na jeden pokus je
 # nutný, protože `docker exec` se umí zaseknout (nereagující démon) — ale sám
 # nestačí: n pokusů × timeout by se sečetlo do násobku inzerovaného limitu.
-readiness_start=$(date +%s)
+# Čas se bere z `/proc/uptime`, protože je MONOTONNÍ. `date +%s` je nástěnný
+# čas a krok NTP krátce po startu serveru — přesně scénář, na který tohle
+# čekání je (`Persistent=true`) — by deadline přeskočil: první neúspěšný
+# pokus by po dvou sekundách ohlásil „nenaběhla ani po 120 s", poslal planý
+# poplach a záloha by ten den neproběhla.
+readiness_start=$(uptime_s)
 readiness_deadline=$((readiness_start + READINESS_TIMEOUT))
 while true; do
-  if timeout 10 docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
-    waited=$(($(date +%s) - readiness_start))
+  # `--kill-after`: kdyby `docker exec` ignoroval SIGTERM, samotný `timeout`
+  # by na něj čekal dál. Takhle dostane po dalších 5 s SIGKILL.
+  if timeout --kill-after=5s 10s docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
+    waited=$(($(uptime_s) - readiness_start))
     [ "$waited" -gt 0 ] && log "databáze připravená po $waited s"
     break
   fi
-  [ "$(date +%s)" -lt "$readiness_deadline" ] \
+  [ "$(uptime_s)" -lt "$readiness_deadline" ] \
     || fail "databáze v kontejneru $CONTAINER nenaběhla ani po $READINESS_TIMEOUT s"
   sleep 2
 done
 
 # 1) Dump. `< /dev/null` je pojistka, aby si docker exec nebral stdin skriptu.
 #
-# Kontrola existence je PŘED `dump_owned=1`, aby `fail` (a tím `cleanup_partial`)
+# Jméno se zabírá ATOMICKY: `noclobber` dělá z `>` otevření s O_EXCL, takže
+# „zkontroluj, jestli existuje" a „zaber" nejsou dva kroky, mezi které se vejde
+# druhý běh. Zabrání je PŘED `dump_owned=1`, aby `fail` (a tím `cleanup_partial`)
 # cizí soubor nesmazal.
-[ -e "$dump" ] && fail "soubor $dump už existuje — neběží druhá záloha zároveň?"
+set -o noclobber
+if ! : > "$dump"; then
+  fail "soubor $dump už existuje — neběží druhá záloha zároveň?"
+fi
+set +o noclobber
 dump_owned=1
 docker exec "$CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$dump" < /dev/null
 size=$(stat -c %s "$dump")
@@ -204,8 +229,13 @@ fi
 
 # 4) Retence. Lokálně mažeme jen naše `aracze-*.dump` — ruční zálohy
 #    s jiným jménem zůstávají ležet.
-find "$BACKUP_DIR" -maxdepth 1 -name 'aracze-*.dump' -mtime "+$KEEP_LOCAL_DAYS" -print -delete \
-  | sed 's/^/  smazáno lokálně: /' | tee -a "$LOG"
+# Žádné `| tee -a "$LOG"` v rouře: s `pipefail` by neúspěšný zápis do logu
+# shodil celý krok a poslal „ZALOHA SELHALA" po tom, co už je dump nahraný —
+# a přeskočil by i retenci na R2 níž.
+smazano=$(find "$BACKUP_DIR" -maxdepth 1 -name 'aracze-*.dump' -mtime "+$KEEP_LOCAL_DAYS" -print -delete | wc -l)
+if [ "$smazano" -gt 0 ]; then
+  log "lokálně smazáno starých záloh: $smazano"
+fi
 rclone delete "$REMOTE/denni" --min-age "$KEEP_DAILY" "${RCLONE_OPTS[@]}"
 rclone delete "$REMOTE/mesicni" --min-age "$KEEP_MONTHLY" "${RCLONE_OPTS[@]}"
 
@@ -213,7 +243,22 @@ remote_daily=$(rclone size "$REMOTE/denni" --json "${RCLONE_OPTS[@]}" | python3 
 log "stav na R2: denní $remote_daily"
 log "== záloha OK =="
 
-# Log nenecháme růst do nekonečna.
+# Log nenecháme růst do nekonečna. Pozor: `tail` jako PRVNÍ člen `&&` listu
+# nespustí ani `set -e`, ani ERR trap — a protože je tohle poslední příkaz
+# skriptu, skončila by hotová záloha nenulovým kódem bez jediného hlášení.
 if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt $((2 * 1024 * 1024)) ]; then
-  tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  # Zkracuje se podle BAJTŮ, ne řádků: cíl je držet velikost, a jediný dlouhý
+  # řádek (např. obří chybový výstup) by log nad limitem udržel navždy —
+  # rotace by se pak spouštěla při každém běhu naprázdno. První řádek tím může
+  # zůstat rozpůlený, což je u logu přijatelné.
+  if tail -c 1000000 "$LOG" > "$LOG.tmp" 2>/dev/null && mv "$LOG.tmp" "$LOG"; then
+    log "log zkrácen na poslední ~1 MB"
+  else
+    rm -f "$LOG.tmp"
+    log "rotaci logu se nepovedlo dokončit — na výsledek zálohy to nemá vliv"
+  fi
 fi
+
+# Záloha je v tuhle chvíli hotová a ověřená; nic po ní už nesmí změnit
+# návratový kód.
+exit 0
