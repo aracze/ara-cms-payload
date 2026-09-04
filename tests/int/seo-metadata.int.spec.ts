@@ -88,6 +88,13 @@ describe('truncateDescription — zkrácení na hranici slova', () => {
   it('sbalí bílé znaky a nenechá před výpustkou čárku', () => {
     expect(truncateDescription('a,   b\n c', 3)).toBe('a…')
   })
+
+  it('mez platí včetně výpustky a řeže po celých znacích (emoji = jeden znak)', () => {
+    expect(truncateDescription('a'.repeat(200), 160)).toHaveLength(160)
+    const emoji = truncateDescription('😀'.repeat(10), 5)
+    expect(emoji).toBe('😀😀😀😀…')
+    expect(Array.from(emoji)).toHaveLength(5)
+  })
 })
 
 describe('resolveSeoDescription — CMS popisek, jinak začátek textu', () => {

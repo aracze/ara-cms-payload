@@ -41,6 +41,7 @@ import {
   richTextToPlainText,
   stripLeadingContinent,
   articlePath,
+  truncateAtWord,
 } from './utils'
 
 /**
@@ -2973,7 +2974,7 @@ type RawActivityComment = {
 function activityExcerpt(text: string, max = 120): string | null {
   const compact = text.replace(/\s+/g, ' ').trim()
   if (!compact) return null
-  return compact.length > max ? compact.slice(0, max).trimEnd() + '…' : compact
+  return truncateAtWord(compact, max)
 }
 
 async function fetchLatestActivityUncached(): Promise<ActivityItem[]> {

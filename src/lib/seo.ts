@@ -9,7 +9,7 @@
  */
 import type { Metadata } from 'next'
 import { cloudinaryVariant } from '@/lib/cloudinary-loader'
-import { absoluteMediaUrl, getSiteURL, richTextToPlainText } from '@/lib/utils'
+import { absoluteMediaUrl, getSiteURL, richTextToPlainText, truncateAtWord } from '@/lib/utils'
 
 export const SITE_NAME = 'Ara.cz'
 /**
@@ -80,16 +80,9 @@ export function resolveSeoTitle(meta: SeoMeta, fallback: string): string {
   return fallback
 }
 
-/** Zkrátí text na mez pro popisek — na hranici slova, s výpustkou. */
+/** Zkrátí text na mez pro popisek (včetně výpustky) — na hranici slova. */
 export function truncateDescription(text: string, max = DESCRIPTION_MAX): string {
-  const compact = text.replace(/\s+/g, ' ').trim()
-  if (compact.length <= max) return compact
-  const cut = compact.slice(0, max - 1)
-  const lastSpace = cut.lastIndexOf(' ')
-  // Useknutí uprostřed slova jen když by hranice slova zahodila přes 40 % textu
-  // (extrémně dlouhé „slovo", typicky URL).
-  const base = lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut
-  return `${base.replace(/[\s,;:(–—-]+$/, '')}…`
+  return truncateAtWord(text, max)
 }
 
 /**

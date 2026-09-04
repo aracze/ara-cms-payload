@@ -4,6 +4,9 @@
 -- (nominativ, přitom místo má vyplněný 6. pád, který se liší). Web pak použije šablonu
 -- ze `src/lib/seo-templates.ts`. Místa a správně skloněné titulky se nemění.
 -- Idempotentní; původní hodnoty ukládá do zaloha.pages_meta_title_2026_09_04.
+-- Běží proti živému CMS: řádky cílů drží FOR UPDATE po celou transakci a maže se jen
+-- hodnota, která byla klasifikovaná (souběžná editace v adminu se nepřepíše); z verzí jen
+-- poslední PUBLIKOVANÁ (rozpracovaný draft editora zůstává, historie taky).
 -- Spuštění (dev):  docker compose exec -T postgres psql -U postgres -d aracze < scripts/seo-legacy-titles-targets.sql
 -- Prod: stejně proti produkční DB (služba `postgres`), potom `docker compose up -d --force-recreate cms` (cache).
 BEGIN;
@@ -20,16 +23,22 @@ WITH RECURSIVE up AS (
 SELECT DISTINCT ON (root) root, title place_title, COALESCE(detail_locative, '') place_loc
 FROM up WHERE category = 'Místo k navštívení' ORDER BY root, d;
 
+-- `bare` = titulek bez přípony webu (stejná pravidla jako stripSiteSuffix v src/lib/seo.ts:
+-- „• Ara.cz", „| Ara.cz", „- cestovní průvodce Ara.cz", překlep „•vAra.cz"). „Rozbitý"
+-- se pozná až na normalizované hodnotě, aby prošla i varianta s „| Ara.cz".
 CREATE TEMP TABLE l AS
-SELECT p.id, p.meta_title,
-  regexp_replace(regexp_replace(p.meta_title,
-    '(\s*[•|–—-]\s*(cestovní\s+(průvodce|inspirace)\s+)?|\s+cestovní\s+(průvodce|inspirace)\s+|\s*•\s*v)Ara\.cz\s*$', '', 'i'),
-    '[\s:•|–—-]+$', '') bare,
-  t.place_title, t.place_loc,
-  (p.meta_title ~ ': Cestovní průvodce\s*(•\s*Ara\.cz)?\s*$') broken
-FROM pages p LEFT JOIN t ON t.root = p.id
-WHERE p._status = 'published' AND p.category = 'Turistický cíl'
-  AND p.meta_title ~ '(: Cestovní průvodce|: cestovní průvodce| - cestovní průvodce)';
+SELECT s.*, (s.bare ~* ': cestovní průvodce$') broken
+FROM (
+  SELECT p.id, p.meta_title,
+    regexp_replace(regexp_replace(p.meta_title,
+      '(\s*[•|–—-]\s*(cestovní\s+(průvodce|inspirace)\s+)?|\s+cestovní\s+(průvodce|inspirace)\s+|\s*•\s*v)Ara\.cz\s*$', '', 'i'),
+      '[\s:•|–—-]+$', '') bare,
+    t.place_title, t.place_loc
+  FROM pages p LEFT JOIN t ON t.root = p.id
+  WHERE p._status = 'published' AND p.category = 'Turistický cíl'
+    AND p.meta_title ~* '(: cestovní průvodce| - cestovní průvodce)'
+  FOR UPDATE OF p
+) s;
 ALTER TABLE l ADD COLUMN tail text, ADD COLUMN duvod text;
 UPDATE l SET tail = trim(regexp_replace(bare, '^.*Cestovní průvodce\s*', '', 'i'));
 UPDATE l SET duvod = CASE
@@ -45,9 +54,13 @@ CREATE TABLE IF NOT EXISTS zaloha.pages_meta_title_2026_09_04 AS
 INSERT INTO zaloha.pages_meta_title_2026_09_04 (id, meta_title, duvod, zalohovano)
   SELECT id, meta_title, duvod, now() FROM l WHERE duvod IS NOT NULL;
 
-UPDATE pages SET meta_title = NULL WHERE id IN (SELECT id FROM l WHERE duvod IS NOT NULL);
-UPDATE _pages_v SET version_meta_title = NULL
-  WHERE latest AND parent_id IN (SELECT id FROM l WHERE duvod IS NOT NULL);
+-- Maže se jen hodnota, kterou skript klasifikoval (pojistka k zámku výše).
+UPDATE pages p SET meta_title = NULL
+  FROM l WHERE p.id = l.id AND l.duvod IS NOT NULL AND p.meta_title = l.meta_title;
+UPDATE _pages_v v SET version_meta_title = NULL
+  FROM l WHERE v.parent_id = l.id AND l.duvod IS NOT NULL
+    AND v.latest AND v.version__status = 'published'
+    AND v.version_meta_title = l.meta_title;
 
 SELECT duvod, count(*) FROM l WHERE duvod IS NOT NULL GROUP BY duvod ORDER BY duvod;
 COMMIT;

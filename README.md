@@ -528,10 +528,10 @@ v `src/app/(frontend)/[...slug]/page.tsx` a homepage `page.tsx`:
 
 - **Titulek a popisek** berou SEO záložku z CMS (`meta.title`, `meta.description` — u stránek
   a článků migrovaných z Grails vyplněná). Jediná přípona na celém webu je layout šablona
-  `%s | Ara.cz` (krátká schválně — Google ukazuje ~60 znaků, klíčová slova nesou titulky
-  samy; homepage má vlastní absolutní titulek). Legacy přípony (`• Ara.cz`, `- cestovní
-průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřezává
-  `stripSiteSuffix`. Bez SEO titulku se použije šablona kategorie, resp. kontextový titulek
+  `%s • Ara.cz` (krátká schválně — Google ukazuje ~60 znaků, klíčová slova nesou titulky
+  samy; homepage má vlastní absolutní titulek). Legacy přípony (`| Ara.cz`, `- cestovní
+průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) i už vyplněnou
+  `• Ara.cz` odřezává `stripSiteSuffix`, aby se přípona nepřidala dvakrát. Bez SEO titulku se použije šablona kategorie, resp. kontextový titulek
   z `buildPageTitle`. Popisek bez `meta` = šablona kategorie, jinak začátek textu zkrácený na
   hranici slova (`DESCRIPTION_MAX` 160), úplně bez textu výchozí popisek layoutu
   (`DEFAULT_DESCRIPTION`). Pro stránky (Page) to celé počítá `src/lib/page-seo.ts`
