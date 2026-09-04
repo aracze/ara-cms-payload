@@ -13,7 +13,7 @@ import { absoluteMediaUrl, getSiteURL, richTextToPlainText } from '@/lib/utils'
 
 export const SITE_NAME = 'Ara.cz'
 /**
- * Jediná přípona titulků na celém webu (layout šablona `%s | Ara.cz`). Krátká
+ * Jediná přípona titulků na celém webu (layout šablona `%s • Ara.cz`). Krátká
  * schválně: Google ukazuje ~60 znaků a klíčová slova („cestovní průvodce")
  * nesou samy titulky stránek — homepage má vlastní absolutní titulek.
  */
@@ -51,7 +51,8 @@ export type SeoMeta = { title?: string | null; description?: string | null } | n
  * Titulky ze starého webu končí značkou v několika podobách: „ • Ara.cz"
  * (2 881 stránek), „ - cestovní průvodce Ara.cz" / „: Cestovní průvodce Ara.cz"
  * (170), „ - Cestovní inspirace Ara.cz" (rubriky) i překlep „ •vAra.cz";
- * generátor plugin-seo dává „ | Ara.cz". Příponu odřízneme, aby ji layout
+ * generátor plugin-seo dával „ | Ara.cz" (od 9/2026 „ • Ara.cz", tečka je
+ * jednotný oddělovač celého webu — rozhodnutí uživatele 4. 9. 2026). Příponu odřízneme, aby ji layout
  * šablona přidala jednotně (a ne dvakrát). „Ara.cz" uprostřed věty („Reklama
  * a spolupráce na Ara.cz") zůstává — chybí oddělovač i fráze.
  */
@@ -66,7 +67,7 @@ export function stripSiteSuffix(title: string): string {
 }
 
 /**
- * Titulek stránky BEZ přípony webu (tu přidá layout šablona `%s | Ara.cz`):
+ * Titulek stránky BEZ přípony webu (tu přidá layout šablona `%s • Ara.cz`):
  * vyplněný SEO titulek z CMS má přednost, jinak `fallback` (šablona kategorie
  * nebo kontextový titulek).
  */

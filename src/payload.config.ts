@@ -181,7 +181,7 @@ export default buildConfig({
     seoPlugin({
       // Tlačítka „Vygenerovat" u SEO polí: návrh podle kategorie stránky ve
       // znění starého webu (src/lib/seo-templates.ts) — stejné šablony, jaké web
-      // použije, když pole zůstane prázdné. Web příponu „| Ara.cz" odřízne
+      // použije, když pole zůstane prázdné. Web příponu „• Ara.cz" odřízne
       // a přidá jednotně, takže je jedno, jestli ji editor nechá.
       generateTitle: async ({ doc, collectionSlug, req }) =>
         generateSeoTitle(doc as SeoAdminDoc, collectionSlug, req),

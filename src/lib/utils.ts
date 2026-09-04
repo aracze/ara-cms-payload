@@ -113,9 +113,21 @@ export function richTextToPlainText(value: unknown): string {
 
 // ─── Sdílené odvozeniny pro článkové karty/seznamy (jedno místo pravdy) ──────
 
-/** Plain-text perex z rich-textu článku. */
+/**
+ * Horní mez perexu ve výpisech. Karta ukazuje nejvýš tři řádky (`line-clamp-3`,
+ * ~90 znaků na řádek na desktopu), takže víc textu nikdo neuvidí — a perex
+ * putuje přes RSC hranici do klientských výpisů (ArticlesRowsClient…), kde
+ * celý text článku jen nafukoval HTML (na /asie 71 kB pro šest článků).
+ */
+const ARTICLE_EXCERPT_MAX = 320
+
+/** Plain-text perex z rich-textu článku — zkrácený na hranici slova. */
 export function getArticleExcerpt(article: Article): string {
-  return richTextToPlainText(article.text)
+  const plain = richTextToPlainText(article.text)
+  if (plain.length <= ARTICLE_EXCERPT_MAX) return plain
+  const cut = plain.slice(0, ARTICLE_EXCERPT_MAX)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > ARTICLE_EXCERPT_MAX * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:(–—-]+$/, '')}…`
 }
 
 /**

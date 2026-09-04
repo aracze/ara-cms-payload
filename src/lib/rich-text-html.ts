@@ -227,8 +227,10 @@ function richTextToHtmlInternal(value: unknown, context: RichTextRenderContext =
         // rewriteUploadUrlsToMediaProxy) — pro regex níže se normalizuje na
         // kanonickou Cloudinary podobu; emise na konci volá toMediaProxy zpět.
         const url = fromMediaProxy(String(image.url))
-        const alt = escapeHtml(String(image.alt ?? ''))
-        const caption = String(fields.caption ?? '')
+        const caption = String(fields.caption ?? '').trim()
+        // Alt z média, jinak popisek pod fotkou: fotky v článcích mají alt
+        // prázdný skoro všechny (443 z 443, stav 9/2026), popisek ale 97 % z nich.
+        const alt = escapeHtml(String(image.alt ?? '').trim() || caption)
         const attribution = buildImageAttributionHtml(image)
         // Verze (v123/) a přípona se do přestavěných URL vracejí schválně:
         // bez verze by fotka vyměněná pod stejným public_id zůstala navěky

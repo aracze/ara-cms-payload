@@ -54,7 +54,7 @@ describe('stripSiteSuffix — přípona webu z legacy/plugin titulků', () => {
 })
 
 describe('resolveSeoTitle — SEO titulek z CMS má přednost', () => {
-  it('vyplněný meta.title → bez přípony (tu přidá layout šablona `%s | Ara.cz`)', () => {
+  it('vyplněný meta.title → bez přípony (tu přidá layout šablona `%s • Ara.cz`)', () => {
     expect(
       resolveSeoTitle({ title: 'Vstupní podmínky a víza do Srbska • Ara.cz' }, 'fallback'),
     ).toBe('Vstupní podmínky a víza do Srbska')
@@ -126,7 +126,7 @@ describe('buildPageMetadata — canonical + Open Graph', () => {
 
   it('článek: OG article s časy a autorem, Cloudinary fotka dostane zmenšení', () => {
     const m = buildPageMetadata({
-      title: { absolute: 'Dva týdny v Myanmaru | Ara.cz' },
+      title: { absolute: 'Dva týdny v Myanmaru • Ara.cz' },
       path: '/myanmar/dva-tydny-v-myanmaru',
       imageUrl: 'https://res.cloudinary.com/ara/image/upload/v1/foto.jpg',
       type: 'article',

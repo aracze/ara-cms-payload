@@ -61,7 +61,7 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   metadataBase: getSiteURLObject(),
   title: {
-    template: `%s | ${SITE_TITLE_SUFFIX}`,
+    template: `%s • ${SITE_TITLE_SUFFIX}`,
     default: `${SITE_TITLE_SUFFIX} – Cestovní průvodce`,
   },
   description: DEFAULT_DESCRIPTION,

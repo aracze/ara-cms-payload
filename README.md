@@ -565,7 +565,12 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
   bez nich název s předložkou. Šablony mění jen `<title>`/popisek — viditelný h1 dál skládá
   `buildPageTitle`. Stránky a články, které po migraci SEO pole neměly, doplnil jednorázově
   `scripts/seo-fill-missing-meta.sql` (idempotentní; na produkci spustit stejně jako ostatní
-  SQL doběhy + force-recreate `cms`).
+  SQL doběhy + force-recreate `cms`). Titulky zděděné ze starého webu („Läckerli Huus:
+  Cestovní průvodce Basilejí") zůstávají, kde jsou správně skloněné a vejdou se do ~60 znaků;
+  rozbité (bez města), příliš dlouhé a nesklonované u turistických cílů vynuluje
+  `scripts/seo-legacy-titles-targets.sql`, aby se uplatnila šablona (rozhodnutí 4. 9. 2026;
+  šablona cíle bez 6. pádu místa dává „Název – cestovní průvodce", ne „v Astana"). Přípona
+  titulku je všude „ • Ara.cz" (layout šablona i generátor v adminu).
 - **Strukturovaná data navíc**: homepage `WebSite` + `SearchAction` (`/hledani?q=…`) a
   `Organization` (logo `/icon-512.png`) v jednom `@graph`; stránky „Místo k navštívení"
   `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
