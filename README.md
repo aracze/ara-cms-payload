@@ -565,7 +565,9 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
   bez nich název s předložkou. Šablony mění jen `<title>`/popisek — viditelný h1 dál skládá
   `buildPageTitle`. Stránky a články, které po migraci SEO pole neměly, doplnil jednorázově
   `scripts/seo-fill-missing-meta.sql` (idempotentní; na produkci spustit stejně jako ostatní
-  SQL doběhy + force-recreate `cms`).
+  SQL doběhy + force-recreate `cms`). Pády míst, která po migraci žádné neměla (456 z 669),
+  doplňuje `scripts/seo-fill-place-cases.sql` (tvary navržené AI, prošlé uživatelem 4. 9. 2026;
+  zapisuje jen do prázdných polí, i do `_pages_v`).
 - **Strukturovaná data navíc**: homepage `WebSite` + `SearchAction` (`/hledani?q=…`) a
   `Organization` (logo `/icon-512.png`) v jednom `@graph`; stránky „Místo k navštívení"
   `TouristDestination` (popis, fotka, souřadnice, nadřazené místo); turistické cíle
