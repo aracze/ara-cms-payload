@@ -28,14 +28,15 @@ MIN_SIZE_BYTES=$((1024 * 1024)) # dump menší než 1 MB = něco se pokazilo
 LOG="$BACKUP_DIR/zaloha.log"
 DRY_RUN="${DRY_RUN:-}"
 
-# Dump obsahuje e-maily uživatelů a hashe hesel, takže nesmí být čitelný pro
-# nikoho dalšího na stroji. `umask` platí pro nově zakládané soubory (dumpy,
-# log), `chmod` srovná i adresář, který mohl vzniknout dřív s volnějšími právy.
-umask 077
-mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
-
-log() { printf '%s  %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "$*" | tee -a "$LOG"; }
+# Hlášení jde VŽDY na stdout (pod systemd ho sbírá journal) a do souboru jen
+# když to jde. Původní `| tee -a "$LOG"` by na nezapisovatelném adresáři vrátil
+# nenulový kód, spustil ERR trap a hlášení o chybě by se tím samo utnulo.
+log() {
+  local msg
+  msg="$(date -u '+%Y-%m-%d %H:%M:%S UTC')  $*"
+  printf '%s\n' "$msg"
+  printf '%s\n' "$msg" >> "$LOG" 2>/dev/null || true
+}
 
 # Při jakékoli chybě pošli e-mail — jinak by se rozbitá záloha tiše ztratila.
 notify_failure() {
@@ -58,17 +59,27 @@ notify_failure() {
     printf 'Denni zaloha produkcni databaze se nedokoncila.\n\n'
     printf 'Server: %s\nRadek skriptu: %s (exit %s)\n\n' "$(hostname)" "$line" "$rc"
     printf 'Poslednich 25 radku logu:\n\n'
-    tail -25 "$LOG"
+    if [ -r "$LOG" ]; then
+      tail -25 "$LOG"
+    else
+      printf '(log %s neni citelny — viz `journalctl -u aracze-backup.service`)\n' "$LOG"
+    fi
   } > "$mail"
 
+  # Výstup curlu jde do /tmp, NE do `$LOG`. Kdyby byl `$BACKUP_DIR` nedostupný,
+  # přesměrování `>> "$LOG"` by selhalo a curl by se vůbec nespustil — hlášení
+  # o chybě by tiše nedorazilo právě v případě, kdy je nejpotřebnější.
+  local curlout
+  curlout=$(mktemp)
   if curl --silent --show-error --ssl-reqd --max-time 60 \
     --url "smtps://$host:465" --user "$user:$pass" \
-    --mail-from "$from" --mail-rcpt "$from" --upload-file "$mail" >> "$LOG" 2>&1
+    --mail-from "$from" --mail-rcpt "$from" --upload-file "$mail" > "$curlout" 2>&1
   then
     log "e-mail o chybě odeslán na $from"
   else
-    log "e-mail o chybě se NEPODAŘILO poslat (viz řádky curl výše)"
+    log "e-mail o chybě se NEPODAŘILO poslat: $(tr '\n' ' ' < "$curlout" | cut -c1-300)"
   fi
+  rm -f "$curlout"
   rm -f "$mail"
 }
 # Nedokončený dump musí zmizet — v seznamu záloh by vypadal jako platný.
@@ -97,6 +108,14 @@ fail() {
   exit 1
 }
 
+# Adresář se zakládá teprve TEĎ, až po instalaci trapů — kdyby to selhalo
+# (plný disk, špatná práva), musí i o tom přijít e-mail. Dump obsahuje
+# e-maily uživatelů a hashe hesel, proto `umask 077` pro nově zakládané
+# soubory a `chmod 700` i na adresář, který mohl vzniknout dřív volnější.
+umask 077
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+
 stamp=$(date -u +%Y%m%d-%H%M)
 dump="$BACKUP_DIR/aracze-$stamp.dump"
 
@@ -107,7 +126,10 @@ log "== start zálohy =="
 # dohání zálohu zmeškanou během vypnutí). Bez čekání by první záloha po
 # restartu selhala a poslala planý poplach. Platí i pro ruční spuštění.
 for i in $(seq 1 30); do
-  if docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
+  # `timeout` je tu nutný: samotné `docker exec` se umí zaseknout (nereagující
+  # démon), smyčka by nikdy nepostoupila dál a limit 60 s by neplatil — čekalo
+  # by se až na `TimeoutStartSec=30min` ze systemd.
+  if timeout 15 docker exec "$CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" -q < /dev/null 2>/dev/null; then
     [ "$i" -gt 1 ] && log "databáze připravená po $((i * 2)) s"
     break
   fi
@@ -174,6 +196,6 @@ log "stav na R2: denní $remote_daily"
 log "== záloha OK =="
 
 # Log nenecháme růst do nekonečna.
-if [ "$(stat -c %s "$LOG")" -gt $((2 * 1024 * 1024)) ]; then
+if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt $((2 * 1024 * 1024)) ]; then
   tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi

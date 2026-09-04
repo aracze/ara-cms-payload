@@ -256,6 +256,21 @@ nespustí, takže by se úklid i e-mail přeskočily.
 Dump obsahuje e-maily uživatelů a hashe hesel, proto má `/opt/aracze/backups/`
 práva 700 a soubory v něm 600 (skript si nastavuje `umask 077`).
 
+Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
+
+- adresář se zakládá **až po** instalaci trapů — i „nejde založit `$BACKUP_DIR`"
+  (plný disk, špatná práva) tak pošle e-mail;
+- `log()` píše vždy na stdout (pod systemd ho sbírá journal) a do souboru jen
+  když to jde;
+- výstup `curl`u jde do `/tmp`, ne do `$LOG` — přesměrování do nedostupného
+  adresáře by selhalo a curl by se vůbec nespustil;
+- každý pokus o `pg_isready` má `timeout 15` — bez něj se `docker exec` umí
+  zaseknout, smyčka by nepostoupila dál a inzerovaný limit 60 s by neplatil
+  (čekalo by se až na `TimeoutStartSec=30min`).
+
+Zaseknutí v `pg_dump` nebo při nahrávání na R2 řeší `TimeoutStartSec=30min`
+ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-mailem.
+
 **Ruční použití**
 
 ```bash
