@@ -236,11 +236,21 @@ smazano=$(find "$BACKUP_DIR" -maxdepth 1 -name 'aracze-*.dump' -mtime "+$KEEP_LO
 if [ "$smazano" -gt 0 ]; then
   log "lokálně smazáno starých záloh: $smazano"
 fi
+# Tyhle dvě naopak ZŮSTÁVAJÍ fatální. Neúspěšná retence není kosmetika: úložiště
+# by rostlo bez omezení, a to je hodné e-mailu. Předmět „ZALOHA SELHALA" je pak
+# nepřesný, ale tělo e-mailu obsahuje konec logu, kde je vidět, který krok spadl.
 rclone delete "$REMOTE/denni" --min-age "$KEEP_DAILY" "${RCLONE_OPTS[@]}"
 rclone delete "$REMOTE/mesicni" --min-age "$KEEP_MONTHLY" "${RCLONE_OPTS[@]}"
 
-remote_daily=$(rclone size "$REMOTE/denni" --json "${RCLONE_OPTS[@]}" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'], 'záloh,', round(d['bytes'] / 1e6), 'MB')")
-log "stav na R2: denní $remote_daily"
+# Tenhle údaj je čistě informativní, takže NESMÍ shodit hotovou zálohu —
+# zakolísání R2 nebo změna formátu výstupu by jinak poslaly „ZALOHA SELHALA"
+# o záloze, která je v tu chvíli nahraná i ověřená.
+if remote_daily=$(rclone size "$REMOTE/denni" --json "${RCLONE_OPTS[@]}" 2>/dev/null \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['count'], 'záloh,', round(d['bytes'] / 1e6), 'MB')" 2>/dev/null); then
+  log "stav na R2: denní $remote_daily"
+else
+  log "stav na R2 se nepodařilo zjistit — na výsledek zálohy to nemá vliv"
+fi
 log "== záloha OK =="
 
 # Log nenecháme růst do nekonečna. Pozor: `tail` jako PRVNÍ člen `&&` listu

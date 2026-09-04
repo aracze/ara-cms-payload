@@ -291,6 +291,11 @@ Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
   a skript končí explicitním `exit 0`;
 - log se zkracuje podle **bajtů** (~1 MB), ne řádků — jediný dlouhý řádek by
   ho jinak držel nad limitem navždy a rotace by běžela naprázdno;
+- informativní údaj „stav na R2" na konci běhu je **nefatální** — zakolísání R2
+  by jinak poslalo „ZALOHA SELHALA" o záloze, která je nahraná i ověřená.
+  Naopak `rclone delete` (retence) fatální **zůstává**: neúspěch by znamenal
+  neomezeně rostoucí úložiště, a to za e-mail stojí. Předmět e-mailu je pak
+  nepřesný, ale v jeho těle je konec logu, kde je vidět, který krok spadl;
 
 Zaseknutí v `pg_dump` nebo při nahrávání na R2 řeší `TimeoutStartSec=30min`
 ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-mailem.
