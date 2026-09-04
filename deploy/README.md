@@ -264,9 +264,10 @@ Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
   když to jde;
 - výstup `curl`u jde do `/tmp`, ne do `$LOG` — přesměrování do nedostupného
   adresáře by selhalo a curl by se vůbec nespustil;
-- každý pokus o `pg_isready` má `timeout 15` — bez něj se `docker exec` umí
-  zaseknout, smyčka by nepostoupila dál a inzerovaný limit 60 s by neplatil
-  (čekalo by se až na `TimeoutStartSec=30min`).
+- čekání na databázi má **dva** limity a oba jsou potřeba: `timeout 10` na jeden
+  pokus (samotné `docker exec` se umí zaseknout na nereagujícím démonu) a k tomu
+  celkový limit podle hodin (`READINESS_TIMEOUT`, výchozí 120 s). Jen ten první
+  nestačí — n pokusů × timeout by se sečetlo do násobku inzerovaného limitu.
 
 Zaseknutí v `pg_dump` nebo při nahrávání na R2 řeší `TimeoutStartSec=30min`
 ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-mailem.
@@ -276,6 +277,7 @@ ze systemd: pošle `SIGTERM`, který skript odchytí, uklidí a ohlásí e-maile
 ```bash
 /opt/aracze/backup-db.sh                    # záloha hned
 DRY_RUN=1 /opt/aracze/backup-db.sh          # jen dump + ověření, nic se nenahraje
+READINESS_TIMEOUT=20 /opt/aracze/backup-db.sh  # kratší limit čekání na databázi
 tail -30 /opt/aracze/backups/zaloha.log     # log
 systemctl list-timers aracze-backup.timer   # kdy poběží příště
 rclone lsl r2zal:aracze-db-zalohy/denni     # co je na R2
