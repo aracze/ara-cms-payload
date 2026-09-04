@@ -15,6 +15,35 @@ export type ParsedPath = {
 
 export type ParseResult = { ok: true; path: ParsedPath } | { ok: false; status: 400 | 404 }
 
+// Trénovací AI crawleři — zrcadlo TRAINING_BOTS v src/app/robots.ts hlavního
+// appu (test hlídá, že se seznamy neliší). robots.txt platí per hostname:
+// zákaz na ara.cz na fotky z media.ara.cz nedosáhne a bot, který adresy fotek
+// už zná (indexy ze srpna 2026), by si je odsud bez tohohle souboru směl dál
+// stahovat. Vyhledávací/asistenční boti (OAI-SearchBot, Claude-User,
+// PerplexityBot, Googlebot-Image…) tu být NESMÍ — viz komentář v appu.
+export const TRAINING_BOTS = [
+  'GPTBot',
+  'ClaudeBot',
+  'CCBot',
+  'Amazonbot',
+  'Bytespider',
+  'meta-externalagent',
+  'Google-Extended',
+  'Applebot-Extended',
+]
+
+/** Obsah `media.ara.cz/robots.txt`: všem povoleno, trénovacím botům zakázáno vše. */
+export function robotsTxt(): string {
+  return [
+    'User-Agent: *',
+    'Allow: /',
+    '',
+    ...TRAINING_BOTS.map((bot) => `User-Agent: ${bot}`),
+    'Disallow: /',
+    '',
+  ].join('\n')
+}
+
 // Šířky, které web reálně generuje: next/image imageSizes (výchozí sada) ∪
 // deviceSizes (next.config.mjs) ∪ pevné konstanty (mapa 44/220, rich-text
 // 420/790, lightbox 1600). Cokoliv mimo množinu = pokus razit vlastní

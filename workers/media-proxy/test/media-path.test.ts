@@ -5,8 +5,12 @@ import {
   isValidTransform,
   negotiateFormat,
   parsePath,
+  robotsTxt,
   signTransform,
+  TRAINING_BOTS,
 } from '../src/media-path'
+// Zdroj robots.txt hlavního appu jako text (Vite `?raw`) — hlídáme shodu seznamů.
+import appRobotsSource from '../../../src/app/robots.ts?raw'
 
 describe('parsePath', () => {
   it('rozparsuje URL z next/image loaderu (transformace + verze + přípona)', () => {
@@ -224,5 +228,24 @@ describe('signTransform', () => {
 describe('náhled adminu Payloadu', () => {
   it('projde whitelistem (thumbnailURL jde od PR #78 přes proxy)', () => {
     expect(isValidTransform('c_fill,f_auto,g_auto,h_150,q_auto,w_150')).toBe(true)
+  })
+})
+
+describe('robotsTxt', () => {
+  it('všem povolí vše a trénovacím botům zakáže vše', () => {
+    const text = robotsTxt()
+    expect(text.startsWith('User-Agent: *\nAllow: /\n\n')).toBe(true)
+    for (const bot of TRAINING_BOTS) expect(text).toContain(`User-Agent: ${bot}\n`)
+    expect(text.endsWith('Disallow: /\n')).toBe(true)
+    // Jediný zákaz je ten společný pro trénovací skupinu.
+    expect(text.match(/Disallow:/g)).toHaveLength(1)
+  })
+
+  it('má stejný seznam trénovacích botů jako src/app/robots.ts', () => {
+    const block = appRobotsSource.match(/const TRAINING_BOTS = \[([^\]]*)\]/)
+    expect(block).not.toBeNull()
+    const appBots = [...block![1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+    expect(appBots.length).toBeGreaterThan(0)
+    expect([...TRAINING_BOTS].sort()).toEqual([...appBots].sort())
   })
 })

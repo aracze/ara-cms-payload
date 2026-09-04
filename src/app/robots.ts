@@ -11,6 +11,9 @@ import { getSiteURL } from '@/lib/utils'
  * díky nim AI asistenti web citují a posílají návštěvníky.
  * Google-Extended a Applebot-Extended nejsou crawleři, ale opt-out tokeny
  * (procházení dělá Googlebot/Applebot, tokeny jen zakazují použití pro trénink).
+ *
+ * Zrcadlo seznamu je ve Workeru media.ara.cz (workers/media-proxy/src/media-path.ts):
+ * robots.txt platí per hostname, fotky mají vlastní doménu. Shodu hlídá test Workeru.
  */
 const TRAINING_BOTS = [
   'GPTBot',
