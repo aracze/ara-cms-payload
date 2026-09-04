@@ -45,6 +45,13 @@ To spin up this project locally, follow these steps:
    - The uploaded file is first validated with `pg_restore --list` (also proves `pg_restore`/Docker are reachable). Only then are **all user schemas** in the target DB (`public`, `zaloha`, …) dropped with `CASCADE` and the restore runs. Without the wipe, `--clean` fails on tables that exist locally but not in the dump (e.g. local backup tables in `zaloha`) and the whole import rolls back.
    - The restore itself runs in a single transaction, but the schema wipe happens before it — if the restore still fails (e.g. a dump from an incompatible Postgres version), the database is left empty. Download a fresh dump first if you may need to roll back.
    - Requires the same Docker Compose access as the dump action.
+9. **Automated production backups**: since 4 Sep 2026 the production server also
+   takes a **daily unattended backup to Cloudflare R2** (`deploy/backup-db.sh` +
+   a systemd timer). Kept for 30 days (daily) and 400 days (monthly); a failed
+   backup sends an e-mail to `SMTP_FROM`. Setup, retention, restore steps and the
+   two R2/rclone gotchas are documented in
+   [`deploy/README.md`](deploy/README.md#zálohy-databáze). The admin dump/import
+   actions above stay available for manual, ad-hoc use.
 
 ---
 
