@@ -589,6 +589,33 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
 - **Písma**: načítají se jen používané řezy — Open Sans 300–700, Poppins 400/600/700/800
   (každý řez × subset je samostatný preload soupeřící s hero fotkou).
 
+### Sdílené stavební prvky výpisů (dlaždice, řádky, tlačítka, hodnocení)
+
+Výpisy obsahu se od 29. 8. 2026 (PR #86, #87) skládají ze čtyř sdílených komponent — dřív
+měl každý výpis vlastní kopii a vzhled se rozjížděl (rohy, ztmavení, tučnost). Když se má
+změnit vzhled dlaždic nebo řádků, sahej sem, ne do jednotlivých sekcí:
+
+- **`PhotoTile`** (`src/components/features/photo-tile.tsx`) — fotodlaždice „fotka + bílý
+  titulek přes ztmavení": „Co vidět" u míst, profil, „Co dalšího vidět" pod cílem a tři
+  sekce homepage. Tři velikosti (`sm`/`md`/`lg`), volitelný odznak v rohu (`PinIcon`),
+  řádek `meta` pod titulkem (hodnocení). Obrázek dodává volající jako `children`; bez fotky
+  se ukáže `NoPreview`. Rám (`PHOTO_TILE_FRAME`) sdílí i bílé karty profilu.
+- **`ThumbRow`** + **`Thumb`** (`src/components/features/thumb-row.tsx`) — řádek
+  „miniatura + titulek": výsledky hledání i našeptávače, „Nejnovější články", panel „Články
+  v rubrice", „Co je nového". Dvě velikosti (`md` 48 px, `sm` 44 px); titulek si řádek kreslí
+  sám (tučnost podle velikosti), doplňky (štítek, cesta, čas) dává volající přes `children`.
+- **`LoadMoreButton`** (`src/components/features/load-more-button.tsx`) — „Zobrazit další":
+  varianta `pill` (samostatná pilulka pod sekcemi) a `text` (vložený modrý odkaz ve výpisu
+  recenzí a novinek), oba se stejným chevronem.
+- **`RatingSummary`** (`src/components/features/reviews/rating-summary.tsx`) — „★★★★☆
+  12 recenzí" pro dlaždice, hlavičku cíle i hero; jediné místo s pravidlem zaokrouhlení na
+  půl hvězdičky (`halfStarRating`). Nula recenzí je platná hodnota a zobrazuje se.
+
+Pravidla tučnosti a velikostí (rozhodnutí uživatele z 29. 8. 2026) jsou zapsaná v hlavičkách
+těchto souborů, ne tady — README jen říká, kde je hledat. Odznaky míst záměrně používají dvě
+rodiny ikon: vyplněný špendlík (`PinIcon`) na fotce, obrysový lucide `MapPin` v textových
+řádcích („Co je nového", hledání) — na fotce sedí plná plocha, v řádku textu tenká linka.
+
 ### Fotky v obsahu — lightbox (PhotoSwipe)
 
 Klik na fotku v článku otevře **lightbox** (PhotoSwipe v5): zvětšení přes ztmavenou stránku,
