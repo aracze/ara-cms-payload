@@ -256,6 +256,12 @@ nespustí, takže by se úklid i e-mail přeskočily.
 Dump obsahuje e-maily uživatelů a hashe hesel, proto má `/opt/aracze/backups/`
 práva 700 a soubory v něm 600 (skript si nastavuje `umask 077`).
 
+Úklid neověřeného dumpu maže **jen soubor, který vytvořil daný běh**. Značka
+v názvu je proto na sekundy — s rozlišením na minuty dostaly dva běhy ve stejné
+minutě stejné jméno a spadlý druhý běh smazal platnou zálohu prvního (stalo se
+při testování 4. 9. 2026). Když soubor toho jména už existuje, skript se ho
+nedotkne a skončí chybou.
+
 Hlášení o chybě nesmí záviset na tom, co se právě rozbilo, proto:
 
 - adresář se zakládá **až po** instalaci trapů — i „nejde založit `$BACKUP_DIR`"

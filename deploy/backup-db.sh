@@ -89,7 +89,11 @@ notify_failure() {
 # Když už ověření prošlo (`dump_ok`), soubor si necháme: selhalo jen nahrání
 # nebo úklid a lokální kopie je v pořádku.
 cleanup_partial() {
-  [ -n "${dump:-}" ] && [ -e "${dump:-}" ] && [ -z "${dump_ok:-}" ] || return 0
+  # Tři podmínky, všechny nutné: soubor vytvořil TENTO běh (`dump_owned`),
+  # ještě neprošel ověřením (`dump_ok`) a existuje. Bez `dump_owned` mohl
+  # spadlý běh smazat platnou zálohu z JINÉHO běhu — což se 4. 9. 2026 při
+  # testování skutečně stalo, protože značka měla rozlišení jen na minuty.
+  [ -n "${dump_owned:-}" ] && [ -z "${dump_ok:-}" ] && [ -e "${dump:-}" ] || return 0
   rm -f "$dump"
   log "neověřený dump smazán: $dump"
 }
@@ -119,7 +123,9 @@ umask 077
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
-stamp=$(date -u +%Y%m%d-%H%M)
+# Sekundy jsou tu podstatné: se značkou na minuty dostanou dva běhy v téže
+# minutě stejné jméno souboru (viz `dump_owned` u cleanup_partial).
+stamp=$(date -u +%Y%m%d-%H%M%S)
 dump="$BACKUP_DIR/aracze-$stamp.dump"
 
 log "== start zálohy =="
@@ -145,6 +151,11 @@ while true; do
 done
 
 # 1) Dump. `< /dev/null` je pojistka, aby si docker exec nebral stdin skriptu.
+#
+# Kontrola existence je PŘED `dump_owned=1`, aby `fail` (a tím `cleanup_partial`)
+# cizí soubor nesmazal.
+[ -e "$dump" ] && fail "soubor $dump už existuje — neběží druhá záloha zároveň?"
+dump_owned=1
 docker exec "$CONTAINER" pg_dump -Fc -U "$DB_USER" "$DB_NAME" > "$dump" < /dev/null
 size=$(stat -c %s "$dump")
 log "dump hotov: $dump ($(numfmt --to=iec "$size"))"
