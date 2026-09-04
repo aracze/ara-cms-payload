@@ -58,11 +58,14 @@ const TITLE_CLASS: Record<PhotoTileSize, string> = {
   lg: 'text-lg leading-tight font-bold',
 }
 
-/** Špendlík — odznak místa (Co vidět, profil). Sdílený, ať je všude stejný. */
+/**
+ * Špendlík — odznak místa (Co vidět, profil). Sdílený, ať je všude stejný.
+ * CSS maska (`.pin-glyph` v globals.css) místo inline SVG: Řecko má 96 dlaždic
+ * a každá kopie SVG stála 273 B (26 kB HTML), maska ~60 B. Stejný vzor jako
+ * hvězdičky `.star-glyph`. Barva přes `text-*` (kreslí se `currentColor`).
+ */
 export const PinIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-  </svg>
+  <span aria-hidden="true" className={cn('pin-glyph', className)} />
 )
 
 export function PhotoTile({

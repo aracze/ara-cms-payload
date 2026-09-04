@@ -594,6 +594,23 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) odřez
 - **Písma**: načítají se jen používané řezy — Open Sans 300–700, Poppins 400/600/700/800
   (každý řez × subset je samostatný preload soupeřící s hero fotkou).
 
+### Fotky dlaždic míst — `<picture>` místo tří `next/image`
+
+Dlaždice v „Co vidět", „Co dalšího vidět" a na profilu (`PlaceCardImage`,
+`src/components/layout/page/place-card-image.tsx`) mají jiný ořez pro mobil (5:7 nebo 3:2
+přes celou šířku), tablet (3:2) a desktop (5:7 vedle mapy / 1:1). Kreslí ho jeden nativní
+`<picture>` se třemi `<source media>` — prohlížeč vybere JEDNU variantu podle šířky okna a hustoty
+pixelů a stáhne jen ji. Do 4. 9. 2026 to byly tři `next/image fill` přepínané `hidden lg:block`;
+u pevné šířky v pixelech (`sizes="210px"`) ale `next/image` vypisuje všech 14 šířek
+z `imageSizes ∪ deviceSizes`, takže jedna dlaždice nesla 26 adres (~4,3 kB) a Řecko s 96 místy
+mělo 420 kB HTML jen v adresách fotek (HTML 992 → 635 kB v dev). Šířky kandidátů musí být
+z whitelistu media proxy (`ALLOWED_WIDTHS` ve `workers/media-proxy/src/media-path.ts`), jinak
+Worker vrátí 400 — nová šířka v kódu = nejdřív rozšířit whitelist a nasadit Worker. Komponenta
+zůstává klientská záměrně: přes RSC hranici jdou jen props, ne hotový `<picture>` (jako serverová
+by RSC payload narostl o to, co se ušetřilo v HTML). Špendlík na dlaždicích (`PinIcon`) a hvězdičky
+(`StarRating`) jsou CSS masky (`.pin-glyph`, `.star-glyph` v `globals.css`), ne inline SVG —
+na stránce s desítkami dlaždic to byly desítky kB opakovaného SVG.
+
 ### Fotky v obsahu — lightbox (PhotoSwipe)
 
 Klik na fotku v článku otevře **lightbox** (PhotoSwipe v5): zvětšení přes ztmavenou stránku,

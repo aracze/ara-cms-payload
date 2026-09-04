@@ -2968,7 +2968,9 @@ type RawActivityComment = {
 }
 
 /** Zhuštění na jeden řádek výpisu (legacy texty obsahují i vložený balast). */
-function activityExcerpt(text: string, max = 160): string | null {
+// Řádek novinky je jednořádkový (`truncate`), na desktopu se vejde ~90 znaků —
+// delší úryvek by jen zvětšoval RSC payload homepage (36 položek × text).
+function activityExcerpt(text: string, max = 120): string | null {
   const compact = text.replace(/\s+/g, ' ').trim()
   if (!compact) return null
   return compact.length > max ? compact.slice(0, max).trimEnd() + '…' : compact
