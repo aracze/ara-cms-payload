@@ -54,7 +54,7 @@ export const ArticlesListClassicClient = ({
           {/* Ad column — like the legacy layout. 340 = 300px reklama + 2×20px
               padding šedého boxu (viz ArticleAd), stejně jako aside u článků. */}
           <aside className="hidden lg:block w-[340px] shrink-0">
-            <ArticleAd variant="primary" className="sticky top-24" />
+            <ArticleAd variant="primary" className="sticky top-pod-listou" />
           </aside>
         </div>
 
