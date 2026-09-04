@@ -202,5 +202,98 @@ cd /opt/aracze && docker compose pull && docker compose up -d
 - **Vyhledávání**: index se staví za běhu z Payload Local API a obnovuje se
   automaticky při změně obsahu (revalidace cache tagů v hoocích) — žádný
   samostatný build/workflow už není potřeba.
-- **Zálohy DB**: CMS má endpointy pro dump/import databáze; doporučuji nastavit
-  pravidelnou zálohu volume `pgdata`.
+- **Zálohy DB**: ✅ hotovo (4. 9. 2026) — viz sekce „Zálohy databáze" níže.
+  Kromě nich má CMS pořád endpointy pro ruční dump/import databáze v adminu.
+
+---
+
+## Zálohy databáze
+
+Denní záloha na Cloudflare R2, nasazená 4. 9. 2026. Do té doby web žádnou
+automatickou zálohu neměl — nejnovější byla ruční z 9. 8. 2026.
+
+**Co kde je**
+
+| Soubor v repu                          | Kam patří na server                    |
+| -------------------------------------- | -------------------------------------- |
+| `deploy/backup-db.sh`                  | `/opt/aracze/backup-db.sh` (práva 750) |
+| `deploy/systemd/aracze-backup.service` | `/etc/systemd/system/`                 |
+| `deploy/systemd/aracze-backup.timer`   | `/etc/systemd/system/`                 |
+
+Nasazení nic z toho nekopíruje — po změně skriptu ho na server nahraj ručně
+(stejně jako `docker-compose.yml` a `Caddyfile`).
+
+**Jak to běží**
+
+Timer `aracze-backup.timer` spustí skript denně v 01:30 UTC (rozptyl 15 min,
+`Persistent=true` doběhne po startu, když byl server v tu dobu vypnutý). Skript:
+
+1. udělá `pg_dump -Fc` z kontejneru `aracze-postgres-1` do `/opt/aracze/backups/`;
+2. **ověří dump** — musí být čitelný pro `pg_restore --list`, mít aspoň 1 MB
+   a obsahovat aspoň 90 % tabulek, které databáze právě má (počet se zjišťuje
+   za běhu, aby pevné číslo nezastaralo s novou kolekcí);
+3. nahraje ho na R2 a **porovná velikost** vzdáleného souboru s lokálním;
+4. promaže staré zálohy podle retence.
+
+**Retence**
+
+| Kde                                     | Jak dlouho |
+| --------------------------------------- | ---------- |
+| lokálně `/opt/aracze/backups/`          | 7 dní      |
+| R2 `db-zalohy/denni/`                   | 30 dní     |
+| R2 `db-zalohy/mesicni/` (1. dne měsíce) | 400 dní    |
+
+Dump má ~12 MB, celkem tedy ~0,5 GB, tj. ~5 % bezplatných 10 GB na R2.
+
+**Když se záloha nepovede**, přijde e-mail na `SMTP_FROM` (info@ara.cz)
+s posledními 25 řádky logu a skript skončí nenulovým kódem, takže selhání
+uvidíš i v `systemctl status aracze-backup.service`. Neověřený dump se maže,
+aby v seznamu záloh nevypadal jako platný.
+
+**Ruční použití**
+
+```bash
+/opt/aracze/backup-db.sh                    # záloha hned
+DRY_RUN=1 /opt/aracze/backup-db.sh          # jen dump + ověření, nic se nenahraje
+tail -30 /opt/aracze/backups/zaloha.log     # log
+systemctl list-timers aracze-backup.timer   # kdy poběží příště
+rclone lsl r2zal:aracze-db-zalohy/denni     # co je na R2
+```
+
+**Obnova ze zálohy** (ověřeno 4. 9. 2026 — počty řádků po obnově souhlasily
+s produkcí). Nejdřív nanečisto do vedlejší databáze, ať nepřepíšeš ostrá data:
+
+```bash
+docker exec aracze-postgres-1 psql -U postgres -d postgres -c "create database zaloha_test"
+docker exec -i aracze-postgres-1 pg_restore --dbname zaloha_test -U postgres \
+  --no-owner --no-acl --single-transaction --exit-on-error < /opt/aracze/backups/<soubor>.dump
+docker exec aracze-postgres-1 psql -U postgres -d zaloha_test -Atc "select count(*) from pages"
+docker exec aracze-postgres-1 psql -U postgres -d postgres -c "drop database zaloha_test"
+```
+
+**Nastavení rclone** je v `/root/.config/rclone/rclone.conf` a má **dva remote**:
+
+| Remote  | Bucket             | Klíče v `.env`                         | K čemu                |
+| ------- | ------------------ | -------------------------------------- | --------------------- |
+| `r2`    | `aracze`           | `S3_*`                                 | zrcadlo médií (appka) |
+| `r2zal` | `aracze-db-zalohy` | `R2_ZALOHY_KEY_ID`, `R2_ZALOHY_SECRET` | zálohy databáze       |
+
+Zálohy mají **vlastní bucket a vlastní token** (od 4. 9. 2026), aby klíč od médií
+na ně nedosáhl a naopak — ověřeno: `rclone lsjson r2zal:aracze` vrací 403.
+Token má práva jen _Object Read & Write_ na ten jeden bucket, `TTL: Forever`
+(token s expirací by zálohy tiše zastavil) a **filtr na IP serveru**
+`217.154.225.117` — stejný podepsaný požadavek vrací 200 ze serveru a 403 odjinud
+(ověřeno). Server nemá IPv6, takže filtr na IPv4 stačí; **při změně IP serveru
+je potřeba token v Cloudflare upravit**, jinak zálohy začnou selhávat.
+
+Dvě pasti:
+
+- `S3_ENDPOINT` v `.env` má bucket zapečený v cestě (`…r2.cloudflarestorage.com/aracze`).
+  V rclone konfiguraci musí být **jen host**, jinak rclone hledá `aracze/aracze`.
+- `--s3-no-head` je povinné: rclone si po nahrání objekt zpětně načte dotazem
+  s `?versionId=`, což R2 neumí (501 Not Implemented) a první pokus vždy selže.
+  Proto si velikost ověřuje sám skript.
+
+**Co by šlo zlepšit**: zálohy leží u téhož poskytovatele jako web i média.
+Proti ztrátě serveru chrání, proti ztrátě účtu u Cloudflare ne — druhá kopie
+mimo Cloudflare (stažení k sobě nebo jiná služba) je zbylý nepokrytý risk.
