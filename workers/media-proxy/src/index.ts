@@ -35,7 +35,11 @@ const IMMUTABLE_CACHE = `public, max-age=${YEAR_SECONDS}, immutable`
 const UNVERSIONED_CACHE = `public, max-age=${DAY_SECONDS}`
 /** Nouzový režim jen krátce — po oživení Cloudinary se rychle vrátí zmenšeniny. */
 const FALLBACK_CACHE = 'public, max-age=300'
-/** robots.txt: boti si ho stejně obnovují ~denně (Google až 24 h). */
+/**
+ * robots.txt: hlavička je pro keše botů (Google si ho drží až 24 h), ne pro edge —
+ * custom doména Workeru volá Worker vždy a odpověď bez subrequestu se na edge
+ * nekešuje. Pár požadavků denně, řešit to Cache API by bylo víc kódu než užitku.
+ */
 const ROBOTS_CACHE = `public, max-age=${DAY_SECONDS}`
 
 /** Z upstreamu kopírujeme jen tohle; x-cld-error a spol. ven nepatří. */
