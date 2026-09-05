@@ -207,9 +207,9 @@ export const MainContent = ({
    */
   aboveText?: React.ReactNode
   /**
-   * Blok vložený DO textu: za úvod, před první nadpis h2 (mapa s kartou
-   * ubytování). Text bez h2 ho dostane až za sebe (před `belowText`). Jen pro
-   * nesbalované stránky — rozdělený text by sbalování rozbilo.
+   * Blok vložený DO textu za první nadpis h2 a jeho první odstavec (mapa se
+   * štítkem ubytování). Text bez h2 ho dostane až za sebe (před `belowText`).
+   * Jen pro nesbalované stránky — rozdělený text by sbalování rozbilo.
    */
   midText?: React.ReactNode
   /** Položky obsahu (TOC) bloku `midText` — zařadí se mezi nadpisy textu na jeho místo. */
@@ -266,10 +266,17 @@ export const MainContent = ({
   // Rozdělení textu pro `midText`: před prvním h2 (úvod) / od něj dál. Nadpisy
   // jsou v HTML z richTextToHtml na nejvyšší úrovni, takže řez mezi bloky
   // nechá oba kusy validní. Bez h2 zůstane text celý a blok jde až za něj.
+  // Řez pro `midText`: za prvním nadpisem h2 a jeho prvním odstavcem
+  // (rozhodnutí uživatele 5. 9. 2026) — čtenář si přečte úvod i to, kde se
+  // ubytovat, a pak vidí mapu. Bez h2 nebo bez odstavce za ním jde blok až za
+  // text. Nadpisy i odstavce jsou v HTML z richTextToHtml na nejvyšší úrovni,
+  // takže řez za `</p>` nechá oba kusy validní.
   const firstH2 = midText ? textHtml.search(/<h2[\s>]/i) : -1
-  const splitText = midText && firstH2 > 0
-  const textBefore = splitText ? textHtml.slice(0, firstH2) : textHtml
-  const textAfter = splitText ? textHtml.slice(firstH2) : ''
+  const firstParagraphEnd = firstH2 >= 0 ? textHtml.indexOf('</p>', firstH2) : -1
+  const splitAt = firstParagraphEnd >= 0 ? firstParagraphEnd + '</p>'.length : -1
+  const splitText = midText && splitAt > 0
+  const textBefore = splitText ? textHtml.slice(0, splitAt) : textHtml
+  const textAfter = splitText ? textHtml.slice(splitAt) : ''
   const headingLevel = isPracticalInfo ? 4 : 3
   const headings = showTableOfContents
     ? [

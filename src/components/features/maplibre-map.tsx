@@ -431,6 +431,15 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         let mapStarted = false
         map.on('load', () => {
           mapStarted = true
+          // Licenční text (OpenFreeMap © OpenMapTiles, OSM) hned sbalený do ⓘ —
+          // MapLibre ho v kompaktním režimu ukazuje rozbalený a sbalí ho až po
+          // prvním posunu mapy; tady by do prvního posunu ležel přes piny a štítek.
+          // Atribuce zůstává na kliknutí dostupná (stejný stav, do jakého ji
+          // MapLibre sám přepíná), licence ODbL tím není dotčena.
+          map
+            .getContainer()
+            .querySelector('.maplibregl-ctrl-attrib')
+            ?.classList.remove('maplibregl-compact-show')
           if (!cancelled) {
             setLoadError(null)
             setLoaded(true)

@@ -793,9 +793,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
           // z adminu (rozhodnutí uživatele). Nad textem tak zůstane jen to,
           // co text komentuje — aktuální stav a dlouhodobé průměry; krátkodobá
           // předpověď je praktický dovětek, ne úvod.
-          // Mapa s kartou ubytování jde MEZI text — za úvod, před první nadpis
-          // (čtenář si zorientuje ostrov dřív, než čte o letoviscích; výzvu vidí
-          // i kdo nedočte). Text bez nadpisu ji dostane až za sebe.
+          // Mapa se štítkem ubytování jde MEZI text — za první nadpis a jeho
+          // odstavec (čtenář si zorientuje ostrov dřív, než čte o jednotlivých
+          // letoviscích; výzvu vidí i kdo nedočte). Text bez nadpisu ji dostane
+          // až za sebe.
           midText={accommodationSection}
           belowText={
             teamSection ? (

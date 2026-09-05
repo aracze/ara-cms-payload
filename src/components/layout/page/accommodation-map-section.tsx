@@ -5,7 +5,7 @@ import type { AccommodationMapMarker } from '@/lib/payload'
 import { BedIcon } from './legacy-icons'
 
 /**
- * Blok v textu podstránky „Ubytování" (za úvodem, před prvním nadpisem — viz
+ * Blok v textu podstránky „Ubytování" (za prvním nadpisem a jeho odstavcem — viz
  * `midText` v MainContent): mapa místa s piny jeho turistických cílů a v levém
  * dolním rohu výzva „Hledat ubytování" vedoucí přes /go/ubytovani na Booking
  * (provize přes síť CJ). Nahrazuje mapový widget Bookingu ze starého webu, který
@@ -14,10 +14,9 @@ import { BedIcon } from './legacy-icons'
  * bez souřadnic dostane jen výzvu.
  */
 
-// Štítek je nízký (~56 px) a stojí nad proužkem s licencí mapy — piny se
-// dorámují nad něj. Konstanta modulu: mapa se při změně reference odsazení
+// Štítek je nízký (~56 px) v levém dolním rohu — piny se dorámují nad něj. Konstanta modulu: mapa se při změně reference odsazení
 // bourá a staví znovu.
-const FIT_PADDING: FitPadding = { top: 56, right: 40, bottom: 112, left: 40 }
+const FIT_PADDING: FitPadding = { top: 56, right: 40, bottom: 92, left: 40 }
 
 export interface AccommodationMapSectionProps {
   placeTitle: string
@@ -78,9 +77,9 @@ export function AccommodationMapSection({
           fitToMarkers
           fitPadding={FIT_PADDING}
         />
-        {/* Na širokém displeji štítek pluje v levém dolním rohu mapy nad
-            proužkem s licencí (OpenFreeMap/OSM), na užším stojí pod mapou. */}
-        <div className="mt-4 lg:absolute lg:bottom-9 lg:left-3.5 lg:mt-0">{chip}</div>
+        {/* Na širokém displeji štítek pluje v levém dolním rohu mapy (licenční
+            text je sbalený do ⓘ vpravo, viz MapLibreMap), na užším stojí pod mapou. */}
+        <div className="mt-4 lg:absolute lg:bottom-3.5 lg:left-3.5 lg:mt-0">{chip}</div>
       </div>
     </section>
   )

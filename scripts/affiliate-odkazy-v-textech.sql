@@ -17,10 +17,23 @@
 BEGIN;
 CREATE SCHEMA IF NOT EXISTS zaloha;
 
+-- Poslední PUBLIKOVANÁ verze každé stránky — řádek v `pages` může být rozpracovaný
+-- draft s jiným textem, než web ukazuje; přepisuje se obojí, takže se odkazy sbírají
+-- z obou zdrojů (viz CodeRabbit k PR #100).
+CREATE TEMP TABLE pubv ON COMMIT DROP AS
+SELECT DISTINCT ON (v.parent_id) v.id AS version_id, v.parent_id AS page_id, v.version_text
+FROM _pages_v v
+WHERE v.version__status = 'published' AND v.version_text IS NOT NULL
+ORDER BY v.parent_id, v.updated_at DESC, v.id DESC;
+
 -- Všechny odkazy v textech (stránky FOR UPDATE — souběžná editace v adminu se nepřepíše).
 CREATE TEMP TABLE links ON COMMIT DROP AS
 SELECT 'page' AS scope, p.id AS doc_id, p.full_slug AS slug, p.parent_id, l->'fields'->>'url' AS url
 FROM pages p, jsonb_path_query(p.text, 'strict $.**.children[*] ? (@.type == "link")') l
+UNION ALL
+SELECT 'page', p.id, p.full_slug, p.parent_id, l->'fields'->>'url'
+FROM pubv v JOIN pages p ON p.id = v.page_id,
+     jsonb_path_query(v.version_text, 'strict $.**.children[*] ? (@.type == "link")') l
 UNION ALL
 SELECT 'article', a.id, a.slug, NULL, l->'fields'->>'url'
 FROM articles a, jsonb_path_query(a.text, 'strict $.**.children[*] ? (@.type == "link")') l;
@@ -87,14 +100,9 @@ FROM pages p WHERE p.id IN (SELECT doc_id FROM m WHERE scope = 'page') FOR UPDAT
 DELETE FROM src_pages WHERE old_text = new_text;
 
 CREATE TEMP TABLE src_versions ON COMMIT DROP AS
-SELECT v.id AS version_id, v.parent_id AS page_id, v.version_text AS old_text,
-       pg_temp.fix_links('page', v.parent_id, v.version_text) AS new_text
-FROM (
-  SELECT DISTINCT ON (v.parent_id) v.*
-  FROM _pages_v v
-  WHERE v.parent_id IN (SELECT doc_id FROM m WHERE scope = 'page') AND v.version__status = 'published'
-  ORDER BY v.parent_id, v.updated_at DESC, v.id DESC
-) v WHERE v.version_text IS NOT NULL;
+SELECT v.version_id, v.page_id, v.version_text AS old_text,
+       pg_temp.fix_links('page', v.page_id, v.version_text) AS new_text
+FROM pubv v WHERE v.page_id IN (SELECT doc_id FROM m WHERE scope = 'page');
 DELETE FROM src_versions WHERE old_text = new_text;
 
 CREATE TEMP TABLE src_articles ON COMMIT DROP AS

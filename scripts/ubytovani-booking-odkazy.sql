@@ -25,11 +25,21 @@ INSERT INTO m VALUES
    '/go/ubytovani/region/us/yellowstone-national-park.cs.html');
 -- Wyoming: odkaz zkopírovaný z Google reklamy (searchresults + gclid + sid) — cíl je
 -- „ubytování ve Wyomingu", ne konkrétní dotaz, proto stránka regionu.
+-- Adresa se sbírá z aktuálního textu I z poslední publikované verze — řádek v `pages`
+-- může být draft s jiným textem, než web ukazuje (CodeRabbit k PR #100).
 INSERT INTO m
 SELECT DISTINCT l->'fields'->>'url', '/go/ubytovani/region/us/wyoming.cs.html'
-FROM pages p, jsonb_path_query(p.text, 'strict $.**.children[*] ? (@.type == "link")') l
-WHERE p.category = 'Ubytování' AND p.full_slug = '/usa/wyoming/ubytovani'
-  AND l->'fields'->>'url' LIKE 'https://www.booking.com/searchresults.cs.html?aid=319918%'
+FROM (
+  SELECT p.text FROM pages p WHERE p.category = 'Ubytování' AND p.full_slug = '/usa/wyoming/ubytovani'
+  UNION ALL
+  SELECT v.version_text FROM pages p
+  JOIN LATERAL (
+    SELECT version_text FROM _pages_v v WHERE v.parent_id = p.id AND v.version__status = 'published'
+    ORDER BY v.updated_at DESC, v.id DESC LIMIT 1
+  ) v ON true
+  WHERE p.category = 'Ubytování' AND p.full_slug = '/usa/wyoming/ubytovani'
+) t, jsonb_path_query(t.text, 'strict $.**.children[*] ? (@.type == "link")') l
+WHERE l->'fields'->>'url' LIKE 'https://www.booking.com/searchresults.cs.html?aid=319918%'
 ON CONFLICT DO NOTHING;
 
 -- Náhrada url v serializovaném jsonb: hledá se přesná dvojice `"url": "<stará>"`

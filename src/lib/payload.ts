@@ -1923,7 +1923,19 @@ async function fetchPlaceTouristPointMarkersUncached(
   for (const doc of docs) {
     const lat = Number.parseFloat(doc.detail?.latitude ?? '')
     const lng = Number.parseFloat(doc.detail?.longitude ?? '')
-    if (!doc.fullSlug || !Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    // Souřadnice mimo rozsah (překlep v adminu) by shodily celou mapu — MapLibre
+    // při setLngLat s |lat| > 90 vyhazuje chybu a komponenta ji hlásí jako
+    // nedostupnou mapu. Takový pin se radši vynechá.
+    if (
+      !doc.fullSlug ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
+    )
+      continue
     const imageUrl = (doc.featuredImage?.image as { url?: string } | null | undefined)?.url
     markers.push({
       id: doc.id,

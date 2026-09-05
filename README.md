@@ -989,8 +989,8 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   prod = stejný skript + force-recreate `cms`). Nechané záměrně: živé odkazy na
   ara.carrentalnet.com a economycarrentals (reseller 1657), Kiwi a Vašenároky.
   Místo widgetu má podstránka Ubytování vlastní blok (`page/accommodation-map-section.tsx`)
-  vložený DO textu za úvod před první nadpis (`midText` v MainContent — text se rozdělí na
-  prvním h2, pokračování nemá „lead" odstavec, viz `.prose-continued`): MapLibre mapa
+  vložený DO textu za první nadpis h2 a jeho první odstavec (`midText` v MainContent; text bez
+  h2 ho dostane až za sebe, pokračování nemá „lead" odstavec, viz `.prose-continued`): MapLibre mapa
   kontextového místa s piny jeho turistických cílů (`fetchAccommodationMapData`, fotky pinů)
   a v levém dolním rohu štítek „Ubytování <6. pád>“ + tlačítko Hledat → `/go/ubytovani/<cesta>`
   z pole „Rezervace ubytování" nejbližšího předka; piny se dorámují nad štítek (`fitPadding`
