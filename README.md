@@ -636,9 +636,16 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) i už 
   `fetchFeedArticles` s tagy `articles`/`pages`); odkaz `<link rel="alternate">` nese každá
   stránka (`RSS_ALTERNATE` v `buildPageMetadata` i layoutu — `alternates` se mezi layoutem
   a stránkou neslučuje).
-- **Ikony a manifest**: `src/app/icon.png` (512 px) + `public/icon-192.png`, `icon-512.png`,
-  `icon-maskable-512.png` (papoušek z loga v CMS, vykreslený ze SVG přes sharp),
-  `src/app/manifest.ts` a `themeColor` (`viewport` v layoutu) v modré hlavičky `#215491`.
+- **Ikony a manifest**: `src/app/icon.png` (512 px), `apple-icon.png` + `public/icon-192.png`,
+  `icon-512.png`, `icon-maskable-512.png` generuje `pnpm build:icons` (`scripts/build-icons.mjs`:
+  papoušek ze SVG loga v CMS, vykreslený přes sharp). Google ve výsledcích ořezává favicon do
+  kolečka a těsný výřez (papoušek na 81 % šířky) přišel o pravé rohy (5. 9. 2026). Papoušek
+  proto zabírá 65 % šířky (okraj podle podkladu „logo-fb-small“) a je posunutý doleva, aby rovné
+  pravé rohy ležely uvnitř kružnice; `icon.png` je průhledný, ikony pro PWA/Apple/JSON-LD mají
+  bílé pozadí. Ikona záložky `src/app/favicon.ico` (16/32/48) se NEgeneruje — je původní, papoušek
+  od kraje ke kraji a průhledný, v záložce je potřeba velký (rozhodnutí uživatele). Barva
+  generovaných ikon `#224386` je původní modrá loga; `src/app/manifest.ts` a `themeColor`
+  (`viewport` v layoutu) drží modrou hlavičky `#215491`.
 - **Obrázky**: hero fotka má `alt` = popisek média z CMS (`Media.alt`, doplňuje ho
   `fetchMediaBasicsByIds`), bez něj název stránky/článku; sdílená výchozí obálka (profil,
   přihlášení, hledání, statické stránky bez fotky) `alt=""`, je to dekorace; fotky v rich textu nesou `width`/`height` (žádný posun rozvržení),
