@@ -4,6 +4,7 @@ import type {
   GlobalAfterChangeHook,
   PayloadRequest,
 } from 'payload'
+import { invalidateSearchIndex } from '../lib/search-cache'
 
 /**
  * Okamžitá invalidace cache webu při změně obsahu v adminu.
@@ -12,6 +13,8 @@ import type {
  * `unstable_cache` + tagy (viz src/lib/payload.ts a src/lib/search.ts).
  * Tyto hooky po uložení/smazání dokumentu zavolají `revalidateTag`, takže
  * změna je na webu vidět hned — žádné čekání na vypršení cache, žádné webhooky.
+ * Index vyhledávání není v Next cache (přes 2 MB, viz lib/search-cache.ts), ale
+ * v paměti procesu — u stránek ho proto zahazujeme přímo (`invalidateSearchIndex`).
  */
 
 // `next/cache` se importuje LÍNĚ a s explicitní příponou `.js`. Tento modul se
@@ -61,11 +64,11 @@ export const revalidatePageAfterChange: CollectionAfterChangeHook = async ({
   doc,
   previousDoc,
 }) => {
+  invalidateSearchIndex()
   await safeRevalidate([
     'pages',
     'root_pages',
     'sitemap',
-    'search-index',
     ...pageTags(doc as PageLikeDoc),
     ...pageTags(previousDoc as PageLikeDoc),
   ])
@@ -73,13 +76,8 @@ export const revalidatePageAfterChange: CollectionAfterChangeHook = async ({
 }
 
 export const revalidatePageAfterDelete: CollectionAfterDeleteHook = async ({ doc }) => {
-  await safeRevalidate([
-    'pages',
-    'root_pages',
-    'sitemap',
-    'search-index',
-    ...pageTags(doc as PageLikeDoc),
-  ])
+  invalidateSearchIndex()
+  await safeRevalidate(['pages', 'root_pages', 'sitemap', ...pageTags(doc as PageLikeDoc)])
   return doc
 }
 

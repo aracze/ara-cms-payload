@@ -283,8 +283,15 @@ curl -i http://localhost:3000/api/health
 ### `GET /api/search`
 
 Full-text search over page titles and text. The index is built at runtime from
-the Local API and cached with tags (see `src/lib/search.ts`); matching uses
-[Fuse.js](https://fusejs.io/).
+the Local API (see `src/lib/search.ts`); matching uses [Fuse.js](https://fusejs.io/).
+V produkci se hotový index drží **v paměti procesu** (`src/lib/search-cache.ts`),
+ne v `unstable_cache` — Next položky nad 2 MB do datové cache tiše neukládá (jen
+`console.warn` „items over 2MB can not be cached“ v logu) a index má ~3 MB, takže
+se dřív při každém písmenu četl celý web z DB (1,1–1,8 s na dotaz). Uložení nebo
+smazání stránky v adminu index zahodí přímo z hooku (`invalidateSearchIndex`),
+pojistkou je obnova na pozadí po hodině. Po nasazení hlídat
+`docker compose logs cms | grep "over 2MB"` — stejný limit platí pro každé
+`cached()` čtení.
 
 - Query param `q` — the search term (empty `q` returns no matches).
 - Response: `{ "success": true, "message": [ /* Fuse results */ ] }`.

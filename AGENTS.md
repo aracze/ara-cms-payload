@@ -17,8 +17,10 @@
    webu projevit okamžitě a měření výkonu musí ukazovat skutečné (necachované) časy.
 2. Každé cachované čtení CMS dat MUSÍ jít přes helper `cached()` v `src/lib/payload.ts`
    (v dev vrací funkci bez cache obalu). Nikdy nevolej `unstable_cache` přímo
-   z jiného místa — jediná povolená výjimka je `src/lib/search.ts`, které má stejnou
-   dev/prod větev.
+   z jiného místa. Jediná výjimka je vyhledávací index (`src/lib/search.ts` +
+   `src/lib/search-cache.ts`): drží se v paměti procesu, protože Next položky nad
+   2 MB do datové cache TIŠE neuloží (jen warn v logu) — pozor na to u každého
+   dalšího velkého `cached()` čtení. I tato cache je jen v produkci.
 3. Povolené výjimky v dev: React `cache()` (jen dedup dotazů v rámci JEDNOHO requestu,
    nic nedrží mezi requesty) a cache externích API mimo CMS (kurzy měn, počasí —
    chrání rate limity třetích stran).

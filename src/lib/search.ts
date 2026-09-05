@@ -1,21 +1,31 @@
 import Fuse, { type FuseResult, type IFuseOptions } from 'fuse.js'
-import { unstable_cache } from 'next/cache'
 import { getDb } from './db'
+import { getCachedSearchIndex } from './search-cache'
 import { isProduction, richTextToPlainText, stripLeadingContinent } from './utils'
 import type { SearchItem } from '@/types/search'
 
 /**
  * Vyhledávací index se staví ZA BĚHU z Local API (dřív se generoval při buildu
  * ze souborů, což vyžadovalo běžící CMS při buildu a index zastarával).
- * Data se cachují s tagy — publikace stránky index okamžitě obnoví
- * (revalidateTag v hoocích). Fuse index nad ~200 položkami se staví za ~ms.
+ * V produkci se hotový Fuse index drží v paměti procesu (lib/search-cache.ts) —
+ * publikace stránky ho zahodí přímo z hooku (invalidateSearchIndex). Dřívější
+ * `unstable_cache` tu tiše nefungoval: data mají ~3 MB a Next položky nad 2 MB
+ * do datové cache neukládá, takže se ~3000 stránek četlo z DB při každém písmenu.
  *
  * Payload instance se sdílí přes stejný singleton (getDb) jako datová vrstva —
  * /api/search se volá při psaní často, vlastní init by byl zbytečná režie.
  */
-// Selhání DB NESMÍ vracet prázdno uvnitř cache (uložilo by se) — chyba propadá
-// ven z unstable_cache a fallback řeší až getFuse.
-async function loadSearchDataUncached(): Promise<SearchItem[]> {
+// Do indexu jde začátek textu stránky. Zkrácení na 1000 znaků bylo změřeno
+// (5. 9. 2026) a rychlosti nepomohlo (79 vs. 82 ms na dotaz) — čas Fuse jde
+// za počtem stránek, ne délkou textu — proto zůstává 2000 a shody hlouběji
+// v textu se neztrácí.
+const SEARCH_TEXT_MAX = 2000
+
+// Pojistka pro případ, že by hook z adminu index nezahodil; primárně
+// invalidují hooky (src/hooks/revalidation.ts). Po vypršení se staví na pozadí.
+const SEARCH_INDEX_MAX_AGE_MS = 60 * 60 * 1000
+
+async function loadSearchData(): Promise<SearchItem[]> {
   const payload = await getDb()
   const items: SearchItem[] = []
   // Fotky se dotahují hromadně až nakonec (jeden dotaz na media pro všechny
@@ -71,7 +81,7 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
         // Stabilní klíč pro React ve výpisu (jinak by se padalo na index).
         documentId: String(doc.id),
         title: doc.title ?? '',
-        text: richTextToPlainText(doc.text).slice(0, 2000),
+        text: richTextToPlainText(doc.text).slice(0, SEARCH_TEXT_MAX),
         slug: doc.slug ?? '',
         fullSlug: doc.fullSlug ?? '',
         path: path || undefined,
@@ -119,13 +129,6 @@ async function loadSearchDataUncached(): Promise<SearchItem[]> {
   return items
 }
 
-const loadSearchData = isProduction()
-  ? unstable_cache(loadSearchDataUncached, ['search-data'], {
-      tags: ['pages', 'search-index'],
-      revalidate: 3600,
-    })
-  : loadSearchDataUncached
-
 // Čeští návštěvníci běžně píší bez diakritiky — porovnáváme index i dotaz
 // bez háčků a čárek, aby „rim" našlo „Řím" (a „řím" i „Rim Trail").
 function removeDiacritics(value: string): string {
@@ -151,14 +154,15 @@ const FUSE_OPTIONS: IFuseOptions<SearchItem> = {
   },
 }
 
-async function getFuse(): Promise<Fuse<SearchItem>> {
-  let data: SearchItem[] = []
-  try {
-    data = await loadSearchData()
-  } catch {
-    // DB nedostupná — prázdné vyhledávání, nic se necachuje
-  }
-  return new Fuse<SearchItem>(data, FUSE_OPTIONS)
+async function buildFuse(): Promise<Fuse<SearchItem>> {
+  return new Fuse<SearchItem>(await loadSearchData(), FUSE_OPTIONS)
+}
+
+// Selhání DB propadá ven (route vrátí 500 a UI ukáže chybu místo „Žádné
+// výsledky"); v produkci se neúspěšný build nedrží v paměti — viz search-cache.
+function getFuse(): Promise<Fuse<SearchItem>> {
+  if (!isProduction()) return buildFuse()
+  return getCachedSearchIndex(buildFuse, SEARCH_INDEX_MAX_AGE_MS)
 }
 
 // Jediný vstup vyhledávání. UI zobrazuje max 10 položek, víc nemá smysl
