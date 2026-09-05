@@ -9,7 +9,9 @@
 --      nový partnerský odkaz lze dosadit stejným způsobem).
 --   4. Invia: Černá Hora, Kypr a Lotyšsko vedly omylem na /dovolena/belorusko/.
 --   5. booking.com (staré aid=1328457 ve článku o Sri Lance, jinde bez provize)
---      → /go/ubytovani[/cesta na booking.com] (CJ).
+--      → /go/ubytovani[/cesta na booking.com] (CJ). Stránky kategorie Ubytování se
+--      vynechávají — ty řeší scripts/ubytovani-booking-odkazy.sql (vč. mazání zbytků
+--      widgetu), takže na pořadí spuštění obou skriptů nezáleží.
 -- Idempotentní; původní texty do zaloha.texts_affiliate_odkazy_2026_09_04. Z verzí
 -- stránek jen poslední PUBLIKOVANÁ (draft editora a historie zůstávají); články verze nemají.
 -- Spuštění (dev):  docker compose exec -T postgres psql -U postgres -d aracze < scripts/affiliate-odkazy-v-textech.sql
@@ -28,14 +30,15 @@ ORDER BY v.parent_id, v.updated_at DESC, v.id DESC;
 
 -- Všechny odkazy v textech (stránky FOR UPDATE — souběžná editace v adminu se nepřepíše).
 CREATE TEMP TABLE links ON COMMIT DROP AS
-SELECT 'page' AS scope, p.id AS doc_id, p.full_slug AS slug, p.parent_id, l->'fields'->>'url' AS url
+SELECT 'page' AS scope, p.id AS doc_id, p.full_slug AS slug, p.parent_id, p.category::text AS category,
+       l->'fields'->>'url' AS url
 FROM pages p, jsonb_path_query(p.text, 'strict $.**.children[*] ? (@.type == "link")') l
 UNION ALL
-SELECT 'page', p.id, p.full_slug, p.parent_id, l->'fields'->>'url'
+SELECT 'page', p.id, p.full_slug, p.parent_id, p.category::text, l->'fields'->>'url'
 FROM pubv v JOIN pages p ON p.id = v.page_id,
      jsonb_path_query(v.version_text, 'strict $.**.children[*] ? (@.type == "link")') l
 UNION ALL
-SELECT 'article', a.id, a.slug, NULL, l->'fields'->>'url'
+SELECT 'article', a.id, a.slug, NULL, NULL, l->'fields'->>'url'
 FROM articles a, jsonb_path_query(a.text, 'strict $.**.children[*] ? (@.type == "link")') l;
 
 CREATE TEMP TABLE m (
@@ -76,11 +79,12 @@ WHERE scope = 'page' AND slug IN ('/cerna-hora/doprava', '/kypr/doprava', '/loty
   AND url LIKE 'https://www.invia.cz/dovolena/belorusko/%'
 ON CONFLICT DO NOTHING;
 
--- 5) Booking → /go/ubytovani[/cesta]
+-- 5) Booking → /go/ubytovani[/cesta] — mimo stránky Ubytování (viz hlavička)
 INSERT INTO m
 SELECT DISTINCT '5 booking', scope, doc_id, url,
   '/go/ubytovani' || regexp_replace(regexp_replace(regexp_replace(url, '^https?://[^/]+', ''), '[?#;].*$', ''), '/+$', '')
-FROM links WHERE url ~* '^https?://(www\.)?booking\.com(/|$)'
+FROM links
+WHERE url ~* '^https?://(www\.)?booking\.com(/|$)' AND category IS DISTINCT FROM 'Ubytování'
 ON CONFLICT DO NOTHING;
 
 -- Náhrada v serializovaném jsonb: přesná dvojice `"url": "<stará>"` (jsonb::text

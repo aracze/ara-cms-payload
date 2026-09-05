@@ -54,7 +54,8 @@ BEGIN
 END $$;
 
 -- Odstranění odstavců, které jsou JEN záložní odkaz widgetu (jediný potomek typu link
--- s url `//www.booking.com?aid=…` nebo `https://www.booking.com/?aid=…`).
+-- s url `//www.booking.com?aid=…`, `https://www.booking.com/?aid=…`, nebo už přepsané
+-- holé `/go/ubytovani` — kdyby dřív běžel scripts/affiliate-odkazy-v-textech.sql).
 CREATE FUNCTION pg_temp.drop_widget_paragraphs(t jsonb) RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT CASE WHEN t->'root'->'children' IS NULL THEN t ELSE
     jsonb_set(t, '{root,children}', COALESCE((
@@ -64,7 +65,8 @@ CREATE FUNCTION pg_temp.drop_widget_paragraphs(t jsonb) RETURNS jsonb LANGUAGE s
         c->>'type' = 'paragraph'
         AND jsonb_array_length(COALESCE(c->'children', '[]'::jsonb)) = 1
         AND c->'children'->0->>'type' = 'link'
-        AND c->'children'->0->'fields'->>'url' ~ '^(https?:)?//www\.booking\.com/?\?aid=\d+$'
+        AND c->'children'->0->'fields'->>'url' ~ '^((https?:)?//www\.booking\.com/?\?aid=\d+|/go/ubytovani/?)$'
+        AND c->'children'->0->'children'->0->>'text' ~* '^\s*booking\.com\s*$'
       )
     ), '[]'::jsonb))
   END
@@ -78,7 +80,8 @@ $$;
 CREATE TEMP TABLE src ON COMMIT DROP AS
 SELECT p.id, p.full_slug, p.text AS old_text, pg_temp.fix_text(p.text) AS new_text
 FROM pages p
-WHERE p.category = 'Ubytování' AND p.text IS NOT NULL AND p.text::text LIKE '%booking.com%'
+WHERE p.category = 'Ubytování' AND p.text IS NOT NULL
+  AND (p.text::text LIKE '%booking.com%' OR p.text::text LIKE '%/go/ubytovani%')
 FOR UPDATE OF p;
 DELETE FROM src WHERE old_text = new_text;
 
@@ -93,7 +96,8 @@ FROM (
   WHERE p.category = 'Ubytování' AND v.version__status = 'published'
   ORDER BY v.parent_id, v.updated_at DESC, v.id DESC
 ) v
-WHERE v.version_text IS NOT NULL AND v.version_text::text LIKE '%booking.com%';
+WHERE v.version_text IS NOT NULL
+  AND (v.version_text::text LIKE '%booking.com%' OR v.version_text::text LIKE '%/go/ubytovani%');
 DELETE FROM srcv WHERE old_text = new_text;
 
 CREATE TABLE IF NOT EXISTS zaloha.pages_text_ubytovani_2026_09_04 (

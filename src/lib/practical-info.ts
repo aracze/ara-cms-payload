@@ -7,18 +7,23 @@ import { richTextToHtml, type RichTextRenderContext } from './rich-text-html'
  * stejně jako na starém webu (taglib displayTextsFromOtherPages).
  */
 
-// Pořadí sekcí a jejich nadpisy jako na starém webu. Kategorie bez `title`
-// používají název podstránky z CMS (Ubytování, Cesta).
+// Pořadí sekcí podle toho, jak se cesta plánuje (rozhodnutí uživatele
+// 5. 9. 2026): podmínky vstupu a kdy jet, pak cesta a doprava, ubytování,
+// peníze a jídlo, nakonec zdraví a kultura. Starý web řadil Ubytování první
+// a Počasí poslední (nejdelší sekce) — Počasí je proto druhé, ne první, aby
+// čtenář nemusel přes dlouhý text scrollovat k ostatním. Nadpisy sekcí jako
+// na starém webu; kategorie bez `title` používají název podstránky z CMS
+// (Ubytování, Cesta).
 const sectionDefs: { category: PageCategory; title?: string }[] = [
-  { category: PageCategory.Ubytovani },
   { category: PageCategory.Vstupni_podminky, title: 'Vstupní podmínky' },
+  { category: PageCategory.Pocasi, title: 'Počasí a doba návštěvy' },
+  { category: PageCategory.Cesta },
+  { category: PageCategory.Doprava, title: 'Cestování a doprava' },
+  { category: PageCategory.Ubytovani },
   { category: PageCategory.Mena_a_ceny, title: 'Měna a ceny' },
   { category: PageCategory.Jidlo_a_pit, title: 'Jídlo a pití' },
-  { category: PageCategory.Cesta },
   { category: PageCategory.Zdravi_a_bezpeci, title: 'Zdraví a bezpečí' },
   { category: PageCategory.Jazyk_a_kultura, title: 'Jazyk a kultura' },
-  { category: PageCategory.Doprava, title: 'Cestování a doprava' },
-  { category: PageCategory.Pocasi, title: 'Počasí a doba návštěvy' },
 ]
 
 /** Kategorie podstránek, ze kterých se skládá stránka Praktické informace. */
