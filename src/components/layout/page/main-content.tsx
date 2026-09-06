@@ -136,6 +136,36 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   return headings
 }
 
+type LexicalBlockNode = { type?: string; tag?: string }
+
+/**
+ * Rozdělí Lexical text za prvním nadpisem h2 a jeho prvním odstavcem — místo
+ * pro blok `midText`. Vrací `null`, když text není Lexical (složené Praktické
+ * informace dostávají hotový HTML řetězec), nemá h2, za h2 nenásleduje hned
+ * odstavec, nebo by za řezem už nic nezbylo (blok pak jde až za text).
+ */
+function splitRichTextAfterFirstSection(
+  text: string | RichTextRoot,
+): { before: RichTextRoot; after: RichTextRoot } | null {
+  if (typeof text === 'string') return null
+  const root = text.root
+  const children = root?.children
+  if (!root || !Array.isArray(children)) return null
+  const h2 = children.findIndex((node) => {
+    const n = node as LexicalBlockNode | null
+    return n?.type === 'heading' && n.tag === 'h2'
+  })
+  if (h2 < 0) return null
+  const next = children[h2 + 1] as LexicalBlockNode | undefined
+  if (next?.type !== 'paragraph') return null
+  const cut = h2 + 2
+  if (cut >= children.length) return null
+  return {
+    before: { root: { ...root, children: children.slice(0, cut) } },
+    after: { root: { ...root, children: children.slice(cut) } },
+  }
+}
+
 export const MainContent = ({
   text,
   pageCategory,
@@ -149,7 +179,6 @@ export const MainContent = ({
   touristPointInfo = null,
   aboveText = null,
   midText = null,
-  midHeadings = [],
   belowText = null,
   preHeadings = [],
   extraHeadings = [],
@@ -208,12 +237,11 @@ export const MainContent = ({
   aboveText?: React.ReactNode
   /**
    * Blok vložený DO textu za první nadpis h2 a jeho první odstavec (mapa se
-   * štítkem ubytování). Text bez h2 ho dostane až za sebe (před `belowText`).
-   * Jen pro nesbalované stránky — rozdělený text by sbalování rozbilo.
+   * štítkem ubytování). Text bez h2, bez odstavce hned za ním nebo bez dalšího
+   * obsahu ho dostane až za sebe (před `belowText`). Jen pro nesbalované
+   * stránky — rozdělený text by sbalování rozbilo.
    */
   midText?: React.ReactNode
-  /** Položky obsahu (TOC) bloku `midText` — zařadí se mezi nadpisy textu na jeho místo. */
-  midHeadings?: TocItem[]
   /**
    * Položky obsahu (TOC) PŘED nadpisy z textu — pro sekce v `aboveText`.
    */
@@ -243,8 +271,24 @@ export const MainContent = ({
   ]
   const showAktualniInfo = !!pageCategory && placeCategories.includes(pageCategory)
   // Pásmo jde do kontextu spolu s měnou — karta „Aktuální čas" v textu si ho
-  // bere, když má v bloku prázdné políčko (viz rich-text-html).
-  const textHtml = richTextToHtml(text, { currencyCode, exchangeRate, timezone })
+  // bere, když má v bloku prázdné políčko (viz rich-text-html). Sdílená sada
+  // id nadpisů drží kotvy unikátní i při textu rozděleném na dva kusy.
+  const renderContext = {
+    currencyCode,
+    exchangeRate,
+    timezone,
+    usedHeadingIds: new Set<string>(),
+  }
+  // Řez pro `midText` na úrovni Lexical uzlů (ne v HTML — odstavce v tabulkách
+  // či popiscích bloků nejsou na nejvyšší úrovni a řez v řetězci by rozbil
+  // otevřené obaly): za prvním nadpisem h2 a jeho prvním odstavcem
+  // (rozhodnutí uživatele 5. 9. 2026). Bez řezu jde blok až za text.
+  const midSplit = midText ? splitRichTextAfterFirstSection(text) : null
+  const splitText = midSplit !== null
+  const textBefore = richTextToHtml(midSplit ? midSplit.before : text, renderContext)
+  const textAfter = midSplit ? richTextToHtml(midSplit.after, renderContext) : ''
+  // Celý text (pro rozhodnutí o panelu apod.) = oba kusy za sebou.
+  const textHtml = textBefore + textAfter
   const tocCategories: PageCategory[] = [
     PageCategory.Vstupni_podminky,
     PageCategory.Mena_a_ceny,
@@ -263,29 +307,8 @@ export const MainContent = ({
   // Složené Praktické informace mají nadpisy posunuté o úroveň níž — obsah
   // proto bere h2–h4 (sekce + dvě úrovně podkapitol, jako starý web s h1–h3).
   const isPracticalInfo = pageCategory === PageCategory.Prakticke_informace
-  // Rozdělení textu pro `midText`: před prvním h2 (úvod) / od něj dál. Nadpisy
-  // jsou v HTML z richTextToHtml na nejvyšší úrovni, takže řez mezi bloky
-  // nechá oba kusy validní. Bez h2 zůstane text celý a blok jde až za něj.
-  // Řez pro `midText`: za prvním nadpisem h2 a jeho prvním odstavcem
-  // (rozhodnutí uživatele 5. 9. 2026) — čtenář si přečte úvod i to, kde se
-  // ubytovat, a pak vidí mapu. Bez h2 nebo bez odstavce za ním jde blok až za
-  // text. Nadpisy i odstavce jsou v HTML z richTextToHtml na nejvyšší úrovni,
-  // takže řez za `</p>` nechá oba kusy validní.
-  const firstH2 = midText ? textHtml.search(/<h2[\s>]/i) : -1
-  const firstParagraphEnd = firstH2 >= 0 ? textHtml.indexOf('</p>', firstH2) : -1
-  const splitAt = firstParagraphEnd >= 0 ? firstParagraphEnd + '</p>'.length : -1
-  const splitText = midText && splitAt > 0
-  const textBefore = splitText ? textHtml.slice(0, splitAt) : textHtml
-  const textAfter = splitText ? textHtml.slice(splitAt) : ''
-  const headingLevel = isPracticalInfo ? 4 : 3
   const headings = showTableOfContents
-    ? [
-        ...preHeadings,
-        ...extractHeadings(textBefore, headingLevel),
-        ...(midText ? midHeadings : []),
-        ...extractHeadings(textAfter, headingLevel),
-        ...extraHeadings,
-      ]
+    ? [...preHeadings, ...extractHeadings(textHtml, isPracticalInfo ? 4 : 3), ...extraHeadings]
     : []
 
   // Celý 2. pád i s předložkou („do Myanmaru", „na Slovensko") — stejně jako
@@ -399,7 +422,7 @@ export const MainContent = ({
         )}
         {splitText && midText}
         <CollapsiblePageTextWithContributor
-          textHtml={splitText ? textAfter : textHtml}
+          textHtml={splitText ? textAfter : textBefore}
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
           // i na informačních podstránkách (Vstupní podmínky, Měna a ceny, Počasí…)
           // — jako na původním webu. Rubriky a statické stránky autora nemají.

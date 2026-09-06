@@ -48,7 +48,9 @@ export function AccommodationMapSection({
       <span className="shrink-0 text-[#1a3f6c]" aria-hidden="true">
         <BedIcon height={22} />
       </span>
-      <h3 className="font-heading text-[15px] font-bold leading-tight text-[#1a3f6c]">{title}</h3>
+      {/* Není to nadpis sekce (blok nemá položku v obsahu vpravo a jediný obsah
+          je tlačítko) — jen popisek tlačítka, proto <p>, ne <h3>. */}
+      <p className="font-heading text-[15px] font-bold leading-tight text-[#1a3f6c]">{title}</p>
       <a
         href={href}
         target="_blank"

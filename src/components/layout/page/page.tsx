@@ -57,6 +57,7 @@ import { absoluteUrl, ogImageUrl, toJsonLd, touristDestinationJsonLd } from '@/l
 import { resolvePageSeo } from '@/lib/page-seo'
 import { breadcrumbsFromSlug, fetchAncestorChain } from '@/lib/page-ancestors'
 import { getCurrentUser } from '@/lib/auth'
+import { parseLatLng } from '@/lib/geo'
 import { getPayloadURL, getSiteURL, websiteHref } from '@/lib/utils'
 import { DEFAULT_COVER_BLUR, DEFAULT_COVER_POSITION, DEFAULT_COVER_URL } from '@/lib/default-cover'
 import type { ReviewPublic } from '@/types/payload'
@@ -445,12 +446,10 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
 
   // Blok mapy se štítkem (viz accommodationMapPromise). Bez souřadnic místa
   // zůstane jen štítek. Blok nemá nadpis, takže ani položku v obsahu vpravo.
-  const accommodationLat = Number.parseFloat(accommodationPlace?.detail?.latitude ?? '')
-  const accommodationLng = Number.parseFloat(accommodationPlace?.detail?.longitude ?? '')
-  const accommodationCenter =
-    Number.isFinite(accommodationLat) && Number.isFinite(accommodationLng)
-      ? { lat: accommodationLat, lng: accommodationLng }
-      : null
+  const accommodationCenter = parseLatLng(
+    accommodationPlace?.detail?.latitude,
+    accommodationPlace?.detail?.longitude,
+  )
   const accommodationProps = accommodationPlace
     ? {
         placeTitle: accommodationPlace.title,
@@ -823,8 +822,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
                 ]
               : []),
           ]}
-          extraHeadings={[
-            ...(placeWeather && placeWeather.days.length > 0
+          extraHeadings={
+            placeWeather && placeWeather.days.length > 0
               ? [
                   {
                     id: 'predpoved-pocasi',
@@ -832,8 +831,8 @@ export const Page = async ({ page }: { page: PayloadPage }) => {
                     level: 2,
                   },
                 ]
-              : []),
-          ]}
+              : []
+          }
           // Na stránkách počasí patří podpis autora až za předpověď (rozhodnutí
           // uživatele) — mezi textem a grafy by rozdělil související sekce.
           contributorAtEnd={page.category === PageCategory.Pocasi}

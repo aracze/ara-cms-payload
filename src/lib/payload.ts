@@ -26,6 +26,7 @@ import {
   ContributorFace,
   HomepageTourDeal,
 } from '@/types/payload'
+import { parseLatLng } from './geo'
 import { CONTRIBUTOR_FACES_LIMIT, NON_PERSON_USERNAMES, TEAM_USERNAMES } from './team'
 import { practicalInfoSectionCategories } from './practical-info'
 import { unstable_cache } from 'next/cache'
@@ -1896,10 +1897,13 @@ type RawTouristPointMarker = {
 }
 
 /**
- * Turistické cíle místa se souřadnicemi — piny mapy na podstránce Ubytování.
- * Stránka Ubytování je sourozenec cílů (dítě místa), takže je nemá načtené;
- * sekce „Co vidět" místa řeší i vnořená místa (resolvePlacesToVisit), tady
- * stačí přímé cíle — mapa jen ukazuje, kde na ostrově/v zemi co leží.
+ * Přímé děti místa se souřadnicemi — piny mapy na podstránce Ubytování.
+ * Stránka Ubytování je sourozenec cílů (dítě místa), takže je nemá načtené.
+ * Berou se turistické cíle i podřazená místa (Sicílie má jen města, Kazachstán
+ * jen regiony — bez nich by mapa zůstala prázdná); vnořené úrovně jako sekce
+ * „Co vidět" (resolvePlacesToVisit) se neřeší, mapa jen ukazuje, kde co leží.
+ * Souřadnice mimo rozsah (překlep v adminu) by shodily celou mapu, takový pin
+ * se vynechá (parseLatLng).
  */
 async function fetchPlaceTouristPointMarkersUncached(
   placeId: number,
@@ -1909,40 +1913,37 @@ async function fetchPlaceTouristPointMarkersUncached(
     collection: 'pages',
     overrideAccess: false,
     where: {
-      and: [{ parent: { equals: placeId } }, { category: { equals: PageCategory.Turisticky_cil } }],
+      and: [
+        { parent: { equals: placeId } },
+        { category: { in: [PageCategory.Turisticky_cil, PageCategory.Misto_k_navstiveni] } },
+      ],
     },
     depth: 0,
     limit: 100,
     pagination: false,
-    select: { id: true, title: true, fullSlug: true, featuredImage: true, detail: true },
+    // Z detailu jen souřadnice — celá skupina (adresa, web, pásmo…) by šla
+    // přes afterRead hooky za každý pin zbytečně.
+    select: {
+      id: true,
+      title: true,
+      fullSlug: true,
+      featuredImage: true,
+      detail: { latitude: true, longitude: true },
+    },
     joins: false,
   })) as unknown as PayloadDocsResponse<RawTouristPointMarker>
   // depth 0 → featuredImage.image je id; fotky pinů doplní hromadný překlad.
   const docs = await enrichFeaturedImages(res.docs ?? [])
   const markers: AccommodationMapMarker[] = []
   for (const doc of docs) {
-    const lat = Number.parseFloat(doc.detail?.latitude ?? '')
-    const lng = Number.parseFloat(doc.detail?.longitude ?? '')
-    // Souřadnice mimo rozsah (překlep v adminu) by shodily celou mapu — MapLibre
-    // při setLngLat s |lat| > 90 vyhazuje chybu a komponenta ji hlásí jako
-    // nedostupnou mapu. Takový pin se radši vynechá.
-    if (
-      !doc.fullSlug ||
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      lat < -90 ||
-      lat > 90 ||
-      lng < -180 ||
-      lng > 180
-    )
-      continue
+    const coords = parseLatLng(doc.detail?.latitude, doc.detail?.longitude)
+    if (!doc.fullSlug || !coords) continue
     const imageUrl = (doc.featuredImage?.image as { url?: string } | null | undefined)?.url
     markers.push({
       id: doc.id,
       title: doc.title,
       fullSlug: doc.fullSlug,
-      lat,
-      lng,
+      ...coords,
       imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
     })
   }
@@ -1956,10 +1957,12 @@ const fetchPlaceTouristPointMarkersCached = cached(
 )
 
 /**
- * Data mapového bloku podstránky Ubytování: piny cílů místa + Booking deep-link
+ * Data mapového bloku podstránky Ubytování: piny dětí místa + Booking deep-link
  * nejbližšího předka, který ho má (Grand Teton → vlastní, Zakynthos → vlastní,
  * jinak země). Předky dodá volající seřazené od nejbližšího
- * (`ancestorSlugsNearestFirst`) — sdílí se cachovaný dotaz s měnou a nabídkami.
+ * (`ancestorSlugsNearestFirst`); dotaz na předky je stejný cachovaný helper jako
+ * u měny a nabídek (ty ale na podstránce Ubytování neběží, takže tu jde o
+ * vlastní dotaz).
  */
 export const fetchAccommodationMapData = cache(
   async (placeId: number, ancestorFullSlugs: string[]): Promise<AccommodationMapData> => {

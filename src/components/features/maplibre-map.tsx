@@ -41,11 +41,14 @@ interface MapLibreMapProps {
    */
   fitToMarkers?: boolean
   /**
-   * Odsazení výřezu při fitBounds v pixelech — když přes roh mapy leží karta
+   * Odsazení výřezu při fitBounds v pixelech — když přes roh mapy leží štítek
    * (podstránka Ubytování), piny se dorámují do zbylé plochy. Použije se jen
-   * když je mapa dost široká (odsazení + ~240 px na piny), na užší mapě zůstává
-   * výchozí odsazení. Předávej STABILNÍ referenci (konstantu modulu), jinak se
-   * mapa při každém renderu bourá a staví znovu.
+   * od zlomu `lg` (64rem, kde štítek skutečně leží přes mapu; pod ním stojí pod
+   * mapou) a jen když je mapa dost široká (odsazení + ~240 px na piny), jinak
+   * zůstává výchozí odsazení. Počítá se jednou při stavbě mapy — po změně
+   * velikosti okna se výřez schválně nepřerámuje, zrušilo by to čtenářův posun.
+   * Předávej STABILNÍ referenci (konstantu modulu), jinak se mapa při každém
+   * renderu bourá a staví znovu.
    */
   fitPadding?: FitPadding
 }
@@ -400,11 +403,14 @@ export const MapLibreMap: React.FC<MapLibreMapProps> = ({
         })
 
         if (fitToMarkers && currentMarkers.length > 1) {
-          // Vlastní odsazení jen na dost široké mapě — jinak by fitBounds
-          // s odsazením větším než plátno vyhodil chybu.
+          // Vlastní odsazení jen od zlomu `lg` (překryv štítkem) a na dost
+          // široké mapě — s odsazením větším než plátno by fitBounds výřez
+          // nespočítal (MapLibre vrátí undefined a jen varuje).
           const width = mapRef.current?.clientWidth ?? 0
           const useCustomPadding =
-            fitPadding !== undefined && width > fitPadding.left + fitPadding.right + 240
+            fitPadding !== undefined &&
+            window.matchMedia('(min-width: 64rem)').matches &&
+            width > fitPadding.left + fitPadding.right + 240
           map.fitBounds(bounds, {
             padding: useCustomPadding ? fitPadding : DEFAULT_FIT_PADDING,
             maxZoom: MAX_FIT_ZOOM,
