@@ -136,6 +136,36 @@ function extractHeadings(html: string, maxLevel: 3 | 4 = 3): TocItem[] {
   return headings
 }
 
+type LexicalBlockNode = { type?: string; tag?: string }
+
+/**
+ * Rozdělí Lexical text za prvním nadpisem h2 a jeho prvním odstavcem — místo
+ * pro blok `midText`. Vrací `null`, když text není Lexical (složené Praktické
+ * informace dostávají hotový HTML řetězec), nemá h2, za h2 nenásleduje hned
+ * odstavec, nebo by za řezem už nic nezbylo (blok pak jde až za text).
+ */
+function splitRichTextAfterFirstSection(
+  text: string | RichTextRoot,
+): { before: RichTextRoot; after: RichTextRoot } | null {
+  if (typeof text === 'string') return null
+  const root = text.root
+  const children = root?.children
+  if (!root || !Array.isArray(children)) return null
+  const h2 = children.findIndex((node) => {
+    const n = node as LexicalBlockNode | null
+    return n?.type === 'heading' && n.tag === 'h2'
+  })
+  if (h2 < 0) return null
+  const next = children[h2 + 1] as LexicalBlockNode | undefined
+  if (next?.type !== 'paragraph') return null
+  const cut = h2 + 2
+  if (cut >= children.length) return null
+  return {
+    before: { root: { ...root, children: children.slice(0, cut) } },
+    after: { root: { ...root, children: children.slice(cut) } },
+  }
+}
+
 export const MainContent = ({
   text,
   pageCategory,
@@ -148,6 +178,7 @@ export const MainContent = ({
   createdByPublic,
   touristPointInfo = null,
   aboveText = null,
+  midText = null,
   belowText = null,
   preHeadings = [],
   extraHeadings = [],
@@ -205,6 +236,13 @@ export const MainContent = ({
    */
   aboveText?: React.ReactNode
   /**
+   * Blok vložený DO textu za první nadpis h2 a jeho první odstavec (mapa se
+   * štítkem ubytování). Text bez h2, bez odstavce hned za ním nebo bez dalšího
+   * obsahu ho dostane až za sebe (před `belowText`). Jen pro nesbalované
+   * stránky — rozdělený text by sbalování rozbilo.
+   */
+  midText?: React.ReactNode
+  /**
    * Položky obsahu (TOC) PŘED nadpisy z textu — pro sekce v `aboveText`.
    */
   preHeadings?: TocItem[]
@@ -233,8 +271,24 @@ export const MainContent = ({
   ]
   const showAktualniInfo = !!pageCategory && placeCategories.includes(pageCategory)
   // Pásmo jde do kontextu spolu s měnou — karta „Aktuální čas" v textu si ho
-  // bere, když má v bloku prázdné políčko (viz rich-text-html).
-  const textHtml = richTextToHtml(text, { currencyCode, exchangeRate, timezone })
+  // bere, když má v bloku prázdné políčko (viz rich-text-html). Sdílená sada
+  // id nadpisů drží kotvy unikátní i při textu rozděleném na dva kusy.
+  const renderContext = {
+    currencyCode,
+    exchangeRate,
+    timezone,
+    usedHeadingIds: new Set<string>(),
+  }
+  // Řez pro `midText` na úrovni Lexical uzlů (ne v HTML — odstavce v tabulkách
+  // či popiscích bloků nejsou na nejvyšší úrovni a řez v řetězci by rozbil
+  // otevřené obaly): za prvním nadpisem h2 a jeho prvním odstavcem
+  // (rozhodnutí uživatele 5. 9. 2026). Bez řezu jde blok až za text.
+  const midSplit = midText ? splitRichTextAfterFirstSection(text) : null
+  const splitText = midSplit !== null
+  const textBefore = richTextToHtml(midSplit ? midSplit.before : text, renderContext)
+  const textAfter = midSplit ? richTextToHtml(midSplit.after, renderContext) : ''
+  // Celý text (pro rozhodnutí o panelu apod.) = oba kusy za sebou.
+  const textHtml = textBefore + textAfter
   const tocCategories: PageCategory[] = [
     PageCategory.Vstupni_podminky,
     PageCategory.Mena_a_ceny,
@@ -244,6 +298,9 @@ export const MainContent = ({
     PageCategory.Zdravi_a_bezpeci,
     PageCategory.Jazyk_a_kultura,
     PageCategory.Jidlo_a_pit,
+    // Ubytování je informační podstránka jako ostatní (starý web jí dával
+    // obsah vpravo i autora) — bez ní tu stránka stála vlevo s prázdným sloupcem.
+    PageCategory.Ubytovani,
     PageCategory.Prakticke_informace,
   ]
   const showTableOfContents = !!pageCategory && tocCategories.includes(pageCategory)
@@ -330,6 +387,18 @@ export const MainContent = ({
   // Šířku ani vnitřní odsazení sloupce neměníme — text má pořád stejnou míru
   // řádku, mění se jen jeho poloha.
   const justify = hasSidebar || centerColumn || isRubric ? 'lg:justify-center' : 'lg:justify-start'
+  // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
+  // orientované fotky by jinak zabraly celou obrazovku. Praktické informace:
+  // posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose). Rubrika: text
+  // je jednořádkové motto vycentrované nad mřížkou článků (viz `isRubric`
+  // a .rubric-motto v globals.css).
+  const proseClassName = touristPointInfo
+    ? 'poi-prose'
+    : isPracticalInfo
+      ? 'pi-prose'
+      : isRubric
+        ? 'rubric-motto'
+        : undefined
 
   return (
     <main
@@ -344,8 +413,16 @@ export const MainContent = ({
       {/* Main Content — čtecí sloupec jako u článku (viz reading-prose) */}
       <div className="flex-1 min-w-0 lg:max-w-[808px] lg:px-16">
         {aboveText}
+        {splitText && (
+          <CollapsiblePageTextWithContributor
+            textHtml={textBefore}
+            collapsible={false}
+            proseClassName={proseClassName}
+          />
+        )}
+        {splitText && midText}
         <CollapsiblePageTextWithContributor
-          textHtml={textHtml}
+          textHtml={splitText ? textAfter : textBefore}
           // Autor se zobrazuje na místech (Místa/Místo k navštívení/Turistický cíl)
           // i na informačních podstránkách (Vstupní podmínky, Měna a ceny, Počasí…)
           // — jako na původním webu. Rubriky a statické stránky autora nemají.
@@ -357,21 +434,13 @@ export const MainContent = ({
               : null
           }
           collapsible={pageCategory === PageCategory.Misto_k_navstiveni}
-          // Fotky v textu cíle: plná šířka sloupce, ale omezená výška — na výšku
-          // orientované fotky by jinak zabraly celou obrazovku. Praktické
-          // informace: posunuté nadpisy dostávají vzhled o úroveň výš (pi-prose).
-          // Rubrika: text je jednořádkové motto vycentrované nad mřížkou
-          // článků (viz `isRubric` a .rubric-motto v globals.css).
+          // Pokračování za vloženým blokem: první odstavec už není úvodní
+          // „lead" (viz .prose-continued v globals.css).
           proseClassName={
-            touristPointInfo
-              ? 'poi-prose'
-              : isPracticalInfo
-                ? 'pi-prose'
-                : isRubric
-                  ? 'rubric-motto'
-                  : undefined
+            splitText ? `${proseClassName ?? ''} prose-continued`.trim() : proseClassName
           }
         />
+        {midText && !splitText && midText}
         {belowText}
         {contributorAtEnd && contributor && (
           <div className="mt-10">

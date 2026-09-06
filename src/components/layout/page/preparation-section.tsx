@@ -127,7 +127,7 @@ function carRentalHref(cmsUrl: string | null | undefined): string {
  * spolupráce se zahodí). Adresa mimo booking.com se nechá být — pod CJ inzerát
  * Bookingu nepatří.
  */
-function accommodationHref(cmsUrl: string | null | undefined): string {
+export function accommodationHref(cmsUrl: string | null | undefined): string {
   if (!cmsUrl) return '/go/ubytovani'
   let target: URL
   try {

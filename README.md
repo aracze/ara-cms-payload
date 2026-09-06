@@ -1019,7 +1019,27 @@ m.cloudinary_public_id = a.cloudinary_public_id` musí vrátit 0.
   historii, viz „Stará databáze" výše pro postup. Výsledek na produkci: 657 stránek,
   z toho 487 s přesnou stránkou města/regionu u Bookingu, 258 u DiscoverCars a 117
   lokalit u Invie; zbytek dědí zemi. Novým místům stačí vyplnit pole v adminu (nebo
-  nechat prázdné — runtime spadne na odkaz země/obecný).
+  nechat prázdné — runtime spadne na odkaz země/obecný). Odkazy na Booking přímo
+  v textech stránek „Ubytování" (8 stránek; staré `aid=`, u USA dokonce cizí) přepsal na
+  `/go/ubytovani/<cesta>` skript `scripts/ubytovani-booking-odkazy.sql` a smazal osamocené
+  odkazy „Booking.com" — zbytky legacy mapového widgetu, který se zrušeným partnerským
+  účtem nejde obnovit (dev hotovo 4. 9. 2026; prod = stejný skript + force-recreate `cms`).
+  Ostatní mrtvé partnerské odkazy v textech (audit 4. 9. 2026) přepsal
+  `scripts/affiliate-odkazy-v-textech.sql`: Rentalcars (program ukončen) → `/go/auta[/země]`
+  z DiscoverCars adresy rodiče, `ara.cz/go/epojisteni` (404) → `/go/pojisteni`, mrtvý
+  Impact odkaz Revolutu → revolut.com/cz (bez provize), tři chybné země u Invie a Booking
+  ve článcích → `/go/ubytovani[/cesta]`; dohromady 173 stránek a 4 články (dev hotovo,
+  prod = stejný skript + force-recreate `cms`). Nechané záměrně: živé odkazy na
+  ara.carrentalnet.com a economycarrentals (reseller 1657), Kiwi a Vašenároky.
+  Místo widgetu má podstránka Ubytování vlastní blok (`page/accommodation-map-section.tsx`)
+  vložený DO textu za první nadpis h2 a jeho první odstavec (`midText` v MainContent; text bez
+  h2 ho dostane až za sebe, pokračování nemá „lead" odstavec, viz `.prose-continued`): MapLibre mapa
+  kontextového místa s piny jeho turistických cílů (`fetchAccommodationMapData`, fotky pinů)
+  a v levém dolním rohu štítek „Ubytování <6. pád>“ + tlačítko Hledat → `/go/ubytovani/<cesta>`
+  z pole „Rezervace ubytování" nejbližšího předka; piny se dorámují nad štítek (`fitPadding`
+  mapy, na užší mapě štítek stojí pod ní). Bez nadpisu (rozhodnutí uživatele 5. 9. 2026),
+  místo bez souřadnic dostane jen štítek. Kategorie Ubytování má od téhož dne i pravý
+  sloupec s obsahem a autora jako ostatní informační podstránky (`tocCategories`).
   **Zájezdy jdou přes Invii** (partnerský účet ověřen živý 14. 8. 2026, `aid=4745582`):
   deep-linky destinací (`invia.cz/dovolena/<země>[/<lokalita>]`, slugy česky — bez exonym;
   Invia neexistující lokalitu přesměruje na zemi, hit je jen přímé 200) obaluje karta

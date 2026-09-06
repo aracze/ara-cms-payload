@@ -27,6 +27,7 @@ import {
   HomepageTourDeal,
   PopularDestination,
 } from '@/types/payload'
+import { parseLatLng } from './geo'
 import { CONTRIBUTOR_FACES_LIMIT, NON_PERSON_USERNAMES, TEAM_USERNAMES } from './team'
 import { practicalInfoSectionCategories } from './practical-info'
 import { unstable_cache } from 'next/cache'
@@ -1868,6 +1869,120 @@ const fetchPlaceWeatherChildCached = cached(
 
 export const fetchPlaceWeatherChild = cache((placeId: number): Promise<PlaceWeatherChild | null> =>
   fetchPlaceWeatherChildCached(placeId),
+)
+
+// ————————————————————————————————————————————————————————————————
+// Mapa s kartou „Hledat ubytování" na podstránce Ubytování
+// ————————————————————————————————————————————————————————————————
+
+/** Pin mapy na podstránce Ubytování — turistický cíl místa se souřadnicemi. */
+export interface AccommodationMapMarker {
+  id: number | string
+  title: string
+  fullSlug: string
+  lat: number
+  lng: number
+  imageUrl: string | null
+}
+
+export interface AccommodationMapData {
+  markers: AccommodationMapMarker[]
+  /** Booking deep-link místa (pole „Rezervace ubytování"), zděděný po nejbližším předkovi. */
+  accommodationUrl: string | null
+}
+
+type RawTouristPointMarker = {
+  id: number
+  title: string
+  fullSlug?: string | null
+  featuredImage?: { image?: unknown } | null
+  detail?: { latitude?: string | null; longitude?: string | null } | null
+}
+
+/**
+ * Přímé děti místa se souřadnicemi — piny mapy na podstránce Ubytování.
+ * Stránka Ubytování je sourozenec cílů (dítě místa), takže je nemá načtené.
+ * Berou se turistické cíle i podřazená místa (Sicílie má jen města, Kazachstán
+ * jen regiony — bez nich by mapa zůstala prázdná); vnořené úrovně jako sekce
+ * „Co vidět" (resolvePlacesToVisit) se neřeší, mapa jen ukazuje, kde co leží.
+ * Souřadnice mimo rozsah (překlep v adminu) by shodily celou mapu, takový pin
+ * se vynechá (parseLatLng).
+ */
+async function fetchPlaceTouristPointMarkersUncached(
+  placeId: number,
+): Promise<AccommodationMapMarker[]> {
+  const payload = await getDb()
+  const res = (await payload.find({
+    collection: 'pages',
+    overrideAccess: false,
+    where: {
+      and: [
+        { parent: { equals: placeId } },
+        { category: { in: [PageCategory.Turisticky_cil, PageCategory.Misto_k_navstiveni] } },
+      ],
+    },
+    depth: 0,
+    limit: 100,
+    pagination: false,
+    // Z detailu jen souřadnice — celá skupina (adresa, web, pásmo…) by šla
+    // přes afterRead hooky za každý pin zbytečně.
+    select: {
+      id: true,
+      title: true,
+      fullSlug: true,
+      featuredImage: true,
+      detail: { latitude: true, longitude: true },
+    },
+    joins: false,
+  })) as unknown as PayloadDocsResponse<RawTouristPointMarker>
+  // depth 0 → featuredImage.image je id; fotky pinů doplní hromadný překlad.
+  const docs = await enrichFeaturedImages(res.docs ?? [])
+  const markers: AccommodationMapMarker[] = []
+  for (const doc of docs) {
+    const coords = parseLatLng(doc.detail?.latitude, doc.detail?.longitude)
+    if (!doc.fullSlug || !coords) continue
+    const imageUrl = (doc.featuredImage?.image as { url?: string } | null | undefined)?.url
+    markers.push({
+      id: doc.id,
+      title: doc.title,
+      fullSlug: doc.fullSlug,
+      ...coords,
+      imageUrl: typeof imageUrl === 'string' ? imageUrl : null,
+    })
+  }
+  return markers
+}
+
+const fetchPlaceTouristPointMarkersCached = cached(
+  fetchPlaceTouristPointMarkersUncached,
+  'place-tourist-point-markers',
+  () => ['pages'],
+)
+
+/**
+ * Data mapového bloku podstránky Ubytování: piny dětí místa + Booking deep-link
+ * nejbližšího předka, který ho má (Grand Teton → vlastní, Zakynthos → vlastní,
+ * jinak země). Předky dodá volající seřazené od nejbližšího
+ * (`ancestorSlugsNearestFirst`); dotaz na předky je stejný cachovaný helper jako
+ * u měny a nabídek (ty ale na podstránce Ubytování neběží, takže tu jde o
+ * vlastní dotaz).
+ */
+export const fetchAccommodationMapData = cache(
+  async (placeId: number, ancestorFullSlugs: string[]): Promise<AccommodationMapData> => {
+    const [markers, ancestors] = await Promise.all([
+      fetchPlaceTouristPointMarkersCached(placeId),
+      fetchAncestorDocs(ancestorFullSlugs),
+    ])
+    let accommodationUrl: string | null = null
+    for (const doc of ancestors) {
+      const url = doc.affiliate?.accommodationUrl?.trim()
+      if (url) {
+        accommodationUrl = url
+        break
+      }
+    }
+    return { markers, accommodationUrl }
+  },
 )
 
 // ————————————————————————————————————————————————————————————————
