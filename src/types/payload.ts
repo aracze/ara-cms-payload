@@ -260,6 +260,10 @@ export interface Article {
   title: string
   slug: string
   text: string | RichTextRoot
+  /** Hotový perex pro karty ve výpisech (datová vrstva ho spočítá při načtení
+   *  a `text` pak nechá prázdný — celé texty desítek článků přerůstaly limit
+   *  Next cache 2 MB). Detail článku ho nemá, tam je plný `text`. */
+  excerpt?: string
   attribution?: string | RichTextRoot | null
   category: GeneratedArticle['category']
   publishedAt: string

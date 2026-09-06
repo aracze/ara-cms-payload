@@ -139,8 +139,11 @@ export function truncateAtWord(text: string, max: number): string {
  */
 const ARTICLE_EXCERPT_MAX = 320
 
-/** Plain-text perex z rich-textu článku — zkrácený na hranici slova. */
+/** Plain-text perex z rich-textu článku — zkrácený na hranici slova.
+ *  Když ho už spočítala datová vrstva (`excerpt`, viz toArticleCard v lib/payload.ts),
+ *  bere se hotový — `text` je v tom případě prázdný. */
 export function getArticleExcerpt(article: Article): string {
+  if (typeof article.excerpt === 'string') return article.excerpt
   return truncateAtWord(richTextToPlainText(article.text), ARTICLE_EXCERPT_MAX)
 }
 

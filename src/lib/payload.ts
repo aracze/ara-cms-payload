@@ -46,6 +46,7 @@ import {
   stripLeadingContinent,
   articlePath,
   truncateAtWord,
+  getArticleExcerpt,
 } from './utils'
 
 /**
@@ -180,10 +181,22 @@ const PAGE_ARTICLES_SELECT = {
   title: true,
   slug: true,
   documentId: true,
+  // Celý text je potřeba jen k výpočtu perexu — do cache už nejde (toArticleCard).
   text: true,
   featuredImage: true,
   mainPage: true,
 } as const
+
+/**
+ * Článek pro kartu ve výpisu na stránce: perex spočítaný hned při načtení, celý
+ * text se zahodí. Karta ukazuje nejvýš tři řádky, ale plné texty desítek článků
+ * dělaly z detailu Evropy (16 + 38 článků) 2,1 MB — nad limit Next datové cache
+ * (2 MB), za kterým se položka TIŠE necachuje a stránka jde při každé návštěvě
+ * do DB (viz search-cache.ts). Perex navíc neputuje zbytečně přes RSC hranici.
+ */
+function toArticleCard(article: Article): Article {
+  return { ...article, excerpt: getArticleExcerpt(article), text: '' }
+}
 
 type PayloadDocsResponse<T> = {
   docs: T[]
@@ -589,7 +602,7 @@ async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { 
 
   // Roztřídění článků: primární (mainPage = tato stránka) první — stejné
   // pořadí jako primaryArticles/secondaryArticles joiny.
-  const allArticles = articlesRes.docs || []
+  const allArticles = (articlesRes.docs || []).map(toArticleCard)
   const primary = allArticles.filter(
     (a) => relationId((a as { mainPage?: unknown }).mainPage) === raw.id,
   )
