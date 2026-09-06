@@ -46,6 +46,7 @@ import {
   stripLeadingContinent,
   articlePath,
   truncateAtWord,
+  getArticleExcerpt,
 } from './utils'
 
 /**
@@ -67,6 +68,25 @@ import {
  * vracel url: null a obrázky by zmizely (ověřeno dřív na REST).
  */
 
+/**
+ * Next položky nad 2 MB do datové cache TIŠE neuloží — jen `console.warn`
+ * „items over 2MB can not be cached" bez klíče, kdo to způsobil. Takhle se dvakrát
+ * (index hledání, detail /evropa s texty 54 článků) skládaly stránky z DB při
+ * každé návštěvě a přišlo se na to až z logu (viz search-cache.ts). Hlídka proto
+ * nahlas jmenuje položku, která se limitu blíží — ať se příští případ neprošvihne.
+ */
+const CACHE_ENTRY_WARN_BYTES = 1.5 * 1024 * 1024
+
+function warnIfCacheEntryLarge(keyPrefix: string, args: unknown[], result: unknown): void {
+  const size = JSON.stringify(result)?.length ?? 0
+  if (size > CACHE_ENTRY_WARN_BYTES) {
+    console.error(
+      `[cache] položka ${keyPrefix}(${JSON.stringify(args)}) má ${(size / 1024 / 1024).toFixed(2)} MB — ` +
+        `nad 2 MB ji Next tiše necachuje, zmenši data (viz cached() v lib/payload.ts)`,
+    )
+  }
+}
+
 /** Obal: v produkci cache s tagy (revalidace hooky), ve vývoji přímé volání. */
 function cached<A extends unknown[], R>(
   fn: (...args: A) => Promise<R>,
@@ -74,8 +94,15 @@ function cached<A extends unknown[], R>(
   tags: (args: A) => string[],
 ): (...args: A) => Promise<R> {
   if (!isProduction()) return fn
+  // Měří se jen při skutečném načtení (cache miss) — stringify na 1–2 MB dat
+  // stojí jednotky ms, Next si ho pro uložení dělá tak jako tak.
+  const measured = async (...args: A): Promise<R> => {
+    const result = await fn(...args)
+    warnIfCacheEntryLarge(keyPrefix, args, result)
+    return result
+  }
   return (...args: A) =>
-    unstable_cache(fn, [keyPrefix], {
+    unstable_cache(measured, [keyPrefix], {
       tags: tags(args),
       revalidate: 300, // pojistka; primárně invalidují hooky
     })(...args)
@@ -180,10 +207,22 @@ const PAGE_ARTICLES_SELECT = {
   title: true,
   slug: true,
   documentId: true,
+  // Celý text je potřeba jen k výpočtu perexu — do cache už nejde (toArticleCard).
   text: true,
   featuredImage: true,
   mainPage: true,
 } as const
+
+/**
+ * Článek pro kartu ve výpisu na stránce: perex spočítaný hned při načtení, celý
+ * text se zahodí. Karta ukazuje nejvýš tři řádky, ale plné texty desítek článků
+ * dělaly z detailu Evropy (16 + 38 článků) 2,1 MB — nad limit Next datové cache
+ * (2 MB), za kterým se položka TIŠE necachuje a stránka jde při každé návštěvě
+ * do DB (viz search-cache.ts). Perex navíc neputuje zbytečně přes RSC hranici.
+ */
+function toArticleCard(article: Article): Article {
+  return { ...article, excerpt: getArticleExcerpt(article), text: '' }
+}
 
 type PayloadDocsResponse<T> = {
   docs: T[]
@@ -589,7 +628,7 @@ async function fetchPageByFullSlugUncached(fullSlug: string): Promise<{ data: { 
 
   // Roztřídění článků: primární (mainPage = tato stránka) první — stejné
   // pořadí jako primaryArticles/secondaryArticles joiny.
-  const allArticles = articlesRes.docs || []
+  const allArticles = (articlesRes.docs || []).map(toArticleCard)
   const primary = allArticles.filter(
     (a) => relationId((a as { mainPage?: unknown }).mainPage) === raw.id,
   )
