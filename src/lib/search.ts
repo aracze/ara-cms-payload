@@ -1,29 +1,29 @@
 import Fuse, { type FuseResult, type IFuseOptions } from 'fuse.js'
 import { getDb } from './db'
 import { getCachedSearchIndex } from './search-cache'
-import { isProduction, richTextToPlainText, stripLeadingContinent } from './utils'
+import { richTextToPlainText, stripLeadingContinent } from './utils'
 import type { SearchItem } from '@/types/search'
 
 /**
  * Vyhledávací index se staví ZA BĚHU z Local API (dřív se generoval při buildu
  * ze souborů, což vyžadovalo běžící CMS při buildu a index zastarával).
- * V produkci se hotový Fuse index drží v paměti procesu (lib/search-cache.ts) —
- * publikace stránky ho zahodí přímo z hooku (invalidateSearchIndex). Dřívější
- * `unstable_cache` tu tiše nefungoval: data mají ~3 MB a Next položky nad 2 MB
- * do datové cache neukládá, takže se ~3000 stránek četlo z DB při každém písmenu.
+ * V produkci se hotový Fuse index drží v paměti procesu — proč ne v Next cache
+ * a jak se obnovuje, viz lib/search-cache.ts.
  *
  * Payload instance se sdílí přes stejný singleton (getDb) jako datová vrstva —
  * /api/search se volá při psaní často, vlastní init by byl zbytečná režie.
  */
 // Do indexu jde začátek textu stránky. Zkrácení na 1000 znaků bylo změřeno
-// (5. 9. 2026) a rychlosti nepomohlo (79 vs. 82 ms na dotaz) — čas Fuse jde
-// za počtem stránek, ne délkou textu — proto zůstává 2000 a shody hlouběji
-// v textu se neztrácí.
+// (5. 9. 2026) a rychlosti dotazu nepomohlo (79 vs. 82 ms — čas Fuse jde za
+// počtem stránek, ne délkou textu); velikost dat by kleslo jen k ~1,5–2 MB, tedy
+// těsně k limitu Next cache (viz search-cache.ts). Zůstává 2000, aby se
+// neztrácely shody hlouběji v textu.
 const SEARCH_TEXT_MAX = 2000
 
-// Pojistka pro případ, že by hook z adminu index nezahodil; primárně
-// invalidují hooky (src/hooks/revalidation.ts). Po vypršení se staví na pozadí.
-const SEARCH_INDEX_MAX_AGE_MS = 60 * 60 * 1000
+// Dávky po ID místo offsetového stránkování: `page`/`limit` s pagination dělá
+// za KAŽDOU dávku COUNT DISTINCT přes celou tabulku a OFFSET, který Postgres
+// přečte a zahodí — u ~3000 stránek zbytečných 16 COUNTů a ~24k řádků navíc.
+const LOAD_BATCH = 200
 
 async function loadSearchData(): Promise<SearchItem[]> {
   const payload = await getDb()
@@ -31,15 +31,17 @@ async function loadSearchData(): Promise<SearchItem[]> {
   // Fotky se dotahují hromadně až nakonec (jeden dotaz na media pro všechny
   // stránky) — populace přes depth by znamenala dotaz za KAŽDou stránku.
   const imageIdByItemIndex = new Map<number, number | string>()
-  // Stránkujeme přes CELOU kolekci — s pevným limitem 200 by se do indexu
-  // dostalo jen prvních 200 stránek a zbytek by nešel vyhledat.
-  let page = 1
+  // Procházíme CELOU kolekci — s pevným limitem by se do indexu dostala jen
+  // část stránek a zbytek by nešel vyhledat.
+  let lastId: number | string | undefined
   for (;;) {
     const res = await payload.find({
       overrideAccess: false,
       collection: 'pages',
-      limit: 200,
-      page,
+      pagination: false,
+      limit: LOAD_BATCH,
+      sort: 'id',
+      where: lastId === undefined ? undefined : { id: { greater_than: lastId } },
       depth: 0,
       select: {
         title: true,
@@ -88,8 +90,9 @@ async function loadSearchData(): Promise<SearchItem[]> {
         category: doc.category || undefined,
       } satisfies SearchItem)
     }
-    if (!res.hasNextPage) break
-    page++
+    const docs = res.docs || []
+    if (docs.length < LOAD_BATCH) break
+    lastId = docs[docs.length - 1].id
   }
 
   if (imageIdByItemIndex.size > 0) {
@@ -159,11 +162,8 @@ async function buildFuse(): Promise<Fuse<SearchItem>> {
 }
 
 // Selhání DB propadá ven (route vrátí 500 a UI ukáže chybu místo „Žádné
-// výsledky"); v produkci se neúspěšný build nedrží v paměti — viz search-cache.
-function getFuse(): Promise<Fuse<SearchItem>> {
-  if (!isProduction()) return buildFuse()
-  return getCachedSearchIndex(buildFuse, SEARCH_INDEX_MAX_AGE_MS)
-}
+// výsledky"); neúspěšná první stavba se nedrží v paměti — viz search-cache.
+const getFuse = (): Promise<Fuse<SearchItem>> => getCachedSearchIndex(buildFuse)
 
 // Jediný vstup vyhledávání. UI zobrazuje max 10 položek, víc nemá smysl
 // posílat — dřív šly klientovi VŠECHNY shody vč. textů (u krátkých dotazů

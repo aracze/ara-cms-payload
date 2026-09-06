@@ -51,7 +51,19 @@ export async function generateMetadata({
 
 export default async function HledaniPage({ searchParams }: { searchParams: SearchParams }) {
   const query = await readQuery(searchParams)
-  const results = query ? await searchPages(query, RESULTS_LIMIT) : []
+  // Výpadek DB nesmí shodit celou stránku do obecné chybové obrazovky (ta nemá
+  // pole hledání) ani se tvářit jako „nic nenašli" — vypíšeme, že hledání teď
+  // nejde, a pole necháme, aby to šlo zkusit znovu.
+  let results: Awaited<ReturnType<typeof searchPages>> = []
+  let searchFailed = false
+  if (query) {
+    try {
+      results = await searchPages(query, RESULTS_LIMIT)
+    } catch (error) {
+      console.error('Search page error:', error)
+      searchFailed = true
+    }
+  }
 
   return (
     <main id="obsah" tabIndex={-1} className="focus:outline-none">
@@ -86,7 +98,13 @@ export default async function HledaniPage({ searchParams }: { searchParams: Sear
             </>
           )}
 
-          {query && results.length === 0 && (
+          {query && searchFailed && (
+            <p role="alert" className="pt-4 text-center text-[15px] text-[#5b666e]">
+              Hledání teď nefunguje. Zkus to prosím za chvíli znovu.
+            </p>
+          )}
+
+          {query && !searchFailed && results.length === 0 && (
             <div className="flex flex-col items-center gap-1 pt-4 text-center">
               {/* Menší ara místo velkého chybového pruhu: překlep v hledání
                   není havárie, pole pro nový pokus zůstává hlavním hrdinou

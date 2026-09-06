@@ -10,11 +10,13 @@ import { invalidateSearchIndex } from '../lib/search-cache'
  * Okamžitá invalidace cache webu při změně obsahu v adminu.
  *
  * Web běží ve stejné Next.js aplikaci a čte data přes Local API s
- * `unstable_cache` + tagy (viz src/lib/payload.ts a src/lib/search.ts).
+ * `unstable_cache` + tagy (viz src/lib/payload.ts).
  * Tyto hooky po uložení/smazání dokumentu zavolají `revalidateTag`, takže
  * změna je na webu vidět hned — žádné čekání na vypršení cache, žádné webhooky.
- * Index vyhledávání není v Next cache (přes 2 MB, viz lib/search-cache.ts), ale
- * v paměti procesu — u stránek ho proto zahazujeme přímo (`invalidateSearchIndex`).
+ * Index vyhledávání není v Next cache, ale v paměti procesu (lib/search-cache.ts);
+ * `safeRevalidate` ho označí jako starý při každé invalidaci štítku `pages`,
+ * takže štítky zůstávají jediným „slovníkem" invalidace i pro endpointy, které
+ * zapisují mimo hooky (sync* v src/endpoints).
  */
 
 // `next/cache` se importuje LÍNĚ a s explicitní příponou `.js`. Tento modul se
@@ -28,6 +30,7 @@ import { invalidateSearchIndex } from '../lib/search-cache'
 export const HOMEPAGE_POPULAR_DESTINATIONS_TAG = 'homepage-popular-destinations'
 
 export const safeRevalidate = async (tags: string[]) => {
+  if (tags.includes('pages')) invalidateSearchIndex()
   try {
     const { revalidateTag } = await import('next/cache.js')
     // expire: 0 → tag se zneplatní okamžitě. (updateTag je v Next 16 jen pro
@@ -64,7 +67,6 @@ export const revalidatePageAfterChange: CollectionAfterChangeHook = async ({
   doc,
   previousDoc,
 }) => {
-  invalidateSearchIndex()
   await safeRevalidate([
     'pages',
     'root_pages',
@@ -76,7 +78,6 @@ export const revalidatePageAfterChange: CollectionAfterChangeHook = async ({
 }
 
 export const revalidatePageAfterDelete: CollectionAfterDeleteHook = async ({ doc }) => {
-  invalidateSearchIndex()
   await safeRevalidate(['pages', 'root_pages', 'sitemap', ...pageTags(doc as PageLikeDoc)])
   return doc
 }
