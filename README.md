@@ -640,8 +640,9 @@ průvodce Ara.cz`, `- Cestovní inspirace Ara.cz`, překlep `•vAra.cz`) i už 
   `icon-512.png`, `icon-maskable-512.png` generuje `pnpm build:icons` (`scripts/build-icons.mjs`:
   papoušek ze SVG loga v CMS, vykreslený přes sharp). Google ve výsledcích ořezává favicon do
   kolečka a těsný výřez (papoušek na 81 % šířky) přišel o pravé rohy (5. 9. 2026). Papoušek
-  proto zabírá 65 % šířky (okraj podle podkladu „logo-fb-small“) a je posunutý doleva, aby rovné
-  pravé rohy ležely uvnitř kružnice; `icon.png` je průhledný, ikony pro PWA/Apple/JSON-LD mají
+  proto zabírá 65 % šířky (okraj podle podkladu „logo-fb-small“) — tak se do kružnice vejde na
+  středu; skript při větším `ICON_FILL` papouška posouvá doleva, aby rovné pravé rohy zůstaly
+  uvnitř kružnice. `icon.png` je průhledný, ikony pro PWA/Apple/JSON-LD mají
   bílé pozadí. Ikona záložky `src/app/favicon.ico` (16/32/48) se NEgeneruje — je původní, papoušek
   od kraje ke kraji a průhledný, v záložce je potřeba velký (rozhodnutí uživatele). Barva
   generovaných ikon `#224386` je původní modrá loga; `src/app/manifest.ts` a `themeColor`
